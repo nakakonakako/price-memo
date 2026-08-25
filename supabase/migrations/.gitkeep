@@ -1,0 +1,3 @@
+# B 固有マイグレーションをここに置く。
+# フェーズ 2: folders / price_records / receipt link 等。
+# A（receipt-manager）の receipts / receipt_items は参照のみ（同一 DB の場合）。
