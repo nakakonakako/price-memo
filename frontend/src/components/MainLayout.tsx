@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react'
 
-export type TabId = 'folders' | 'records' | 'trends'
+export type TabId = 'folders' | 'records' | 'trends' | 'link'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'folders', label: 'フォルダ' },
   { id: 'records', label: '記録' },
   { id: 'trends', label: '値段推移' },
+  { id: 'link', label: 'レシート紐付け' },
 ]
 
 type Props = {

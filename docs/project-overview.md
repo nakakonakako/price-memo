@@ -114,10 +114,10 @@ Supabase（A の Dev または Prod）
 | 画面 | ラベル（仮） | ステータス | 概要 |
 |------|--------------|------------|------|
 | `folders` | フォルダ | **現行** | 手動フォルダの一覧・作成・改名・削除（Supabase RLS 直） |
-| `records` | 記録 | **現行** | 厳密レコードの登録・編集・削除（確定データのみ・単価プレビュー） |
+| `records` | 記録 | **現行** | 厳密レコード登録（購入日・店・値段・数量必須。A 検索は任意の下書き） |
 | `trends` | 値段推移 | **現行** | フォルダ内の単価推移グラフ・店舗別平均比較 |
 | `inquiry` | 店頭照会 | 未着手 | 値札 OCR → B 内（必要なら A）と比較 |
-| `link` | レシート紐付け | 未着手 | A 明細の検索・選択・紐付け |
+| `link` | レシート紐付け | **現行** | 完成済みレコードへの事後参照紐付け（A 必須ではない） |
 
 ### 4.2 機能モジュール（予定）
 
@@ -127,7 +127,7 @@ Supabase（A の Dev または Prod）
 | 厳密レコード | `frontend/src/features/records/` | **現行** | 価格・単位量の確定記録（`price_records`） |
 | 値段推移 | `frontend/src/features/trends/` | **現行** | 単価推移（Recharts）・店舗比較テーブル |
 | 店頭照会 | `frontend/src/features/inquiry/` | 未着手 | 値札 OCR |
-| A 参照 | `frontend/src/features/receipt-link/` | 未着手 | A 明細検索・紐付け |
+| A 参照 | `frontend/src/features/receipt-link/` | **現行（初版）** | A 明細検索・紐付け |
 
 ### 4.3 バックエンド API
 
@@ -151,7 +151,7 @@ B 固有テーブル。RLS・`user_id` 分離。マイグレーション: `supab
 | テーブル | 概要 | 主なカラム | 備考 |
 |----------|------|------------|------|
 | `price_folders` | 手動フォルダ | `name`, `user_id`（同一ユーザー内で `name` 一意） | 比較したい集合の棚 |
-| `price_records` | 厳密レコード | `folder_id`, `recorded_at`, `store_name`, `price`, `amount`, `unit`（`g` / `ml` / `piece`）, `receipt_item_id?`, `label_image_path?` | **確定データのみ**。記録タブで CRUD 可 |
+| `price_records` | 厳密レコード | `folder_id`, `recorded_at`（**購入日**）, `store_name`, `price`, `amount`, `unit`（`g` / `ml` / `piece`）, `receipt_item_id?`, `label_image_path?` | 完成に A 不要。`receipt_item_id` は任意参照 |
 
 A 参照（読み取り・紐付け用）:
 
@@ -253,6 +253,8 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-08-26 | A 連携は任意下書き／事後参照。記録は購入日・店・値段・数量で完結（A 待ち禁止） |
+| 2026-08-26 | A 明細検索→厳密レコード紐付けタブ（初版） |
 | 2026-08-26 | 値段推移タブ（単価グラフ・店舗比較） |
 | 2026-08-26 | 厳密レコード（`price_records`）登録・編集・削除 UI |
 | 2026-08-26 | `price_folders` / `price_records` migration 追加。フォルダ CRUD（Auth 共有・RLS 直） |

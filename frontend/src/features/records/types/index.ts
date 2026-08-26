@@ -24,4 +24,20 @@ export type PriceRecordInput = {
   amount: number
   unit: PriceUnit
   note?: string | null
+  receipt_item_id?: string | null
+}
+
+export type ReceiptItemRef = {
+  id: string
+  item_name: string
+  price: number
+  main_category: string | null
+  sub_category: string | null
+  receipt_id: string
+  receipts: {
+    id: string
+    date: string
+    store_name: string
+    total_amount: number
+  } | null
 }

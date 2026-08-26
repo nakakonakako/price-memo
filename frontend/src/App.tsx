@@ -3,6 +3,7 @@ import { Auth } from '@/components/Auth'
 import { MainLayout, type TabId } from '@/components/MainLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { FoldersPage } from '@/features/folders/components/FoldersPage'
+import { ReceiptLinkPage } from '@/features/receipt-link/components/ReceiptLinkPage'
 import { RecordsPage } from '@/features/records/components/RecordsPage'
 import { TrendsPage } from '@/features/trends/components/TrendsPage'
 
@@ -32,6 +33,7 @@ export default function App() {
       {tab === 'folders' && <FoldersPage />}
       {tab === 'records' && <RecordsPage />}
       {tab === 'trends' && <TrendsPage />}
+      {tab === 'link' && <ReceiptLinkPage />}
     </MainLayout>
   )
 }
