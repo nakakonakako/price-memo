@@ -7,7 +7,7 @@
 |------|------|
 | リポジトリ名 | `price-memo` |
 | プロダクト名（UI・仮） | 単価メモ / Price Memo |
-| ドキュメント最終更新 | 2026-08-25 |
+| ドキュメント最終更新 | 2026-08-26 |
 | 文書の扱い | **生きた概要**。機能の追加・削除・方針変更のたびに本ファイルを更新する |
 
 ---
@@ -50,28 +50,53 @@
 
 ---
 
-## 3. アーキテクチャ概要（方針）
+## 3. アーキテクチャ概要（方針・確定）
 
-A と同系統のスタックを想定する（認証・運用の揃えやすさのため）。最終的な DB 配置（A と同一 Supabase / 別プロジェクト）は実装フェーズで確定する。
+### 3.1 DB / Auth 配置
+
+| 決定 | 内容 |
+|------|------|
+| A と B | **同一 Supabase プロジェクト**（既存の Dev / Prod 各1）。B 用テーブルを足す |
+| マイグレーション | B 固有は本リポジトリ `supabase/migrations/`。Supabase CLI で A と同じ Dev/Prod へ `db push` |
+| Auth | **共有**（同じ `auth.users` / 同じ Google OAuth）。アプリ入り口（URL・SPA）は分けるが、アカウントは分けない |
+| 将来の無関係アプリ | Supabase 枠は増やさない。VPS 上の **PocketBase** などで別運営 |
+
+**入り口が別 ≠ ユーザー DB が別。** 同じ人が A と B にログインすると同じ `user_id` になる。レシート紐付け（一方向参照）に必要で、個人利用でも自然。
+
+分離したいのは次だけ:
+
+- UI・デプロイ・リポジトリ（すでに別）
+- テーブルと RLS（B は `folders` 等、A の明細は読むだけ）
+- 「B を開いていない人に B の UI を出さない」（URL が別なら足りる）
+
+同じプロジェクトで Auth だけ二重化する手段は事実上なく、分けるなら別 Supabase プロジェクトが必要（今回は採らない）。
 
 ```
-Browser (React / Vite SPA)
-  │  Supabase Auth（想定: Google OAuth。A と同一プロジェクトかは要検討）
+[A SPA] ──┐                    ┌─ receipts / receipt_items（A）
+           ├── Supabase Auth ──┤
+[B SPA] ──┘   同一 user_id     └─ folders / price_records（B）
+                                      └── receipt_item_id で A を参照
+```
+
+```
+Browser (React / Vite SPA) … A / B で別ホスト可
+  │  Supabase Auth（Google OAuth・A と同一プロジェクト）
   │  /api → Vite proxy（開発） / nginx（本番）
   ▼
 FastAPI (uvicorn :8001 ※A は :8000)
   │  x-supabase-token → ユーザー単位の Supabase クライアント
   │  （店頭照会 OCR 等で Gemini を使う場合のみ GEMINI_API_KEY）
   ▼
-Supabase（Auth + Postgres + RLS）
-  └── 必要時: A 側テーブル（receipts / receipt_items）を読み取り参照
+Supabase（A の Dev または Prod）
+  ├── A テーブル（receipts 等）… B は参照のみ
+  └── B テーブル（folders 等）… 本リポの migration で追加
 ```
 
 | 層 | パス | 役割 |
 |----|------|------|
 | フロントエンド | `frontend/` | SPA。機能は `src/features/` 以下 |
 | バックエンド | `backend/app/` | FastAPI |
-| DB・Auth | `supabase/` | マイグレーション（B 固有テーブル） |
+| DB・Auth | `supabase/` | B 固有マイグレーション（リンク先は A と同一） |
 | ドキュメント | `docs/` | 本ファイルおよび仕様メモ |
 
 ---
@@ -88,8 +113,8 @@ Supabase（Auth + Postgres + RLS）
 
 | 画面 | ラベル（仮） | ステータス | 概要 |
 |------|--------------|------------|------|
-| `folders` | フォルダ | スキャフォールド | 手動フォルダの一覧・作成・整理 |
-| `records` | 記録 | スキャフォールド | 厳密レコードの登録・編集（確定データのみ） |
+| `folders` | フォルダ | **現行** | 手動フォルダの一覧・作成・改名・削除（Supabase RLS 直） |
+| `records` | 記録 | **現行** | 厳密レコードの登録・編集・削除（確定データのみ・単価プレビュー） |
 | `trends` | 値段推移 | スキャフォールド | フォルダ内の単価推移・店舗比較 |
 | `inquiry` | 店頭照会 | 未着手 | 値札 OCR → B 内（必要なら A）と比較 |
 | `link` | レシート紐付け | 未着手 | A 明細の検索・選択・紐付け |
@@ -98,8 +123,8 @@ Supabase（Auth + Postgres + RLS）
 
 | 領域 | パス（予定） | ステータス | できること |
 |------|--------------|------------|------------|
-| フォルダ | `frontend/src/features/folders/` | スキャフォールド | 手動棚の CRUD |
-| 厳密レコード | `frontend/src/features/records/` | スキャフォールド | 価格・単位量の確定記録 |
+| フォルダ | `frontend/src/features/folders/` | **現行** | 手動棚の CRUD（`price_folders`） |
+| 厳密レコード | `frontend/src/features/records/` | **現行** | 価格・単位量の確定記録（`price_records`） |
 | 値段推移 | `frontend/src/features/trends/` | スキャフォールド | グラフ・店舗比較 |
 | 店頭照会 | `frontend/src/features/inquiry/` | 未着手 | 値札 OCR |
 | A 参照 | `frontend/src/features/receipt-link/` | 未着手 | A 明細検索・紐付け |
@@ -119,23 +144,20 @@ Supabase（Auth + Postgres + RLS）
 
 ---
 
-## 5. データモデル（草案）
+## 5. データモデル
 
-B 固有テーブル（名称は実装時に確定）。RLS・`user_id` 分離を前提。
+B 固有テーブル。RLS・`user_id` 分離。マイグレーション: `supabase/migrations/20260826100000_price_folders_and_records.sql`
 
-| テーブル（仮） | 概要 | 主なカラム（草案） | 備考 |
-|----------------|------|-------------------|------|
-| `folders` | 手動フォルダ | `name`, `user_id` | 比較したい集合の棚 |
-| `price_records` | 厳密レコード | `folder_id`, `recorded_at`, `store_name`, `price`, `amount`, `unit`（g/個/ml 等）, `label_image_path?` | **確定データのみ** |
-| `receipt_links`（またはレコード上の FK） | A 明細への紐付け | `price_record_id`, `receipt_item_id`（A） | A は知らない。B が ID を保持 |
+| テーブル | 概要 | 主なカラム | 備考 |
+|----------|------|------------|------|
+| `price_folders` | 手動フォルダ | `name`, `user_id`（同一ユーザー内で `name` 一意） | 比較したい集合の棚 |
+| `price_records` | 厳密レコード | `folder_id`, `recorded_at`, `store_name`, `price`, `amount`, `unit`（`g` / `ml` / `piece`）, `receipt_item_id?`, `label_image_path?` | **確定データのみ**。記録タブで CRUD 可 |
 
-A 参照（読み取りのみ・同一 DB の場合）:
+A 参照（読み取り・紐付け用）:
 
 | テーブル | 用途 |
 |----------|------|
-| `receipts` / `receipt_items` | 紐付け時の検索対象。B から更新しない |
-
-マイグレーションは未作成。フェーズ 2 で追加する。
+| `receipts` / `receipt_items` | `price_records.receipt_item_id` → `receipt_items.id`（ON DELETE SET NULL）。B から A 行は更新しない |
 
 ---
 
@@ -177,11 +199,11 @@ cd .. && npm run dev
 ```
 
 - Vite が `/api` を `http://localhost:8001` へプロキシ（A の 8000 と併走可能）
-- DB: 未リンク。マイグレーション追加後に `npm run db:push` 等を用意
+- DB: A と同じ Supabase プロジェクトへ link し、B 用 migration を `npm run db:push`
 
 ### 7.2 環境変数（予定）
 
-**フロント**
+**フロント**（A の Dev/Prod と同じ値でよい）
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
@@ -191,7 +213,7 @@ cd .. && npm run dev
 - `SUPABASE_URL` / `SUPABASE_KEY`（または VITE_ 互換）
 - `GEMINI_API_KEY`（OCR 導入時）
 
-`.env` は gitignore 対象。
+`.env` は gitignore 対象。OAuth のリダイレクト URL は A / B それぞれのオリジンを Supabase ダッシュボードに追加する。
 
 ---
 
@@ -231,4 +253,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-08-26 | 厳密レコード（`price_records`）登録・編集・削除 UI |
+| 2026-08-26 | `price_folders` / `price_records` migration 追加。フォルダ CRUD（Auth 共有・RLS 直） |
+| 2026-08-26 | DB は A と同一 Supabase（CLI）。Auth 共有・入り口は別。将来の無関係アプリは VPS 上 PocketBase |
 | 2026-08-25 | 初版。B の目的・A との境界・スキャフォールド方針を固定 |
