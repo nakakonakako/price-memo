@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 
-export type TabId = 'folders' | 'records' | 'trends' | 'link'
+export type TabId = 'memo' | 'folders' | 'records' | 'trends' | 'link'
 
 const TABS: { id: TabId; label: string }[] = [
+  { id: 'memo', label: '買い物メモ' },
   { id: 'folders', label: 'フォルダ' },
   { id: 'records', label: '記録' },
   { id: 'trends', label: '値段推移' },

@@ -3,13 +3,14 @@ import { Auth } from '@/components/Auth'
 import { MainLayout, type TabId } from '@/components/MainLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { FoldersPage } from '@/features/folders/components/FoldersPage'
+import { ShoppingMemoPage } from '@/features/memo/components/ShoppingMemoPage'
 import { ReceiptLinkPage } from '@/features/receipt-link/components/ReceiptLinkPage'
 import { RecordsPage } from '@/features/records/components/RecordsPage'
 import { TrendsPage } from '@/features/trends/components/TrendsPage'
 
 export default function App() {
   const { session, isLoading, logout } = useAuth()
-  const [tab, setTab] = useState<TabId>('folders')
+  const [tab, setTab] = useState<TabId>('memo')
 
   if (isLoading) {
     return (
@@ -30,6 +31,7 @@ export default function App() {
       userLabel={session.user.email ?? 'ユーザー'}
       onLogout={logout}
     >
+      {tab === 'memo' && <ShoppingMemoPage />}
       {tab === 'folders' && <FoldersPage />}
       {tab === 'records' && <RecordsPage />}
       {tab === 'trends' && <TrendsPage />}

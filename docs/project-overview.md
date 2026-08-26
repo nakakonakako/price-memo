@@ -7,7 +7,7 @@
 |------|------|
 | リポジトリ名 | `price-memo` |
 | プロダクト名（UI・仮） | 単価メモ / Price Memo |
-| ドキュメント最終更新 | 2026-08-26 |
+| ドキュメント最終更新 | 2026-08-27 |
 | 文書の扱い | **生きた概要**。機能の追加・削除・方針変更のたびに本ファイルを更新する |
 
 ---
@@ -27,12 +27,15 @@
 
 ## 1. 目的
 
-**ユーザーが意図して選んだ商品だけを、確定した重量・個数・容量で厳密に記録し、単価で比較する。**
+**ユーザーが意図して選んだ商品だけを、確定した重量・個数・容量で厳密に記録し、単価で比較する（統計アプリ）。**
 
 - 主用途は手動フォルダに入れた商品の単価推移・店舗比較
-- 店頭での値札照会（将来）
-- 必要時のみ A のレシート明細を参照して紐付け
+- 店頭では **買い物メモ**（過去統計の一覧＋その場の単位換算試算）。値札 OCR は本流にしない
+- 買わなかった観察価格も、統計データとして残してよい
+- 必要時のみ A のレシート明細を参照（任意下書き／参照）。A なしでも完結する
 - 「家計の支出記録」や「AI による自動カテゴリ」は **目的に含めない**（→ 機能 A）
+
+店頭フローの詳細: [spec-shopping-memo.md](./spec-shopping-memo.md)
 
 ---
 
@@ -43,7 +46,7 @@
 | 目的 | 支出の記録・検索・管理 | 意図した商品だけの厳密単価比較 |
 | カテゴリ | AI / 学習の `main` / `sub` | **手動フォルダのみ** |
 | 単価・重量 | 扱わない | g / 個 / ml 等の **確定データのみ** |
-| 値段推移・店頭照会 | 置かない（削除済み） | **本側で実装** |
+| 値段推移・店頭判断 | 置かない（削除済み） | **値段推移＋買い物メモ**（OCR 店頭照会は非本流） |
 | 連携 | B を知らない | A のレシート DB を **一方向参照** |
 
 詳細: [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md)
@@ -85,7 +88,7 @@ Browser (React / Vite SPA) … A / B で別ホスト可
   ▼
 FastAPI (uvicorn :8001 ※A は :8000)
   │  x-supabase-token → ユーザー単位の Supabase クライアント
-  │  （店頭照会 OCR 等で Gemini を使う場合のみ GEMINI_API_KEY）
+  │  （将来 OCR を足す場合のみ GEMINI_API_KEY。店頭本流ではない）
   ▼
 Supabase（A の Dev または Prod）
   ├── A テーブル（receipts 等）… B は参照のみ
@@ -113,25 +116,27 @@ Supabase（A の Dev または Prod）
 
 | 画面 | ラベル（仮） | ステータス | 概要 |
 |------|--------------|------------|------|
-| `folders` | フォルダ | **現行** | 手動フォルダの一覧・作成・改名・削除（Supabase RLS 直） |
-| `records` | 記録 | **現行** | 厳密レコード登録（購入日・店・値段・数量必須。A 検索は任意の下書き） |
+| `memo` | 買い物メモ | **現行** | フォルダ統計（平均/最安/直近）＋行内試算＋任意保存。店頭の主画面 |
+| `folders` | フォルダ | **現行** | 手動フォルダの一覧・作成・改名・削除・中身一覧 |
+| `records` | 記録 | **現行** | 厳密レコードの詳細登録・編集。A 検索は任意の下書き |
 | `trends` | 値段推移 | **現行** | フォルダ内の単価推移グラフ・店舗別平均比較 |
-| `inquiry` | 店頭照会 | 未着手 | 値札 OCR → B 内（必要なら A）と比較 |
-| `link` | レシート紐付け | **現行** | 完成済みレコードへの事後参照紐付け（A 必須ではない） |
+| `link` | レシート紐付け | **現行（見直し可）** | 事後参照紐付け。需要は低く独立タブは将来整理しうる |
+| `inquiry` | 店頭照会（OCR） | **延期** | 値札 OCR。本流にしない → [spec-shopping-memo.md](./spec-shopping-memo.md) |
 
 ### 4.2 機能モジュール（予定）
 
 | 領域 | パス（予定） | ステータス | できること |
 |------|--------------|------------|------------|
+| 買い物メモ | `frontend/src/features/memo/` | **現行** | 統計一覧・試算・任意で `price_records` 追加 |
 | フォルダ | `frontend/src/features/folders/` | **現行** | 手動棚の CRUD（`price_folders`） |
 | 厳密レコード | `frontend/src/features/records/` | **現行** | 価格・単位量の確定記録（`price_records`） |
 | 値段推移 | `frontend/src/features/trends/` | **現行** | 単価推移（Recharts）・店舗比較テーブル |
-| 店頭照会 | `frontend/src/features/inquiry/` | 未着手 | 値札 OCR |
-| A 参照 | `frontend/src/features/receipt-link/` | **現行（初版）** | A 明細検索・紐付け |
+| A 参照 | `frontend/src/features/receipt-link/` | **現行（見直し可）** | A 明細検索・事後紐付け |
+| 店頭 OCR | `frontend/src/features/inquiry/` | **延期** | 値札 OCR（非本流） |
 
 ### 4.3 バックエンド API
 
-スキャフォールド時点ではヘルスチェックのみ。フォルダ / レコード / 紐付け / OCR はフェーズ 2 以降。
+スキャフォールド時点ではヘルスチェックのみ。現行のフォルダ／レコード／推移／A 検索は FE から Supabase 直。買い物メモも同様を想定。OCR を入れる場合のみ BE + Gemini。
 
 | Method | Path | 認証 | 用途 | ステータス |
 |--------|------|------|------|------------|
@@ -182,7 +187,7 @@ A 参照（読み取り・紐付け用）:
 | Python | >=3.10（実行は 3.12 想定） |
 | FastAPI / Uvicorn | A と同系 |
 | supabase (Python) | A と同系 |
-| google-genai | 店頭照会 OCR 導入時 |
+| google-genai | OCR を将来足す場合のみ（店頭本流ではない） |
 | uv / Ruff | パッケージ・lint |
 
 ---
@@ -211,7 +216,7 @@ cd .. && npm run dev
 **バック**
 
 - `SUPABASE_URL` / `SUPABASE_KEY`（または VITE_ 互換）
-- `GEMINI_API_KEY`（OCR 導入時）
+- `GEMINI_API_KEY`（OCR を将来足す場合のみ）
 
 `.env` は gitignore 対象。OAuth のリダイレクト URL は A / B それぞれのオリジンを Supabase ダッシュボードに追加する。
 
@@ -224,7 +229,7 @@ price-memo/
 ├── frontend/          # React SPA
 │   └── src/
 │       ├── components/
-│       ├── features/      # folders, records, trends, …
+│       ├── features/      # memo, folders, records, trends, …
 │       ├── contexts/
 │       └── lib/
 ├── backend/
@@ -245,6 +250,7 @@ price-memo/
 |------|------|
 | [README.md](./README.md) | docs 索引 |
 | [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md) | A/B 分離方針 |
+| [spec-shopping-memo.md](./spec-shopping-memo.md) | 買い物メモ（店頭の主フロー・OCR 非本流） |
 | `../receipt-manager/docs/project-overview.md` | A の生きた概要（隣リポジトリ） |
 
 ---
@@ -253,6 +259,8 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-08-27 | 買い物メモ実装（統計＋行内試算＋任意保存）。初期タブに配置 |
+| 2026-08-27 | 買い物メモを店頭の主に。OCR 店頭照会は延期。目的を単価統計アプリとして明確化 |
 | 2026-08-26 | A 連携は任意下書き／事後参照。記録は購入日・店・値段・数量で完結（A 待ち禁止） |
 | 2026-08-26 | A 明細検索→厳密レコード紐付けタブ（初版） |
 | 2026-08-26 | 値段推移タブ（単価グラフ・店舗比較） |
