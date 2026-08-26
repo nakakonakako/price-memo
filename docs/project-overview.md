@@ -115,7 +115,7 @@ Supabase（A の Dev または Prod）
 |------|--------------|------------|------|
 | `folders` | フォルダ | **現行** | 手動フォルダの一覧・作成・改名・削除（Supabase RLS 直） |
 | `records` | 記録 | **現行** | 厳密レコードの登録・編集・削除（確定データのみ・単価プレビュー） |
-| `trends` | 値段推移 | スキャフォールド | フォルダ内の単価推移・店舗比較 |
+| `trends` | 値段推移 | **現行** | フォルダ内の単価推移グラフ・店舗別平均比較 |
 | `inquiry` | 店頭照会 | 未着手 | 値札 OCR → B 内（必要なら A）と比較 |
 | `link` | レシート紐付け | 未着手 | A 明細の検索・選択・紐付け |
 
@@ -125,7 +125,7 @@ Supabase（A の Dev または Prod）
 |------|--------------|------------|------------|
 | フォルダ | `frontend/src/features/folders/` | **現行** | 手動棚の CRUD（`price_folders`） |
 | 厳密レコード | `frontend/src/features/records/` | **現行** | 価格・単位量の確定記録（`price_records`） |
-| 値段推移 | `frontend/src/features/trends/` | スキャフォールド | グラフ・店舗比較 |
+| 値段推移 | `frontend/src/features/trends/` | **現行** | 単価推移（Recharts）・店舗比較テーブル |
 | 店頭照会 | `frontend/src/features/inquiry/` | 未着手 | 値札 OCR |
 | A 参照 | `frontend/src/features/receipt-link/` | 未着手 | A 明細検索・紐付け |
 
@@ -173,7 +173,7 @@ A 参照（読み取り・紐付け用）:
 | Tailwind CSS | ^4 |
 | Axios | ^1 |
 | @supabase/supabase-js | ^2 |
-| Recharts | 値段推移用（導入予定） |
+| Recharts | ^3.8（値段推移） |
 
 ### バックエンド
 
@@ -253,6 +253,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-08-26 | 値段推移タブ（単価グラフ・店舗比較） |
 | 2026-08-26 | 厳密レコード（`price_records`）登録・編集・削除 UI |
 | 2026-08-26 | `price_folders` / `price_records` migration 追加。フォルダ CRUD（Auth 共有・RLS 直） |
 | 2026-08-26 | DB は A と同一 Supabase（CLI）。Auth 共有・入り口は別。将来の無関係アプリは VPS 上 PocketBase |
