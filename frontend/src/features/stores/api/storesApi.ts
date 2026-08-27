@@ -36,7 +36,48 @@ export async function createStore(name: string): Promise<PriceStore> {
   return data as PriceStore
 }
 
-/** Register store if missing; returns canonical name from catalog. */
+export async function renameStore(id: string, name: string): Promise<PriceStore> {
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+  if (userError) throw userError
+  if (!user) throw new Error('ログインが必要です')
+
+  const trimmed = name.trim()
+  if (!trimmed) throw new Error('店舗名を入力してください')
+
+  const { data: current, error: fetchError } = await supabase
+    .from('price_stores')
+    .select('name')
+    .eq('id', id)
+    .single()
+  if (fetchError) throw fetchError
+
+  const { data, error } = await supabase
+    .from('price_stores')
+    .update({ name: trimmed })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+
+  if (current.name !== trimmed) {
+    const { error: recordsError } = await supabase
+      .from('price_records')
+      .update({ store_name: trimmed, updated_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .eq('store_name', current.name)
+    if (recordsError) throw recordsError
+  }
+
+  return data as PriceStore
+}
+
+export async function deleteStore(id: string): Promise<void> {
+  const { error } = await supabase.from('price_stores').delete().eq('id', id)
+  if (error) throw error
+}
 export async function ensureStore(name: string): Promise<string> {
   const trimmed = name.trim()
   if (!trimmed) throw new Error('店舗名を入力してください')

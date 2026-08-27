@@ -41,6 +41,9 @@ export function toUserMessage(
     if (/price_folders|user_id_name|folders.*name/i.test(blob)) {
       return '同じ名前のフォルダがすでにあります。別の名前にするか、既存のフォルダを選んでください。'
     }
+    if (/price_stores|stores.*name/i.test(blob)) {
+      return '同じ名前の店舗がすでにあります。別の名前にしてください。'
+    }
     return 'すでに同じ内容が登録されています。'
   }
 

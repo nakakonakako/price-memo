@@ -2,6 +2,7 @@ export type TrashDragPayload =
   | { kind: 'memo-folder'; id: string }
   | { kind: 'folder'; id: string }
   | { kind: 'folder-record'; id: string; folderId: string }
+  | { kind: 'store'; id: string }
 
 export type DragEndResult =
   | { action: 'delete'; payload: TrashDragPayload }

@@ -291,13 +291,9 @@ export function ShoppingMemoPage() {
               onChange={(e) => setPickQuery(e.target.value)}
               placeholder="フォルダ名で検索"
               className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-              disabled={mutating || allFolders.length === 0}
+              disabled={mutating}
             />
-            {allFolders.length === 0 ? (
-              <p className="text-sm text-stone-500">
-                先にフォルダタブで棚を作ってください。
-              </p>
-            ) : foldersForPick.length === 0 ? (
+            {allFolders.length > 0 && foldersForPick.length === 0 ? (
               <p className="text-sm text-stone-500">
                 追加できるフォルダはありません（すべてメモに載っています）。
               </p>

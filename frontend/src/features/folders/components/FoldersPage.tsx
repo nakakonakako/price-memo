@@ -28,11 +28,19 @@ import {
   unitPrice,
 } from '@/features/records/utils/unitPrice'
 import { toUserMessage } from '@/lib/userError'
+import {
+  createStore,
+  deleteStore,
+  listStores,
+  renameStore,
+} from '@/features/stores/api/storesApi'
+import type { PriceStore } from '@/features/stores/types'
 import { useFolders } from '../hooks/useFolders'
 import type { PriceFolder } from '../types'
 import { folderSortKey, parseFolderName } from '../utils/folderName'
 
-type FolderSort = 'added' | 'name'
+type CatalogView = 'folder' | 'store'
+type CatalogSort = 'added' | 'name'
 
 const nameCollator = new Intl.Collator('ja', {
   numeric: true,
@@ -98,7 +106,25 @@ export function FoldersPage() {
   const [addingBusy, setAddingBusy] = useState(false)
   const [editingBusy, setEditingBusy] = useState(false)
   const [folderQuery, setFolderQuery] = useState('')
-  const [folderSort, setFolderSort] = useState<FolderSort>('added')
+  const [folderSort, setFolderSort] = useState<CatalogSort>('added')
+  const [catalogView, setCatalogView] = useState<CatalogView>('folder')
+  const [stores, setStores] = useState<PriceStore[]>([])
+  const [storesLoading, setStoresLoading] = useState(true)
+  const [storesError, setStoresError] = useState<string | null>(null)
+  const [storeQuery, setStoreQuery] = useState('')
+  const [storeSort, setStoreSort] = useState<CatalogSort>('added')
+  const [editingStoreId, setEditingStoreId] = useState<string | null>(null)
+  const [editingStoreName, setEditingStoreName] = useState('')
+  const [openStoreId, setOpenStoreId] = useState<string | null>(null)
+  const [storeMutating, setStoreMutating] = useState(false)
+  const [deleteConfirmStoreId, setDeleteConfirmStoreId] = useState<
+    string | null
+  >(null)
+  const [deleteConfirmStoreBusy, setDeleteConfirmStoreBusy] = useState(false)
+  const [allRecords, setAllRecords] = useState<PriceRecord[]>([])
+  const [storeRecordCounts, setStoreRecordCounts] = useState<
+    Record<string, number>
+  >({})
   /** New folder stays beside the add tile until rename is saved (name sort). */
   const [draftFolderId, setDraftFolderId] = useState<string | null>(null)
   const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<
@@ -109,6 +135,8 @@ export function FoldersPage() {
   const addingFolder = folders.find((f) => f.id === addingFolderId) ?? null
   const deleteConfirmFolder =
     folders.find((f) => f.id === deleteConfirmFolderId) ?? null
+  const deleteConfirmStore =
+    stores.find((s) => s.id === deleteConfirmStoreId) ?? null
   const editingRecordFolder =
     editingRecord != null
       ? (folders.find((f) => f.id === editingRecord.folder_id) ?? null)
@@ -147,24 +175,151 @@ export function FoldersPage() {
     return rows
   }, [draftFolderId, folderQuery, folderSort, folders])
 
+  const visibleStores = useMemo(() => {
+    const q = storeQuery.trim().toLocaleLowerCase('ja')
+    const filtered = q
+      ? stores.filter((s) => s.name.toLocaleLowerCase('ja').includes(q))
+      : stores
+    const rows = [...filtered]
+    if (storeSort === 'name') {
+      rows.sort((a, b) => nameCollator.compare(a.name, b.name))
+    } else {
+      rows.sort((a, b) => {
+        const byCreated = b.created_at.localeCompare(a.created_at)
+        if (byCreated !== 0) return byCreated
+        return b.id.localeCompare(a.id)
+      })
+    }
+    return rows
+  }, [storeQuery, storeSort, stores])
+
+  const refreshStores = useCallback(async () => {
+    setStoresLoading(true)
+    setStoresError(null)
+    try {
+      setStores(await listStores())
+    } catch (err) {
+      setStoresError(toUserMessage(err, '店舗の読み込みに失敗しました。'))
+    } finally {
+      setStoresLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshStores()
+  }, [refreshStores])
+
   useEffect(() => {
     if (isLoading) return
     void listAllRecords()
       .then((records) => {
-        const counts: Record<string, number> = {}
+        setAllRecords(records)
+        const folderCounts: Record<string, number> = {}
+        const storeCounts: Record<string, number> = {}
         for (const r of records) {
-          counts[r.folder_id] = (counts[r.folder_id] ?? 0) + 1
+          folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
         }
-        setRecordCounts(counts)
+        for (const store of stores) {
+          storeCounts[store.id] = records.filter(
+            (r) => r.store_name === store.name,
+          ).length
+        }
+        setRecordCounts(folderCounts)
+        setStoreRecordCounts(storeCounts)
       })
       .catch(() => {
         /* optional */
       })
-  }, [isLoading, folders])
+  }, [isLoading, folders, stores])
 
   const getRecordCount = (folderId: string) => {
     if (recordsByFolder[folderId]) return recordsByFolder[folderId].length
     return recordCounts[folderId] ?? 0
+  }
+
+  const getStoreRecordCount = (storeId: string) => {
+    return storeRecordCounts[storeId] ?? 0
+  }
+
+  const getStoreRecords = (storeName: string) =>
+    allRecords.filter((r) => r.store_name === storeName)
+
+  const startEditStore = (store: PriceStore) => {
+    setEditingStoreId(store.id)
+    setEditingStoreName(store.name)
+  }
+
+  const cancelEditStore = useCallback(() => {
+    setEditingStoreId(null)
+    setEditingStoreName('')
+  }, [])
+
+  const handleRenameStore = async (e: FormEvent) => {
+    e.preventDefault()
+    if (!editingStoreId) return
+    setStoreMutating(true)
+    setStoresError(null)
+    try {
+      const updated = await renameStore(editingStoreId, editingStoreName)
+      setStores((prev) =>
+        prev.map((s) => (s.id === updated.id ? updated : s)),
+      )
+      const fresh = await listAllRecords()
+      setAllRecords(fresh)
+      cancelEditStore()
+    } catch (err) {
+      setStoresError(toUserMessage(err, '店舗名の変更に失敗しました。'))
+    } finally {
+      setStoreMutating(false)
+    }
+  }
+
+  const handleAddStore = async () => {
+    let name = '新しい店舗'
+    let n = 2
+    while (stores.some((s) => s.name === name)) {
+      name = `新しい店舗 ${n}`
+      n += 1
+    }
+    setStoreMutating(true)
+    setStoresError(null)
+    try {
+      const created = await createStore(name)
+      setStores((prev) => [...prev, created])
+      startEditStore(created)
+    } catch (err) {
+      setStoresError(toUserMessage(err, '店舗の追加に失敗しました。'))
+    } finally {
+      setStoreMutating(false)
+    }
+  }
+
+  const confirmDeleteStore = async () => {
+    if (!deleteConfirmStoreId) return
+    const storeId = deleteConfirmStoreId
+    setDeleteConfirmStoreBusy(true)
+    try {
+      await deleteStore(storeId)
+      setStores((prev) => prev.filter((s) => s.id !== storeId))
+      if (editingStoreId === storeId) cancelEditStore()
+      if (openStoreId === storeId) setOpenStoreId(null)
+      setDeleteConfirmStoreId(null)
+    } catch (err) {
+      setStoresError(toUserMessage(err, '店舗の削除に失敗しました。'))
+    } finally {
+      setDeleteConfirmStoreBusy(false)
+    }
+  }
+
+  useOutsidePointerDown(editingStoreId != null, cancelEditStore)
+
+  const toggleStoreDetail = (storeId: string) => {
+    if (openStoreId === storeId) {
+      setOpenStoreId(null)
+      return
+    }
+    setOpenStoreId(storeId)
+    setEditingRecord(null)
   }
 
   const startEdit = (folder: PriceFolder) => {
@@ -321,10 +476,15 @@ export function FoldersPage() {
       try {
         if (payload.kind === 'folder') {
           setDeleteConfirmFolderId(payload.id)
+        } else if (payload.kind === 'store') {
+          setDeleteConfirmStoreId(payload.id)
         } else if (payload.kind === 'folder-record') {
           await deleteRecord(payload.id)
           patchFolderRecords(payload.folderId, (rows) =>
             rows.filter((r) => r.id !== payload.id),
+          )
+          setAllRecords((prev) =>
+            prev.filter((r) => r.id !== payload.id),
           )
           if (editingRecord?.id === payload.id) setEditingRecord(null)
         }
@@ -344,25 +504,72 @@ export function FoldersPage() {
         <div className="space-y-2">
           <h2 className="text-lg font-medium text-stone-900">フォルダ</h2>
           <p className="text-sm text-stone-600">
-            比較したい商品集合を棚分けし、記録の追加・編集もここから行います。先頭のカードでフォルダ追加。ゴミ箱へ落とすと削除（フォルダは確認あり）。
+            品目名（フォルダ）と店名を管理し、記録の追加・編集もここから行います。先頭のカードで追加。ゴミ箱へ落とすと削除（フォルダは確認あり）。
           </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <div className="flex rounded-md border border-stone-300 bg-white p-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setCatalogView('folder')
+                setOpenStoreId(null)
+              }}
+              className={`rounded px-3 py-1.5 text-sm ${
+                catalogView === 'folder'
+                  ? 'bg-stone-900 text-white'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              品目名
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCatalogView('store')
+                setOpenFolderId(null)
+              }}
+              className={`rounded px-3 py-1.5 text-sm ${
+                catalogView === 'store'
+                  ? 'bg-stone-900 text-white'
+                  : 'text-stone-700 hover:bg-stone-100'
+              }`}
+            >
+              店名
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             type="search"
-            value={folderQuery}
-            onChange={(e) => setFolderQuery(e.target.value)}
-            placeholder="フォルダ名で検索"
+            value={catalogView === 'folder' ? folderQuery : storeQuery}
+            onChange={(e) =>
+              catalogView === 'folder'
+                ? setFolderQuery(e.target.value)
+                : setStoreQuery(e.target.value)
+            }
+            placeholder={
+              catalogView === 'folder' ? 'フォルダ名で検索' : '店舗名で検索'
+            }
             className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
           />
           <label className="flex shrink-0 items-center gap-2 text-sm text-stone-600">
             <span className="sr-only sm:not-sr-only">並び</span>
             <select
-              value={folderSort}
-              onChange={(e) => setFolderSort(e.target.value as FolderSort)}
+              value={catalogView === 'folder' ? folderSort : storeSort}
+              onChange={(e) => {
+                const next = e.target.value as CatalogSort
+                if (catalogView === 'folder') setFolderSort(next)
+                else setStoreSort(next)
+              }}
               className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-              title="名前順は末尾の () / （）内の読みを優先します。なければ表示名で並べます。"
+              title={
+                catalogView === 'folder'
+                  ? '名前順は末尾の () / （）内の読みを優先します。'
+                  : undefined
+              }
             >
               <option value="added">追加順（新しい順）</option>
               <option value="name">名前順</option>
@@ -370,20 +577,27 @@ export function FoldersPage() {
           </label>
         </div>
 
-        {error && (
+        {error && catalogView === 'folder' && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
           </p>
         )}
-        {recordsError && (
+        {storesError && catalogView === 'store' && (
+          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {storesError}
+          </p>
+        )}
+        {recordsError && catalogView === 'folder' && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {recordsError}
           </p>
         )}
 
-        {isLoading ? (
+        {isLoading && catalogView === 'folder' ? (
           <p className="text-sm text-stone-500">読み込み中...</p>
-        ) : (
+        ) : storesLoading && catalogView === 'store' ? (
+          <p className="text-sm text-stone-500">読み込み中...</p>
+        ) : catalogView === 'folder' ? (
           <ul className="grid gap-4 sm:grid-cols-2">
             <li className="flex flex-col">
               <button
@@ -588,6 +802,165 @@ export function FoldersPage() {
               })
             )}
           </ul>
+        ) : (
+          <ul className="grid gap-4 sm:grid-cols-2">
+            <li className="flex flex-col">
+              <button
+                type="button"
+                onClick={() => void handleAddStore()}
+                disabled={storeMutating}
+                aria-label="店舗を追加"
+                className="relative flex min-h-[5.75rem] w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50"
+              >
+                <div
+                  className="absolute left-4 top-0 h-2.5 w-14 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
+                  aria-hidden
+                />
+                <span
+                  className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-500 text-2xl font-light leading-none text-sky-700"
+                  aria-hidden
+                >
+                  ＋
+                </span>
+              </button>
+            </li>
+
+            {visibleStores.length === 0 ? (
+              <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500 sm:col-span-1">
+                {storeQuery.trim()
+                  ? '一致する店舗がありません。'
+                  : 'まだ店舗がありません。左のカードから追加してください。'}
+              </li>
+            ) : (
+              visibleStores.map((store) => {
+                const isOpen = openStoreId === store.id
+                const recordCount = getStoreRecordCount(store.id)
+                const storeRecords = getStoreRecords(store.name)
+                return (
+                  <li key={store.id} className="flex flex-col">
+                    <TrashDragItem
+                      payload={{ kind: 'store', id: store.id }}
+                      onClick={() => {
+                        if (editingStoreId === store.id) return
+                        toggleStoreDetail(store.id)
+                      }}
+                      className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
+                        isOpen
+                          ? 'border-emerald-400/80 shadow-md'
+                          : 'border-emerald-200/90 hover:shadow-md'
+                      } bg-gradient-to-b from-emerald-50 via-emerald-50/90 to-emerald-100/40`}
+                    >
+                      <div
+                        className="absolute left-4 top-0 h-2.5 w-14 rounded-b-sm border border-t-0 border-emerald-300/70 bg-emerald-200/90"
+                        aria-hidden
+                      />
+
+                      <div className="flex flex-col gap-2 px-4 pb-3 pt-5">
+                        {editingStoreId === store.id ? (
+                          <form
+                            data-edit-surface
+                            data-no-trash-drag
+                            onSubmit={(e) => void handleRenameStore(e)}
+                            className="flex min-w-0 items-center gap-1"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <input
+                              type="text"
+                              value={editingStoreName}
+                              onChange={(e) =>
+                                setEditingStoreName(e.target.value)
+                              }
+                              className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500"
+                              autoFocus
+                              disabled={storeMutating}
+                            />
+                            <button
+                              type="submit"
+                              disabled={
+                                storeMutating || !editingStoreName.trim()
+                              }
+                              className="shrink-0 rounded-md bg-stone-900 px-2.5 py-1.5 text-sm text-white disabled:opacity-50"
+                            >
+                              保存
+                            </button>
+                            <button
+                              type="button"
+                              onClick={cancelEditStore}
+                              className="shrink-0 rounded-md px-2.5 py-1.5 text-sm text-stone-600 hover:bg-white/60"
+                            >
+                              取消
+                            </button>
+                          </form>
+                        ) : (
+                          <div className="flex min-w-0 items-center gap-0.5">
+                            <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
+                              {store.name}
+                            </span>
+                            <EditIconButton
+                              quiet
+                              label="名前変更"
+                              onClick={() => startEditStore(store)}
+                              disabled={storeMutating}
+                            />
+                            <span className="ml-auto shrink-0 tabular-nums text-sm text-stone-500">
+                              {recordCount}
+                            </span>
+                            <span
+                              className="shrink-0 text-stone-400 transition-transform"
+                              style={{
+                                transform: isOpen ? 'rotate(90deg)' : undefined,
+                              }}
+                              aria-hidden
+                            >
+                              ▸
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {isOpen && (
+                        <div className="border-t border-emerald-200/70 bg-white/80 px-3 py-3">
+                          {storeRecords.length === 0 ? (
+                            <p className="text-sm text-stone-500">
+                              この店舗の記録はまだありません。
+                            </p>
+                          ) : (
+                            <ul className="max-h-64 space-y-2 overflow-y-auto">
+                              {storeRecords.map((record) => (
+                                <li key={record.id} className="list-none">
+                                  <div className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3">
+                                    <div className="min-w-0 flex-1 py-0.5">
+                                      <p className="text-sm font-medium text-stone-900">
+                                        {record.recorded_at} ·{' '}
+                                        {parseFolderName(
+                                          folders.find(
+                                            (f) => f.id === record.folder_id,
+                                          )?.name ?? '—',
+                                        ).displayName}
+                                      </p>
+                                      <p className="text-xs text-stone-600">
+                                        {formatYen(record.price, 0)} /{' '}
+                                        {record.amount}
+                                        {unitLabel(record.unit)}
+                                      </p>
+                                    </div>
+                                    <EditIconButton
+                                      label="編集"
+                                      onClick={() => setEditingRecord(record)}
+                                    />
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </TrashDragItem>
+                  </li>
+                )
+              })
+            )}
+          </ul>
         )}
       </section>
 
@@ -616,6 +989,7 @@ export function FoldersPage() {
                   ...rows,
                   created,
                 ])
+                setAllRecords((prev) => [created, ...prev])
                 if (openFolderId !== addingFolder.id) {
                   setOpenFolderId(addingFolder.id)
                 }
@@ -655,6 +1029,9 @@ export function FoldersPage() {
                 const updated = await updateRecord(editingRecord.id, input)
                 patchFolderRecords(editingRecord.folder_id, (rows) =>
                   rows.map((r) => (r.id === updated.id ? updated : r)),
+                )
+                setAllRecords((prev) =>
+                  prev.map((r) => (r.id === updated.id ? updated : r)),
                 )
                 setEditingRecord(null)
               } finally {
@@ -710,6 +1087,57 @@ export function FoldersPage() {
                 className="rounded-md bg-red-700 px-4 py-2 text-sm text-white hover:bg-red-800 disabled:opacity-50"
               >
                 {deleteConfirmBusy ? '削除中...' : '削除する'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title="店舗を削除"
+        open={deleteConfirmStore != null}
+        onClose={() => {
+          if (!deleteConfirmStoreBusy) setDeleteConfirmStoreId(null)
+        }}
+      >
+        {deleteConfirmStore && (
+          <div className="space-y-4">
+            <p className="text-sm text-stone-700">
+              「
+              <span className="font-medium text-stone-900">
+                {deleteConfirmStore.name}
+              </span>
+              」を店舗一覧から削除しますか？
+            </p>
+            {getStoreRecordCount(deleteConfirmStore.id) > 0 ? (
+              <p className="text-sm text-stone-600">
+                記録{' '}
+                <span className="font-medium tabular-nums">
+                  {getStoreRecordCount(deleteConfirmStore.id)}
+                </span>
+                件はそのまま残ります（選択肢から外れるだけです）。
+              </p>
+            ) : (
+              <p className="text-sm text-stone-600">
+                この店舗の記録はまだありません。
+              </p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmStoreId(null)}
+                disabled={deleteConfirmStoreBusy}
+                className="rounded-md px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteStore()}
+                disabled={deleteConfirmStoreBusy || storeMutating}
+                className="rounded-md bg-red-700 px-4 py-2 text-sm text-white hover:bg-red-800 disabled:opacity-50"
+              >
+                {deleteConfirmStoreBusy ? '削除中...' : '削除する'}
               </button>
             </div>
           </div>
