@@ -130,7 +130,7 @@ export function ShoppingMemoPage() {
 
   const pickableFolders = useMemo(() => {
     const q = pickQuery.trim().toLocaleLowerCase('ja')
-    if (!q) return foldersForPick
+    if (!q) return []
     return foldersForPick.filter((f) => {
       const { displayName, reading } = parseFolderName(f.name)
       const hay = `${displayName} ${reading ?? ''} ${f.name}`.toLocaleLowerCase(
@@ -300,6 +300,10 @@ export function ShoppingMemoPage() {
             ) : foldersForPick.length === 0 ? (
               <p className="text-sm text-stone-500">
                 追加できるフォルダはありません（すべてメモに載っています）。
+              </p>
+            ) : !pickQuery.trim() ? (
+              <p className="text-sm text-stone-500">
+                フォルダ名を入力すると候補が表示されます。
               </p>
             ) : pickableFolders.length === 0 ? (
               <p className="text-sm text-stone-500">
