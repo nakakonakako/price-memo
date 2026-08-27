@@ -133,9 +133,9 @@ export function FoldersPage() {
       }
     } else {
       rows.sort((a, b) => {
-        const byCreated = a.created_at.localeCompare(b.created_at)
+        const byCreated = b.created_at.localeCompare(a.created_at)
         if (byCreated !== 0) return byCreated
-        return a.id.localeCompare(b.id)
+        return b.id.localeCompare(a.id)
       })
     }
     return rows
@@ -339,7 +339,7 @@ export function FoldersPage() {
               className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
               title="名前順は末尾の () / （）内の読みを優先します。なければ表示名で並べます。"
             >
-              <option value="added">追加順</option>
+              <option value="added">追加順（新しい順）</option>
               <option value="name">名前順</option>
             </select>
           </label>
