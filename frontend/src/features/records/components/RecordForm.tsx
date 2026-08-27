@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { StoreField } from '@/components/StoreField'
 import { searchReceiptItems } from '../api/recordsApi'
 import type {
   PriceRecord,
@@ -307,16 +308,14 @@ export function RecordForm({
           </label>
           <label className="block space-y-1">
             <span className="text-xs text-stone-500">店舗</span>
-            <input
-              type="text"
-              className={fieldClass}
+            <StoreField
               value={form.store_name}
-              onChange={(e) =>
-                setForm((s) => ({ ...s, store_name: e.target.value }))
+              onChange={(store_name) =>
+                setForm((s) => ({ ...s, store_name }))
               }
-              placeholder="例: 〇〇スーパー"
-              required
               disabled={busy}
+              required
+              className={fieldClass}
             />
           </label>
           <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-2">

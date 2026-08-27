@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { EditIconButton } from '@/components/EditIconButton'
+import { StoreField } from '@/components/StoreField'
 import { useOutsidePointerDown } from '@/hooks/useOutsidePointerDown'
 import { listFolders } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
@@ -422,16 +423,14 @@ export function RecordsPage() {
                 </label>
                 <label className="block space-y-1">
                   <span className="text-xs text-stone-500">店舗</span>
-                  <input
-                    type="text"
-                    className={fieldClass}
+                  <StoreField
                     value={form.store_name}
-                    onChange={(e) =>
-                      setForm((s) => ({ ...s, store_name: e.target.value }))
+                    onChange={(store_name) =>
+                      setForm((s) => ({ ...s, store_name }))
                     }
-                    placeholder="例: 〇〇スーパー"
-                    required
                     disabled={isMutating}
+                    required
+                    className={fieldClass}
                   />
                 </label>
                 <div className="grid grid-cols-[1fr_7rem] gap-2">

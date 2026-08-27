@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { ensureStore } from '@/features/stores/api/storesApi'
 import type { PriceRecord, PriceRecordInput, ReceiptItemRef } from '../types'
 
 function asNumber(value: unknown): number {
@@ -49,8 +50,7 @@ export async function createRecord(
   if (userError) throw userError
   if (!user) throw new Error('ログインが必要です')
 
-  const store = input.store_name.trim()
-  if (!store) throw new Error('店舗名を入力してください')
+  const store = await ensureStore(input.store_name)
   if (!(input.price >= 0)) throw new Error('価格は 0 以上にしてください')
   if (!(input.amount > 0)) throw new Error('数量は 0 より大きくしてください')
 
@@ -89,8 +89,7 @@ export async function updateRecord(
   id: string,
   input: Omit<PriceRecordInput, 'folder_id'> & { folder_id?: string },
 ): Promise<PriceRecord> {
-  const store = input.store_name.trim()
-  if (!store) throw new Error('店舗名を入力してください')
+  const store = await ensureStore(input.store_name)
   if (!(input.price >= 0)) throw new Error('価格は 0 以上にしてください')
   if (!(input.amount > 0)) throw new Error('数量は 0 より大きくしてください')
 

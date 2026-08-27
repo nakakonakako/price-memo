@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
 import { TrashDragItem } from '@/components/trash/TrashDragItem'
+import { StoreField } from '@/components/StoreField'
 import { parseFolderName } from '@/features/folders/utils/folderName'
 import { UnitField } from '@/features/records/components/UnitField'
 import { createRecord } from '@/features/records/api/recordsApi'
@@ -267,12 +268,10 @@ export function FolderMemoCard({
             </label>
             <label className="space-y-1">
               <span className="text-xs text-stone-500">店名（保存時必須）</span>
-              <input
-                type="text"
-                className={fieldClass}
+              <StoreField
                 value={store}
-                onChange={(e) => setStore(e.target.value)}
-                placeholder="例: カロン"
+                onChange={setStore}
+                className={fieldClass}
               />
             </label>
           </div>
