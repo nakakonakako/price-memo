@@ -41,9 +41,7 @@ export function useFolders() {
     setError(null)
     try {
       const created = await createFolder(name)
-      setFolders((prev) =>
-        [...prev, created].sort((a, b) => a.name.localeCompare(b.name, 'ja')),
-      )
+      setFolders((prev) => [...prev, created])
     } catch (err) {
       setError(errorMessage(err))
       throw err
@@ -57,11 +55,7 @@ export function useFolders() {
     setError(null)
     try {
       const updated = await renameFolder(id, name)
-      setFolders((prev) =>
-        prev
-          .map((f) => (f.id === id ? updated : f))
-          .sort((a, b) => a.name.localeCompare(b.name, 'ja')),
-      )
+      setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)))
     } catch (err) {
       setError(errorMessage(err))
       throw err

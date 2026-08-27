@@ -156,7 +156,7 @@ B 固有テーブル。RLS・`user_id` 分離。マイグレーション: `supab
 | テーブル | 概要 | 主なカラム | 備考 |
 |----------|------|------------|------|
 | `price_folders` | 手動フォルダ | `name`, `user_id`（同一ユーザー内で `name` 一意） | 比較したい集合の棚 |
-| `price_records` | 厳密レコード | `folder_id`, `recorded_at`（**購入日**）, `store_name`, `price`, `amount`, `unit`（`g` / `ml` / `piece`）, `receipt_item_id?`, `label_image_path?` | 完成に A 不要。`receipt_item_id` は任意参照 |
+| `price_records` | 厳密レコード | `folder_id`, `recorded_at`（**購入日**）, `store_name`, `price`, `amount`, `unit`（自由文字列。プリセット g/ml/個＋その他）, `receipt_item_id?`, `label_image_path?` | 完成に A 不要。100単位換算は g/ml のみ |
 
 A 参照（読み取り・紐付け用）:
 
@@ -259,6 +259,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-08-27 | 買い物メモ: 追加削除・入力順・自由単位・複数単位統計・保存のシームレス更新 |
 | 2026-08-27 | 買い物メモ実装（統計＋行内試算＋任意保存）。初期タブに配置 |
 | 2026-08-27 | 買い物メモを店頭の主に。OCR 店頭照会は延期。目的を単価統計アプリとして明確化 |
 | 2026-08-26 | A 連携は任意下書き／事後参照。記録は購入日・店・値段・数量で完結（A 待ち禁止） |

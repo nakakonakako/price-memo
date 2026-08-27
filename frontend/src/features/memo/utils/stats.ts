@@ -1,14 +1,11 @@
 import type { PriceRecord, PriceUnit } from '@/features/records/types'
 import {
   perHundredPrice,
+  supportsPerHundred,
   unitLabel,
   unitPrice,
 } from '@/features/records/utils/unitPrice'
-import {
-  dominantUnit,
-  toTrendPoints,
-  type PriceBasis,
-} from '@/features/trends/utils/aggregate'
+import { toTrendPoints, type PriceBasis } from '@/features/trends/utils/aggregate'
 
 export type FolderStats = {
   unit: PriceUnit
@@ -22,7 +19,7 @@ export type FolderStats = {
 }
 
 export function defaultBasis(unit: PriceUnit): PriceBasis {
-  return unit === 'piece' ? 'per_unit' : 'per_100'
+  return supportsPerHundred(unit) ? 'per_100' : 'per_unit'
 }
 
 export function valueLabelFor(unit: PriceUnit, basis: PriceBasis): string {
@@ -30,12 +27,20 @@ export function valueLabelFor(unit: PriceUnit, basis: PriceBasis): string {
   return `円/${unitLabel(unit)}`
 }
 
-export function computeFolderStats(
+export function unitsInRecords(records: PriceRecord[]): PriceUnit[] {
+  const set = new Set<string>()
+  for (const r of records) {
+    const u = r.unit.trim()
+    if (u) set.add(u)
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'ja'))
+}
+
+export function computeStatsForUnit(
   records: PriceRecord[],
+  unit: PriceUnit,
+  basis: PriceBasis = defaultBasis(unit),
 ): FolderStats | null {
-  const unit = dominantUnit(records)
-  if (!unit) return null
-  const basis = defaultBasis(unit)
   const points = toTrendPoints(records, unit, basis)
   if (points.length === 0) return null
 
@@ -54,6 +59,12 @@ export function computeFolderStats(
   }
 }
 
+export function computeAllFolderStats(records: PriceRecord[]): FolderStats[] {
+  return unitsInRecords(records)
+    .map((unit) => computeStatsForUnit(records, unit))
+    .filter((s): s is FolderStats => s != null)
+}
+
 export function trialDisplayValue(
   price: number,
   amount: number,
@@ -67,15 +78,12 @@ export function trialDisplayValue(
   return unitPrice(price, amount)
 }
 
-/** 試算単位と統計単位が揃っているときだけ比較可能 */
 export function canCompareToStats(
   trialUnit: PriceUnit,
   stats: FolderStats | null,
 ): boolean {
   if (!stats) return false
-  if (trialUnit !== stats.unit) return false
-  if (stats.basis === 'per_100' && trialUnit === 'piece') return false
-  return true
+  return trialUnit === stats.unit
 }
 
 export function diffVs(current: number, baseline: number): number {

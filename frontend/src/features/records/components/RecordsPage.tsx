@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { EditIconButton } from '@/components/EditIconButton'
+import { useOutsidePointerDown } from '@/hooks/useOutsidePointerDown'
 import { listFolders } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
 import { searchReceiptItems } from '../api/recordsApi'
@@ -13,10 +15,10 @@ import {
   formatYen,
   perHundredPrice,
   todayISODate,
-  UNIT_OPTIONS,
   unitLabel,
   unitPrice,
 } from '../utils/unitPrice'
+import { UnitField } from './UnitField'
 
 type FormState = {
   recorded_at: string
@@ -150,13 +152,15 @@ export function RecordsPage() {
     Number.isFinite(previewAmount) &&
     previewAmount > 0
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setForm(emptyForm())
     setEditingId(null)
     setFormError(null)
     setAResults([])
     setAError(null)
-  }
+  }, [])
+
+  useOutsidePointerDown(editingId != null, resetForm)
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -281,7 +285,10 @@ export function RecordsPage() {
             </select>
           </label>
 
-          <div className="space-y-3 rounded-md border border-stone-200 bg-white/70 p-4">
+          <div
+            data-edit-surface
+            className="space-y-3 rounded-md border border-stone-200 bg-white/70 p-4"
+          >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-medium text-stone-800">
                 {editingId ? 'レコードを編集' : '新規レコード'}
@@ -426,23 +433,7 @@ export function RecordsPage() {
                     disabled={isMutating}
                   />
                 </label>
-                <label className="block space-y-1">
-                  <span className="text-xs text-stone-500">価格（円）</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
-                    className={fieldClass}
-                    value={form.price}
-                    onChange={(e) =>
-                      setForm((s) => ({ ...s, price: e.target.value }))
-                    }
-                    required
-                    disabled={isMutating}
-                  />
-                </label>
-                <div className="grid grid-cols-[1fr_5.5rem] gap-2">
+                <div className="grid grid-cols-[1fr_7rem] gap-2">
                   <label className="block space-y-1">
                     <span className="text-xs text-stone-500">数量</span>
                     <input
@@ -461,25 +452,30 @@ export function RecordsPage() {
                   </label>
                   <label className="block space-y-1">
                     <span className="text-xs text-stone-500">単位</span>
-                    <select
-                      className={fieldClass}
+                    <UnitField
                       value={form.unit}
-                      onChange={(e) =>
-                        setForm((s) => ({
-                          ...s,
-                          unit: e.target.value as PriceUnit,
-                        }))
-                      }
+                      onChange={(unit) => setForm((s) => ({ ...s, unit }))}
                       disabled={isMutating}
-                    >
-                      {UNIT_OPTIONS.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
+                      className={fieldClass}
+                    />
                   </label>
                 </div>
+                <label className="block space-y-1">
+                  <span className="text-xs text-stone-500">値段（円）</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    className={fieldClass}
+                    value={form.price}
+                    onChange={(e) =>
+                      setForm((s) => ({ ...s, price: e.target.value }))
+                    }
+                    required
+                    disabled={isMutating}
+                  />
+                </label>
               </div>
 
               <label className="block space-y-1">
@@ -567,14 +563,11 @@ export function RecordsPage() {
                       </p>
                     </div>
                     <div className="flex shrink-0 gap-1">
-                      <button
-                        type="button"
+                      <EditIconButton
+                        label="編集"
                         onClick={() => startEdit(record)}
-                        className="rounded-md px-2.5 py-1 text-sm text-stone-600 hover:bg-stone-100"
                         disabled={isMutating}
-                      >
-                        編集
-                      </button>
+                      />
                       <button
                         type="button"
                         onClick={() => void handleDelete(record)}

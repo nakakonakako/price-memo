@@ -1,6 +1,7 @@
 import type { PriceRecord, PriceUnit } from '@/features/records/types'
 import {
   perHundredPrice,
+  supportsPerHundred,
   unitPrice,
 } from '@/features/records/utils/unitPrice'
 
@@ -48,6 +49,7 @@ export function recordValue(
   basis: PriceBasis,
 ): number | null {
   if (basis === 'per_100') {
+    if (!supportsPerHundred(record.unit)) return null
     return perHundredPrice(record.price, record.amount, record.unit)
   }
   return unitPrice(record.price, record.amount)
@@ -77,6 +79,17 @@ export function toTrendPoints(
     if (a.date !== b.date) return a.date.localeCompare(b.date)
     return a.store.localeCompare(b.store, 'ja')
   })
+}
+
+/** 時系列順に点を並べ、線で結ぶ Recharts 用データ */
+export function toChronologicalChartData(
+  points: TrendPoint[],
+): { date: string; value: number; store: string }[] {
+  return points.map((p) => ({
+    date: p.date,
+    value: p.value,
+    store: p.store,
+  }))
 }
 
 /** Recharts 用: 日付行 × 店舗列（欠けは null） */

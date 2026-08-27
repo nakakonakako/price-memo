@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -15,14 +14,13 @@ import { listRecords } from '@/features/records/api/recordsApi'
 import type { PriceRecord, PriceUnit } from '@/features/records/types'
 import {
   formatYen,
-  UNIT_OPTIONS,
+  supportsPerHundred,
   unitLabel,
 } from '@/features/records/utils/unitPrice'
 import {
   dominantUnit,
-  STORE_COLORS,
   summarizeByStore,
-  toMultiStoreChartData,
+  toChronologicalChartData,
   toTrendPoints,
   type PriceBasis,
 } from '../utils/aggregate'
@@ -75,7 +73,7 @@ export function TrendsPage() {
         const dom = dominantUnit(list)
         if (dom) {
           setUnit(dom)
-          setBasis(dom === 'piece' ? 'per_unit' : 'per_100')
+          setBasis(supportsPerHundred(dom) ? 'per_100' : 'per_unit')
         }
       } catch (err) {
         if (!cancelled) {
@@ -91,20 +89,22 @@ export function TrendsPage() {
   }, [folderId])
 
   const unitsInFolder = useMemo(() => {
-    const set = new Set(records.map((r) => r.unit))
-    return UNIT_OPTIONS.filter((o) => set.has(o.value))
+    return [...new Set(records.map((r) => r.unit.trim()).filter(Boolean))].sort(
+      (a, b) => a.localeCompare(b, 'ja'),
+    )
   }, [records])
 
-  const effectiveBasis: PriceBasis =
-    unit === 'piece' ? 'per_unit' : basis
+  const effectiveBasis: PriceBasis = supportsPerHundred(unit)
+    ? basis
+    : 'per_unit'
 
   const points = useMemo(
     () => toTrendPoints(records, unit, effectiveBasis),
     [records, unit, effectiveBasis],
   )
 
-  const { stores, rows } = useMemo(
-    () => toMultiStoreChartData(points),
+  const chartRows = useMemo(
+    () => toChronologicalChartData(points),
     [points],
   )
 
@@ -160,16 +160,13 @@ export function TrendsPage() {
                 onChange={(e) => {
                   const next = e.target.value as PriceUnit
                   setUnit(next)
-                  if (next === 'piece') setBasis('per_unit')
+                  if (!supportsPerHundred(next)) setBasis('per_unit')
                 }}
                 disabled={unitsInFolder.length === 0}
               >
-                {(unitsInFolder.length > 0
-                  ? unitsInFolder
-                  : UNIT_OPTIONS
-                ).map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
+                {(unitsInFolder.length > 0 ? unitsInFolder : ['g']).map((u) => (
+                  <option key={u} value={u}>
+                    {unitLabel(u)}
                   </option>
                 ))}
               </select>
@@ -180,13 +177,11 @@ export function TrendsPage() {
                 className={fieldClass}
                 value={effectiveBasis}
                 onChange={(e) => setBasis(e.target.value as PriceBasis)}
-                disabled={unit === 'piece'}
+                disabled={!supportsPerHundred(unit)}
               >
                 <option value="per_unit">単位あたり（円/{unitLabel(unit)}）</option>
-                {unit !== 'piece' && (
-                  <option value="per_100">
-                    100{unitLabel(unit)}あたり
-                  </option>
+                {supportsPerHundred(unit) && (
+                  <option value="per_100">100{unitLabel(unit)}あたり</option>
                 )}
               </select>
             </label>
@@ -212,10 +207,10 @@ export function TrendsPage() {
                 </p>
               )}
 
-              <div className="h-[260px] w-full rounded-md border border-stone-200 bg-white/70 p-3">
+              <div className="h-[280px] w-full rounded-md border border-stone-200 bg-white/70 p-3">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart
-                    data={rows}
+                    data={chartRows}
                     margin={{ top: 8, right: 12, left: 0, bottom: 0 }}
                   >
                     <CartesianGrid
@@ -239,34 +234,40 @@ export function TrendsPage() {
                     <Tooltip
                       formatter={(value) => {
                         const n =
-                          typeof value === 'number'
-                            ? value
-                            : Number(value)
+                          typeof value === 'number' ? value : Number(value)
                         if (!Number.isFinite(n)) return ['—', valueLabel]
                         return [formatYen(n, 2), valueLabel]
                       }}
-                      labelFormatter={(label) => String(label)}
+                      labelFormatter={(_, payload) => {
+                        const row = payload?.[0]?.payload as
+                          | { date?: string; store?: string }
+                          | undefined
+                        if (!row?.date) return ''
+                        return row.store
+                          ? `${row.date} · ${row.store}`
+                          : row.date
+                      }}
                       contentStyle={{
                         fontSize: 12,
                         borderRadius: 6,
                         borderColor: '#d6d3d1',
                       }}
                     />
-                    {stores.length > 1 && (
-                      <Legend wrapperStyle={{ fontSize: 12 }} />
-                    )}
-                    {stores.map((store, i) => (
-                      <Line
-                        key={store}
-                        type="monotone"
-                        dataKey={store}
-                        name={store}
-                        stroke={STORE_COLORS[i % STORE_COLORS.length]}
-                        strokeWidth={2}
-                        dot={{ r: 3 }}
-                        connectNulls
-                      />
-                    ))}
+                    <Line
+                      type="linear"
+                      dataKey="value"
+                      name={valueLabel}
+                      stroke="#1c1917"
+                      strokeWidth={2.5}
+                      dot={{
+                        r: 4,
+                        fill: '#1c1917',
+                        stroke: '#ffffff',
+                        strokeWidth: 2,
+                      }}
+                      activeDot={{ r: 6, fill: '#0f766e' }}
+                      connectNulls
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -288,21 +289,9 @@ export function TrendsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100">
-                      {summaries.map((s) => {
-                      const colorIdx = stores.indexOf(s.store)
-                      return (
+                      {summaries.map((s) => (
                         <tr key={s.store}>
                           <td className="px-3 py-2 font-medium text-stone-900">
-                            <span
-                              className="mr-2 inline-block h-2 w-2 rounded-full"
-                              style={{
-                                background:
-                                  STORE_COLORS[
-                                    (colorIdx >= 0 ? colorIdx : 0) %
-                                      STORE_COLORS.length
-                                  ],
-                              }}
-                            />
                             {s.store}
                           </td>
                           <td className="px-3 py-2 text-stone-600">{s.count}</td>
@@ -319,8 +308,7 @@ export function TrendsPage() {
                             {s.latestDate} · {formatYen(s.latestValue, 2)}
                           </td>
                         </tr>
-                      )
-                    })}
+                      ))}
                     </tbody>
                   </table>
                 </div>

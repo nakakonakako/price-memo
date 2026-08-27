@@ -1,4 +1,4 @@
-export type PriceUnit = 'g' | 'ml' | 'piece'
+export type PriceUnit = string
 
 export type PriceRecord = {
   id: string
