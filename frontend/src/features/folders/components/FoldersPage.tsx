@@ -101,8 +101,14 @@ export function FoldersPage() {
   const [folderSort, setFolderSort] = useState<FolderSort>('added')
   /** New folder stays beside the add tile until rename is saved (name sort). */
   const [draftFolderId, setDraftFolderId] = useState<string | null>(null)
+  const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<
+    string | null
+  >(null)
+  const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false)
 
   const addingFolder = folders.find((f) => f.id === addingFolderId) ?? null
+  const deleteConfirmFolder =
+    folders.find((f) => f.id === deleteConfirmFolderId) ?? null
   const editingRecordFolder =
     editingRecord != null
       ? (folders.find((f) => f.id === editingRecord.folder_id) ?? null)
@@ -239,6 +245,41 @@ export function FoldersPage() {
     })
   }
 
+  const finalizeFolderRemoved = useCallback(
+    (folderId: string) => {
+      if (editingId === folderId) cancelEdit()
+      if (openFolderId === folderId) setOpenFolderId(null)
+      if (editingRecord?.folder_id === folderId) setEditingRecord(null)
+      setDraftFolderId((id) => (id === folderId ? null : id))
+      setRecordCounts((prev) => {
+        const next = { ...prev }
+        delete next[folderId]
+        return next
+      })
+      setRecordsByFolder((prev) => {
+        const next = { ...prev }
+        delete next[folderId]
+        return next
+      })
+    },
+    [cancelEdit, editingId, editingRecord, openFolderId],
+  )
+
+  const confirmDeleteFolder = async () => {
+    if (!deleteConfirmFolderId) return
+    const folderId = deleteConfirmFolderId
+    setDeleteConfirmBusy(true)
+    try {
+      await remove(folderId)
+      finalizeFolderRemoved(folderId)
+      setDeleteConfirmFolderId(null)
+    } catch {
+      /* hook */
+    } finally {
+      setDeleteConfirmBusy(false)
+    }
+  }
+
   const handleDragEnd = useCallback(
     async (result: DragEndResult) => {
       if (result.action === 'cancel') return
@@ -279,16 +320,7 @@ export function FoldersPage() {
       if (result.action !== 'delete') return
       try {
         if (payload.kind === 'folder') {
-          await remove(payload.id)
-          if (editingId === payload.id) cancelEdit()
-          if (openFolderId === payload.id) setOpenFolderId(null)
-          if (editingRecord?.folder_id === payload.id) setEditingRecord(null)
-          setDraftFolderId((id) => (id === payload.id ? null : id))
-          setRecordCounts((prev) => {
-            const next = { ...prev }
-            delete next[payload.id]
-            return next
-          })
+          setDeleteConfirmFolderId(payload.id)
         } else if (payload.kind === 'folder-record') {
           await deleteRecord(payload.id)
           patchFolderRecords(payload.folderId, (rows) =>
@@ -300,14 +332,7 @@ export function FoldersPage() {
         /* hook */
       }
     },
-    [
-      cancelEdit,
-      editingId,
-      editingRecord,
-      openFolderId,
-      recordsByFolder,
-      remove,
-    ],
+    [editingRecord],
   )
 
   return (
@@ -319,7 +344,7 @@ export function FoldersPage() {
         <div className="space-y-2">
           <h2 className="text-lg font-medium text-stone-900">フォルダ</h2>
           <p className="text-sm text-stone-600">
-            比較したい商品集合を棚分けし、記録の追加・編集もここから行います。先頭のカードでフォルダ追加。フォルダや記録を右下のゴミ箱へ落とすと削除できます。
+            比較したい商品集合を棚分けし、記録の追加・編集もここから行います。先頭のカードでフォルダ追加。ゴミ箱へ落とすと削除（フォルダは確認あり）。
           </p>
         </div>
 
@@ -637,6 +662,57 @@ export function FoldersPage() {
               }
             }}
           />
+        )}
+      </Modal>
+
+      <Modal
+        title="フォルダを削除"
+        open={deleteConfirmFolder != null}
+        onClose={() => {
+          if (!deleteConfirmBusy) setDeleteConfirmFolderId(null)
+        }}
+      >
+        {deleteConfirmFolder && (
+          <div className="space-y-4">
+            <p className="text-sm text-stone-700">
+              「
+              <span className="font-medium text-stone-900">
+                {parseFolderName(deleteConfirmFolder.name).displayName}
+              </span>
+              」を削除しますか？
+            </p>
+            {getRecordCount(deleteConfirmFolder.id) > 0 ? (
+              <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                このフォルダ内の記録{' '}
+                <span className="font-medium tabular-nums">
+                  {getRecordCount(deleteConfirmFolder.id)}
+                </span>
+                件もまとめて削除されます。元に戻せません。
+              </p>
+            ) : (
+              <p className="text-sm text-stone-600">
+                記録はまだありません。買い物メモに載せている場合は、そこからも外れます。
+              </p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmFolderId(null)}
+                disabled={deleteConfirmBusy}
+                className="rounded-md px-4 py-2 text-sm text-stone-600 hover:bg-stone-100 disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={() => void confirmDeleteFolder()}
+                disabled={deleteConfirmBusy || isMutating}
+                className="rounded-md bg-red-700 px-4 py-2 text-sm text-white hover:bg-red-800 disabled:opacity-50"
+              >
+                {deleteConfirmBusy ? '削除中...' : '削除する'}
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </TrashDragProvider>
