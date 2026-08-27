@@ -61,12 +61,18 @@ type Props = {
   onDragEnd: (result: DragEndResult) => void | Promise<void>
   /** memo = large easy drop target; folder = compact */
   trashSize?: 'memo' | 'folder'
+  /**
+   * Kinds that show insert markers and persist reorder.
+   * Omit to allow reorder for all kinds. Trash-delete still works for every kind.
+   */
+  reorderKinds?: TrashDragPayload['kind'][]
 }
 
 export function TrashDragProvider({
   children,
   onDragEnd,
   trashSize = 'folder',
+  reorderKinds,
 }: Props) {
   const trashRef = useRef<HTMLDivElement>(null)
   const payloadRef = useRef<TrashDragPayload | null>(null)
@@ -161,6 +167,12 @@ export function TrashDragProvider({
     [setInsertTarget],
   )
 
+  const canReorder = useCallback(
+    (kind: TrashDragPayload['kind']) =>
+      reorderKinds == null || reorderKinds.includes(kind),
+    [reorderKinds],
+  )
+
   const moveDrag = useCallback(
     (x: number, y: number) => {
       const over = isOverTrash(x, y)
@@ -169,9 +181,14 @@ export function TrashDragProvider({
         setInsertTarget(undefined)
         return
       }
+      const payload = payloadRef.current
+      if (!payload || !canReorder(payload.kind)) {
+        setInsertTarget(undefined)
+        return
+      }
       setInsertTarget(resolveInsertBefore(x, y))
     },
-    [isOverTrash, resolveInsertBefore, setInsertTarget],
+    [canReorder, isOverTrash, resolveInsertBefore, setInsertTarget],
   )
 
   const finishDrag = useCallback(
@@ -190,13 +207,13 @@ export function TrashDragProvider({
         await onDragEnd({ action: 'delete', payload })
         return
       }
-      if (before !== undefined) {
+      if (before !== undefined && canReorder(payload.kind)) {
         await onDragEnd({ action: 'reorder', payload, beforeId: before })
         return
       }
       await onDragEnd({ action: 'cancel', payload })
     },
-    [isOverTrash, onDragEnd, setInsertTarget],
+    [canReorder, isOverTrash, onDragEnd, setInsertTarget],
   )
 
   const cancelDrag = useCallback(() => {

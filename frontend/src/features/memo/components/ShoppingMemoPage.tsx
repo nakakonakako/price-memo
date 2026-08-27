@@ -5,21 +5,26 @@ import {
   createFolder,
   deleteFolder,
   listFolders,
+  reorderFolders,
 } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
 import { listAllRecords } from '@/features/records/api/recordsApi'
 import type { PriceRecord } from '@/features/records/types'
-import {
-  applyIdOrder,
-  loadIdOrder,
-  reorderIds,
-  saveIdOrder,
-} from '@/lib/listOrder'
+import { reorderIds } from '@/lib/listOrder'
 import { recordsByFolderId } from '../utils/stats'
 import { FolderMemoCard } from './FolderMemoCard'
 import { useTrashDrag } from '@/components/trash/TrashDragProvider'
 
-const ORDER_KEY = 'price-memo-memo-order'
+const MEMO_PALETTES = [
+  'border-rose-200 bg-rose-50/90',
+  'border-amber-200 bg-amber-50/90',
+  'border-lime-200 bg-lime-50/90',
+  'border-sky-200 bg-sky-50/90',
+  'border-violet-200 bg-violet-50/90',
+  'border-teal-200 bg-teal-50/90',
+  'border-orange-200 bg-orange-50/90',
+  'border-fuchsia-200 bg-fuchsia-50/90',
+]
 
 function MemoListEndMarker({ lastId }: { lastId: string | null }) {
   const { insertBeforeId, activeId, activeKind, dragOverTrash, dragging } =
@@ -46,7 +51,7 @@ export function ShoppingMemoPage() {
         listFolders(),
         listAllRecords(),
       ])
-      setFolders(applyIdOrder(folderList, loadIdOrder(ORDER_KEY)))
+      setFolders(folderList)
       setRecords(recordList)
     } catch (err) {
       setError(err instanceof Error ? err.message : '読み込みに失敗しました')
@@ -69,11 +74,7 @@ export function ShoppingMemoPage() {
     setError(null)
     try {
       const created = await createFolder(newName)
-      setFolders((prev) => {
-        const next = [...prev, created]
-        saveIdOrder(ORDER_KEY, next.map((f) => f.id))
-        return next
-      })
+      setFolders((prev) => [...prev, created])
       setNewName('')
     } catch (err) {
       setError(err instanceof Error ? err.message : '追加に失敗しました')
@@ -91,11 +92,7 @@ export function ShoppingMemoPage() {
       setError(null)
       try {
         await deleteFolder(result.payload.id)
-        setFolders((prev) => {
-          const next = prev.filter((f) => f.id !== result.payload.id)
-          saveIdOrder(ORDER_KEY, next.map((f) => f.id))
-          return next
-        })
+        setFolders((prev) => prev.filter((f) => f.id !== result.payload.id))
         setRecords((prev) =>
           prev.filter((r) => r.folder_id !== result.payload.id),
         )
@@ -108,18 +105,28 @@ export function ShoppingMemoPage() {
     }
 
     if (result.action === 'reorder') {
-      setFolders((prev) => {
-        const ids = reorderIds(
-          prev.map((f) => f.id),
-          result.payload.id,
-          result.beforeId,
-        )
-        saveIdOrder(ORDER_KEY, ids)
-        const map = new Map(prev.map((f) => [f.id, f]))
-        return ids.map((id) => map.get(id)!).filter(Boolean)
-      })
+      const prev = folders
+      const ids = reorderIds(
+        prev.map((f) => f.id),
+        result.payload.id,
+        result.beforeId,
+      )
+      const map = new Map(prev.map((f) => [f.id, f]))
+      const next = ids
+        .map((id, sort_order) => {
+          const f = map.get(id)
+          return f ? { ...f, sort_order } : null
+        })
+        .filter((f): f is PriceFolder => f != null)
+      setFolders(next)
+      try {
+        await reorderFolders(ids)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '並べ替えの保存に失敗')
+        void load({ silent: true })
+      }
     }
-  }, [])
+  }, [folders, load])
 
   const handleSaved = (record: PriceRecord) => {
     setRecords((prev) => [record, ...prev])
@@ -170,12 +177,13 @@ export function ShoppingMemoPage() {
           <div className="space-y-2">
             <p className="text-sm text-stone-600">{folders.length} 件のメモ</p>
             <ul className="space-y-2">
-              {folders.map((folder) => (
+              {folders.map((folder, index) => (
                 <FolderMemoCard
                   key={folder.id}
                   folderId={folder.id}
                   folderName={folder.name}
                   records={byFolder.get(folder.id) ?? []}
+                  colorClass={MEMO_PALETTES[index % MEMO_PALETTES.length]}
                   onSaved={handleSaved}
                 />
               ))}

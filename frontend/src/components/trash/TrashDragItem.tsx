@@ -62,9 +62,9 @@ export function TrashDragItem({
   }, [payload.id, registerItem, isDragging])
 
   const isInteractive = (target: EventTarget | null) =>
-    target instanceof HTMLElement &&
+    target instanceof Element &&
     !!target.closest(
-      'button, input, select, textarea, a, [data-no-trash-drag]',
+      'button, input, select, textarea, a, label, [data-no-trash-drag]',
     )
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {

@@ -116,11 +116,11 @@ Supabase（A の Dev または Prod）
 
 | 画面 | ラベル（仮） | ステータス | 概要 |
 |------|--------------|------------|------|
-| `memo` | 買い物メモ | **現行** | フォルダ統計（平均/最安/直近）＋行内試算＋任意保存。店頭の主画面 |
-| `folders` | フォルダ | **現行** | 手動フォルダの一覧・作成・改名・削除・中身一覧 |
-| `records` | 記録 | **現行** | 厳密レコードの詳細登録・編集。A 検索は任意の下書き |
+| `memo` | 買い物メモ | **現行** | フォルダ統計＋行内試算＋任意保存。色分け・ドラッグ並べ替え |
+| `folders` | フォルダ | **現行** | 棚の CRUD・中身編集・記録追加（モーダル）・並べ替え |
 | `trends` | 値段推移 | **現行** | フォルダ内の単価推移グラフ・店舗別平均比較 |
-| `link` | レシート紐付け | **現行（見直し可）** | 事後参照紐付け。需要は低く独立タブは将来整理しうる |
+| `records` | （旧）記録 | **廃止** | フォルダの「＋」モーダルに統合 |
+| `link` | （旧）レシート紐付け | **廃止** | 独立タブ削除。任意下書きは記録追加モーダル内に残す |
 | `inquiry` | 店頭照会（OCR） | **延期** | 値札 OCR。本流にしない → [spec-shopping-memo.md](./spec-shopping-memo.md) |
 
 ### 4.2 機能モジュール（予定）
@@ -129,9 +129,9 @@ Supabase（A の Dev または Prod）
 |------|--------------|------------|------------|
 | 買い物メモ | `frontend/src/features/memo/` | **現行** | 統計一覧・試算・任意で `price_records` 追加 |
 | フォルダ | `frontend/src/features/folders/` | **現行** | 手動棚の CRUD（`price_folders`） |
-| 厳密レコード | `frontend/src/features/records/` | **現行** | 価格・単位量の確定記録（`price_records`） |
+| 厳密レコード | `frontend/src/features/records/` | **現行** | 記録追加フォーム（フォルダモーダルから）。旧記録タブは廃止 |
 | 値段推移 | `frontend/src/features/trends/` | **現行** | 単価推移（Recharts）・店舗比較テーブル |
-| A 参照 | `frontend/src/features/receipt-link/` | **現行（見直し可）** | A 明細検索・事後紐付け |
+| A 参照 | `frontend/src/features/receipt-link/` | **廃止（コード残）** | 独立タブ削除 |
 | 店頭 OCR | `frontend/src/features/inquiry/` | **延期** | 値札 OCR（非本流） |
 
 ### 4.3 バックエンド API
@@ -155,8 +155,8 @@ B 固有テーブル。RLS・`user_id` 分離。マイグレーション: `supab
 
 | テーブル | 概要 | 主なカラム | 備考 |
 |----------|------|------------|------|
-| `price_folders` | 手動フォルダ | `name`, `user_id`（同一ユーザー内で `name` 一意） | 比較したい集合の棚 |
-| `price_records` | 厳密レコード | `folder_id`, `recorded_at`（**購入日**）, `store_name`, `price`, `amount`, `unit`（自由文字列。プリセット g/ml/個＋その他）, `receipt_item_id?`, `label_image_path?` | 完成に A 不要。100単位換算は g/ml のみ |
+| `price_folders` | 手動フォルダ | `name`, `sort_order`, `user_id`（同一ユーザー内で `name` 一意） | 比較したい集合の棚。表示順は DB 永続 |
+| `price_records` | 厳密レコード | `folder_id`, `recorded_at`（**購入日**）, `store_name`, `price`, `amount`, `unit`（自由文字列。プリセット g/ml/個＋その他）, `sort_order`, `receipt_item_id?`, `label_image_path?` | 完成にレシート管理不要。100単位換算は g/ml のみ |
 
 A 参照（読み取り・紐付け用）:
 
@@ -259,6 +259,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-08-28 | 並べ替え DB 永続（`sort_order`）。記録・レシート紐付けタブ廃止。フォルダに記録追加モーダル。UI から A/B 表記を排除 |
 | 2026-08-27 | 買い物メモ: 追加削除・入力順・自由単位・複数単位統計・保存のシームレス更新 |
 | 2026-08-27 | 買い物メモ実装（統計＋行内試算＋任意保存）。初期タブに配置 |
 | 2026-08-27 | 買い物メモを店頭の主に。OCR 店頭照会は延期。目的を単価統計アプリとして明確化 |

@@ -197,7 +197,7 @@ export function TrendsPage() {
             <p className="text-sm text-stone-500">読み込み中...</p>
           ) : points.length === 0 ? (
             <p className="rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500">
-              この条件のレコードがありません。記録タブで追加してください。
+              この条件のレコードがありません。フォルダタブから記録を追加してください。
             </p>
           ) : (
             <>

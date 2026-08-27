@@ -10,6 +10,7 @@ function normalize(row: PriceRecord): PriceRecord {
     ...row,
     price: asNumber(row.price),
     amount: asNumber(row.amount),
+    sort_order: asNumber(row.sort_order ?? 0),
   }
 }
 
@@ -18,6 +19,7 @@ export async function listRecords(folderId: string): Promise<PriceRecord[]> {
     .from('price_records')
     .select('*')
     .eq('folder_id', folderId)
+    .order('sort_order', { ascending: true })
     .order('recorded_at', { ascending: false })
     .order('created_at', { ascending: false })
 
@@ -29,6 +31,7 @@ export async function listAllRecords(): Promise<PriceRecord[]> {
   const { data, error } = await supabase
     .from('price_records')
     .select('*')
+    .order('sort_order', { ascending: true })
     .order('recorded_at', { ascending: false })
     .order('created_at', { ascending: false })
 
@@ -51,6 +54,16 @@ export async function createRecord(
   if (!(input.price >= 0)) throw new Error('価格は 0 以上にしてください')
   if (!(input.amount > 0)) throw new Error('数量は 0 より大きくしてください')
 
+  const { data: maxRow } = await supabase
+    .from('price_records')
+    .select('sort_order')
+    .eq('folder_id', input.folder_id)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const sort_order = (maxRow?.sort_order ?? -1) + 1
+
   const { data, error } = await supabase
     .from('price_records')
     .insert({
@@ -63,6 +76,7 @@ export async function createRecord(
       unit: input.unit,
       note: input.note?.trim() || null,
       receipt_item_id: input.receipt_item_id ?? null,
+      sort_order,
     })
     .select()
     .single()
@@ -108,6 +122,26 @@ export async function updateRecord(
 export async function deleteRecord(id: string): Promise<void> {
   const { error } = await supabase.from('price_records').delete().eq('id', id)
   if (error) throw error
+}
+
+/** Persist record display order within a folder. */
+export async function reorderRecords(
+  folderId: string,
+  ids: string[],
+): Promise<void> {
+  if (ids.length === 0) return
+  const now = new Date().toISOString()
+  const results = await Promise.all(
+    ids.map((id, sort_order) =>
+      supabase
+        .from('price_records')
+        .update({ sort_order, updated_at: now })
+        .eq('id', id)
+        .eq('folder_id', folderId),
+    ),
+  )
+  const failed = results.find((r) => r.error)
+  if (failed?.error) throw failed.error
 }
 
 export async function linkReceiptItemToRecord(

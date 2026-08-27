@@ -1,13 +1,11 @@
 import type { ReactNode } from 'react'
 
-export type TabId = 'memo' | 'folders' | 'records' | 'trends' | 'link'
+export type TabId = 'memo' | 'folders' | 'trends'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'memo', label: '買い物メモ' },
   { id: 'folders', label: 'フォルダ' },
-  { id: 'records', label: '記録' },
   { id: 'trends', label: '値段推移' },
-  { id: 'link', label: 'レシート紐付け' },
 ]
 
 type Props = {
@@ -32,7 +30,7 @@ export function MainLayout({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs tracking-wide text-stone-500">
-                機能 B · 厳密単価比較
+                厳密単価比較
               </p>
               <h1 className="text-2xl font-semibold tracking-tight text-stone-900">
                 単価メモ

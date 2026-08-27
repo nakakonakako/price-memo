@@ -4,6 +4,7 @@ import {
   deleteFolder,
   listFolders,
   renameFolder,
+  reorderFolders,
 } from '../api/foldersApi'
 import type { PriceFolder } from '../types'
 
@@ -36,12 +37,31 @@ export function useFolders() {
     void refresh()
   }, [refresh])
 
-  const create = async (name: string) => {
+  const create = async (
+    name: string,
+    options?: { atStart?: boolean },
+  ) => {
     setIsMutating(true)
     setError(null)
     try {
       const created = await createFolder(name)
+      if (options?.atStart) {
+        const next = [created, ...folders].map((f, sort_order) => ({
+          ...f,
+          sort_order,
+        }))
+        setFolders(next)
+        try {
+          await reorderFolders(next.map((f) => f.id))
+        } catch (err) {
+          setError(errorMessage(err))
+          await refresh()
+          throw err
+        }
+        return created
+      }
       setFolders((prev) => [...prev, created])
+      return created
     } catch (err) {
       setError(errorMessage(err))
       throw err
@@ -78,6 +98,24 @@ export function useFolders() {
     }
   }
 
+  const reorder = async (ids: string[]) => {
+    const map = new Map(folders.map((f) => [f.id, f]))
+    const next = ids
+      .map((id, sort_order) => {
+        const f = map.get(id)
+        return f ? { ...f, sort_order } : null
+      })
+      .filter((f): f is PriceFolder => f != null)
+    setFolders(next)
+    try {
+      await reorderFolders(ids)
+    } catch (err) {
+      setError(errorMessage(err))
+      await refresh()
+      throw err
+    }
+  }
+
   return {
     folders,
     isLoading,
@@ -87,5 +125,6 @@ export function useFolders() {
     create,
     rename,
     remove,
+    reorder,
   }
 }

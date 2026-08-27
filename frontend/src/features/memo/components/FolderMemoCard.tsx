@@ -24,6 +24,7 @@ type Props = {
   folderId: string
   folderName: string
   records: PriceRecord[]
+  colorClass?: string
   onSaved: (record: PriceRecord) => void
 }
 
@@ -31,6 +32,7 @@ export function FolderMemoCard({
   folderId,
   folderName,
   records,
+  colorClass = 'border-stone-200 bg-white',
   onSaved,
 }: Props) {
   const allStats = useMemo(() => computeAllFolderStats(records), [records])
@@ -156,8 +158,8 @@ export function FolderMemoCard({
       <TrashDragItem
         payload={{ kind: 'memo-folder', id: folderId }}
         onClick={handleOpen}
-        className={`overflow-hidden rounded-lg border bg-white shadow-sm transition-colors ${
-          open ? 'border-stone-400' : 'border-stone-200 hover:border-stone-300'
+        className={`overflow-hidden rounded-lg border shadow-sm transition-colors ${colorClass} ${
+          open ? 'ring-1 ring-stone-400' : 'hover:brightness-[0.99]'
         }`}
       >
         <div className="px-3 py-2.5">
@@ -230,9 +232,12 @@ export function FolderMemoCard({
           <form
             onSubmit={(e) => void handleSave(e)}
             data-no-trash-drag
-            className="space-y-3 border-t border-stone-200 bg-stone-50/80 px-3 py-3"
+            className="space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3"
             onClick={(e) => e.stopPropagation()}
           >
+          <p className="text-sm text-stone-600">
+            内容量と値段を入れると単価が出ます。
+          </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-xs text-stone-500">確認日</span>
@@ -356,11 +361,7 @@ export function FolderMemoCard({
                 </p>
               )}
             </div>
-          ) : (
-            <p className="text-sm text-stone-500">
-              内容量と値段を入れると単価が出ます。
-            </p>
-          )}
+          ) : null}
 
           {error && <p className="text-sm text-red-700">{error}</p>}
           {savedMsg && <p className="text-sm text-teal-800">{savedMsg}</p>}

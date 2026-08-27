@@ -12,6 +12,7 @@ export type PriceRecord = {
   note: string | null
   receipt_item_id: string | null
   label_image_path: string | null
+  sort_order: number
   created_at: string
   updated_at: string
 }

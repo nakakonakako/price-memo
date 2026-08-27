@@ -13,7 +13,8 @@
 |----------|--------|
 | `20260824183225_remote_schema.sql` | A（履歴ミラー。編集しない） |
 | `20260825100000_remove_memo_and_is_comparable.sql` | A（履歴ミラー。編集しない） |
-| `20260826100000_price_folders_and_records.sql` | **B が正。A の `supabase/migrations` にも同内容を置く** |
+| `20260827100000_price_records_free_units.sql` | **B が正。A にもコピー** |
+| `20260828100000_sort_order.sql` | **B が正。フォルダ／記録の表示順** |
 
 現状、`db push` は A リポ側の link / DB パスワードが安定している。B 用テーブルを足すときは:
 
@@ -25,6 +26,7 @@ A 側で新しい migration が増えたら、履歴ミラーを本リポにも�
 
 ## 適用済み
 
+- 2026-08-28: Dev へ `sort_order` 適用済み
 - 2026-08-26: Dev（`irgahixsuvtopiwmtkku`）へ `price_folders` / `price_records` 適用済み
 - Prod へは別途同じ migration を push すること
 
