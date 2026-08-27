@@ -306,9 +306,7 @@ export function FoldersPage() {
     setDeleteConfirmStoreBusy(true)
     try {
       await deleteStore(storeId)
-      setStores((prev) => prev.filter((s) => s.id !== storeId))
-      if (editingStoreId === storeId) cancelEditStore()
-      if (openStoreId === storeId) setOpenStoreId(null)
+      finalizeStoreRemoved(storeId)
       setDeleteConfirmStoreId(null)
     } catch (err) {
       setStoresError(toUserMessage(err, '店舗の削除に失敗しました。'))
@@ -316,6 +314,15 @@ export function FoldersPage() {
       setDeleteConfirmStoreBusy(false)
     }
   }
+
+  const finalizeStoreRemoved = useCallback(
+    (storeId: string) => {
+      if (editingStoreId === storeId) cancelEditStore()
+      if (openStoreId === storeId) setOpenStoreId(null)
+      setStores((prev) => prev.filter((s) => s.id !== storeId))
+    },
+    [cancelEditStore, editingStoreId, openStoreId],
+  )
 
   useOutsidePointerDown(editingStoreId != null, cancelEditStore)
 
@@ -492,7 +499,13 @@ export function FoldersPage() {
             finalizeFolderRemoved(payload.id)
           }
         } else if (payload.kind === 'store') {
-          setDeleteConfirmStoreId(payload.id)
+          const count = storeRecordCounts[payload.id] ?? 0
+          if (count > 0) {
+            setDeleteConfirmStoreId(payload.id)
+          } else {
+            await deleteStore(payload.id)
+            finalizeStoreRemoved(payload.id)
+          }
         } else if (payload.kind === 'folder-record') {
           await deleteRecord(payload.id)
           patchFolderRecords(payload.folderId, (rows) =>
@@ -510,9 +523,11 @@ export function FoldersPage() {
     [
       editingRecord,
       finalizeFolderRemoved,
+      finalizeStoreRemoved,
       recordsByFolder,
       recordCounts,
       remove,
+      storeRecordCounts,
     ],
   )
 
@@ -1234,17 +1249,13 @@ export function FoldersPage() {
               </span>
               」を店舗一覧から削除しますか？
             </p>
-            {getStoreRecordCount(deleteConfirmStore.id) > 0 ? (
+            {getStoreRecordCount(deleteConfirmStore.id) > 0 && (
               <p className="text-sm text-stone-600">
                 記録{' '}
                 <span className="font-medium tabular-nums">
                   {getStoreRecordCount(deleteConfirmStore.id)}
                 </span>
                 件はそのまま残ります（選択肢から外れるだけです）。
-              </p>
-            ) : (
-              <p className="text-sm text-stone-600">
-                この店舗の記録はまだありません。
               </p>
             )}
             <div className="flex flex-wrap justify-end gap-2">
