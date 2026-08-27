@@ -19,6 +19,7 @@ import {
 } from '@/features/records/api/recordsApi'
 import {
   RecordForm,
+  emptyRecordForm,
   recordToFormState,
 } from '@/features/records/components/RecordForm'
 import type { PriceRecord } from '@/features/records/types'
@@ -46,6 +47,8 @@ const nameCollator = new Intl.Collator('ja', {
   numeric: true,
   sensitivity: 'base',
 })
+
+const catalogCardMinH = 'min-h-[4rem]'
 
 function ListRegistrar({
   kind,
@@ -103,6 +106,8 @@ export function FoldersPage() {
   const [editingRecord, setEditingRecord] = useState<PriceRecord | null>(null)
   const [recordCounts, setRecordCounts] = useState<Record<string, number>>({})
   const [addingFolderId, setAddingFolderId] = useState<string | null>(null)
+  const [addingForStore, setAddingForStore] = useState<PriceStore | null>(null)
+  const [storeAddFolderId, setStoreAddFolderId] = useState('')
   const [addingBusy, setAddingBusy] = useState(false)
   const [editingBusy, setEditingBusy] = useState(false)
   const [folderQuery, setFolderQuery] = useState('')
@@ -133,6 +138,7 @@ export function FoldersPage() {
   const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false)
 
   const addingFolder = folders.find((f) => f.id === addingFolderId) ?? null
+  const storeAddFolder = folders.find((f) => f.id === storeAddFolderId) ?? null
   const deleteConfirmFolder =
     folders.find((f) => f.id === deleteConfirmFolderId) ?? null
   const deleteConfirmStore =
@@ -620,14 +626,14 @@ export function FoldersPage() {
                 onClick={() => void handleAddFolder()}
                 disabled={isMutating}
                 aria-label="フォルダを追加"
-                className="relative flex min-h-[5.75rem] w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50"
+                className={`relative flex ${catalogCardMinH} w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50`}
               >
                 <div
-                  className="absolute left-4 top-0 h-2.5 w-14 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
+                  className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
                   aria-hidden
                 />
                 <span
-                  className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-500 text-2xl font-light leading-none text-sky-700"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-500 text-xl font-light leading-none text-sky-700"
                   aria-hidden
                 >
                   ＋
@@ -656,19 +662,19 @@ export function FoldersPage() {
                       className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
                         isOpen
                           ? 'border-amber-400/80 shadow-md'
-                          : 'border-amber-200/90 hover:shadow-md min-h-[5.75rem]'
+                          : `border-amber-200/90 hover:shadow-md ${catalogCardMinH}`
                       } bg-gradient-to-b from-amber-50 via-amber-50/90 to-amber-100/40`}
                     >
                       <div
-                        className="absolute left-4 top-0 h-2.5 w-14 rounded-b-sm border border-t-0 border-amber-300/70 bg-amber-200/90"
+                        className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-amber-300/70 bg-amber-200/90"
                         aria-hidden
                       />
 
                       <div
                         className={
                           isOpen
-                            ? 'flex flex-col gap-2 px-4 pb-3 pt-5'
-                            : 'flex min-h-[5.75rem] items-center px-4 pb-3 pt-5'
+                            ? 'flex flex-col gap-2 px-4 pb-2 pt-4'
+                            : `flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`
                         }
                       >
                         {editingId === folder.id ? (
@@ -703,7 +709,7 @@ export function FoldersPage() {
                             </button>
                           </form>
                         ) : (
-                          <div className="flex min-w-0 items-center gap-0.5">
+                          <div className="flex min-w-0 w-full items-center">
                             <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
                               {parseFolderName(folder.name).displayName}
                             </span>
@@ -713,29 +719,34 @@ export function FoldersPage() {
                               onClick={() => startEdit(folder)}
                               disabled={isMutating}
                             />
-                            <span className="ml-auto shrink-0 tabular-nums text-sm text-stone-500">
-                              {recordCount}
-                            </span>
-                            <span
-                              className="shrink-0 text-stone-400 transition-transform"
-                              style={{
-                                transform: isOpen
-                                  ? 'rotate(90deg)'
-                                  : undefined,
-                              }}
-                              aria-hidden
-                            >
-                              ▸
-                            </span>
-                            <button
-                              type="button"
-                              aria-label="記録を追加"
-                              title="記録を追加"
-                              onClick={() => setAddingFolderId(folder.id)}
-                              className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-xl font-medium text-stone-700 hover:bg-white/70"
-                            >
-                              ＋
-                            </button>
+                            <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
+                              <span className="tabular-nums text-sm text-stone-500">
+                                {recordCount}
+                              </span>
+                              <span
+                                className="shrink-0 text-stone-400 transition-transform"
+                                style={{
+                                  transform: isOpen
+                                    ? 'rotate(90deg)'
+                                    : undefined,
+                                }}
+                                aria-hidden
+                              >
+                                ▸
+                              </span>
+                              <button
+                                type="button"
+                                aria-label="記録を追加"
+                                title="記録を追加"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setAddingFolderId(folder.id)
+                                }}
+                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700 hover:bg-white/70"
+                              >
+                                ＋
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -831,14 +842,14 @@ export function FoldersPage() {
                 onClick={() => void handleAddStore()}
                 disabled={storeMutating}
                 aria-label="店舗を追加"
-                className="relative flex min-h-[5.75rem] w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50"
+                className={`relative flex ${catalogCardMinH} w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50`}
               >
                 <div
-                  className="absolute left-4 top-0 h-2.5 w-14 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
+                  className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
                   aria-hidden
                 />
                 <span
-                  className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-sky-500 text-2xl font-light leading-none text-sky-700"
+                  className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-500 text-xl font-light leading-none text-sky-700"
                   aria-hidden
                 >
                   ＋
@@ -868,19 +879,19 @@ export function FoldersPage() {
                       className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
                         isOpen
                           ? 'border-emerald-400/80 shadow-md'
-                          : 'border-emerald-200/90 hover:shadow-md min-h-[5.75rem]'
+                          : `border-emerald-200/90 hover:shadow-md ${catalogCardMinH}`
                       } bg-gradient-to-b from-emerald-50 via-emerald-50/90 to-emerald-100/40`}
                     >
                       <div
-                        className="absolute left-4 top-0 h-2.5 w-14 rounded-b-sm border border-t-0 border-emerald-300/70 bg-emerald-200/90"
+                        className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-emerald-300/70 bg-emerald-200/90"
                         aria-hidden
                       />
 
                       <div
                         className={
                           isOpen
-                            ? 'flex flex-col gap-2 px-4 pb-3 pt-5'
-                            : 'flex min-h-[5.75rem] items-center px-4 pb-3 pt-5'
+                            ? 'flex flex-col gap-2 px-4 pb-2 pt-4'
+                            : `flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`
                         }
                       >
                         {editingStoreId === store.id ? (
@@ -919,7 +930,7 @@ export function FoldersPage() {
                             </button>
                           </form>
                         ) : (
-                          <div className="flex min-w-0 items-center gap-0.5">
+                          <div className="flex min-w-0 w-full items-center">
                             <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
                               {store.name}
                             </span>
@@ -929,18 +940,33 @@ export function FoldersPage() {
                               onClick={() => startEditStore(store)}
                               disabled={storeMutating}
                             />
-                            <span className="ml-auto shrink-0 tabular-nums text-sm text-stone-500">
-                              {recordCount}
-                            </span>
-                            <span
-                              className="shrink-0 text-stone-400 transition-transform"
-                              style={{
-                                transform: isOpen ? 'rotate(90deg)' : undefined,
-                              }}
-                              aria-hidden
-                            >
-                              ▸
-                            </span>
+                            <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
+                              <span className="tabular-nums text-sm text-stone-500">
+                                {recordCount}
+                              </span>
+                              <span
+                                className="shrink-0 text-stone-400 transition-transform"
+                                style={{
+                                  transform: isOpen ? 'rotate(90deg)' : undefined,
+                                }}
+                                aria-hidden
+                              >
+                                ▸
+                              </span>
+                              <button
+                                type="button"
+                                aria-label="記録を追加"
+                                title="記録を追加"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setAddingForStore(store)
+                                  setStoreAddFolderId(folders[0]?.id ?? '')
+                                }}
+                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700 hover:bg-white/70"
+                              >
+                                ＋
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1026,6 +1052,82 @@ export function FoldersPage() {
               }
             }}
           />
+        )}
+      </Modal>
+
+      <Modal
+        title="記録を追加"
+        open={addingForStore != null}
+        onClose={() => setAddingForStore(null)}
+      >
+        {addingForStore && (
+          <div className="space-y-3">
+            <p className="text-sm text-stone-600">
+              店舗:{' '}
+              <span className="font-medium text-stone-900">
+                {addingForStore.name}
+              </span>
+            </p>
+            {folders.length === 0 ? (
+              <p className="text-sm text-stone-500">
+                先に品目名タブでフォルダを追加してください。
+              </p>
+            ) : (
+              <>
+                <label className="block space-y-1">
+                  <span className="text-xs text-stone-500">品目（フォルダ）</span>
+                  <select
+                    value={storeAddFolderId}
+                    onChange={(e) => setStoreAddFolderId(e.target.value)}
+                    className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+                  >
+                    {folders.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {parseFolderName(f.name).displayName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {storeAddFolder && (
+                  <RecordForm
+                    key={`store-add-${addingForStore.id}-${storeAddFolderId}`}
+                    folderId={storeAddFolderId}
+                    folderName={storeAddFolder.name}
+                    initial={{
+                      ...emptyRecordForm(),
+                      store_name: addingForStore.name,
+                    }}
+                    preferredUnits={[
+                      ...new Set(
+                        (
+                          recordsByFolder[storeAddFolderId] ?? []
+                        ).map((r) => r.unit),
+                      ),
+                    ]}
+                    busy={addingBusy}
+                    onCancel={() => setAddingForStore(null)}
+                    onSubmit={async (input) => {
+                      setAddingBusy(true)
+                      try {
+                        const created = await createRecord(input)
+                        patchFolderRecords(storeAddFolderId, (rows) => [
+                          ...rows,
+                          created,
+                        ])
+                        setAllRecords((prev) => [created, ...prev])
+                        if (openFolderId !== storeAddFolderId) {
+                          setOpenFolderId(storeAddFolderId)
+                        }
+                        setAddingForStore(null)
+                      } finally {
+                        setAddingBusy(false)
+                      }
+                    }}
+                  />
+                )}
+              </>
+            )}
+          </div>
         )}
       </Modal>
 
