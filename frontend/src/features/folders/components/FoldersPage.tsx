@@ -475,7 +475,16 @@ export function FoldersPage() {
       if (result.action !== 'delete') return
       try {
         if (payload.kind === 'folder') {
-          setDeleteConfirmFolderId(payload.id)
+          const count =
+            recordsByFolder[payload.id]?.length ??
+            recordCounts[payload.id] ??
+            0
+          if (count > 0) {
+            setDeleteConfirmFolderId(payload.id)
+          } else {
+            await remove(payload.id)
+            finalizeFolderRemoved(payload.id)
+          }
         } else if (payload.kind === 'store') {
           setDeleteConfirmStoreId(payload.id)
         } else if (payload.kind === 'folder-record') {
@@ -492,7 +501,13 @@ export function FoldersPage() {
         /* hook */
       }
     },
-    [editingRecord],
+    [
+      editingRecord,
+      finalizeFolderRemoved,
+      recordsByFolder,
+      recordCounts,
+      remove,
+    ],
   )
 
   return (
@@ -641,7 +656,7 @@ export function FoldersPage() {
                       className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
                         isOpen
                           ? 'border-amber-400/80 shadow-md'
-                          : 'border-amber-200/90 hover:shadow-md'
+                          : 'border-amber-200/90 hover:shadow-md min-h-[5.75rem]'
                       } bg-gradient-to-b from-amber-50 via-amber-50/90 to-amber-100/40`}
                     >
                       <div
@@ -649,7 +664,13 @@ export function FoldersPage() {
                         aria-hidden
                       />
 
-                      <div className="flex flex-col gap-2 px-4 pb-3 pt-5">
+                      <div
+                        className={
+                          isOpen
+                            ? 'flex flex-col gap-2 px-4 pb-3 pt-5'
+                            : 'flex min-h-[5.75rem] items-center px-4 pb-3 pt-5'
+                        }
+                      >
                         {editingId === folder.id ? (
                           <form
                             data-edit-surface
@@ -847,7 +868,7 @@ export function FoldersPage() {
                       className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
                         isOpen
                           ? 'border-emerald-400/80 shadow-md'
-                          : 'border-emerald-200/90 hover:shadow-md'
+                          : 'border-emerald-200/90 hover:shadow-md min-h-[5.75rem]'
                       } bg-gradient-to-b from-emerald-50 via-emerald-50/90 to-emerald-100/40`}
                     >
                       <div
@@ -855,7 +876,13 @@ export function FoldersPage() {
                         aria-hidden
                       />
 
-                      <div className="flex flex-col gap-2 px-4 pb-3 pt-5">
+                      <div
+                        className={
+                          isOpen
+                            ? 'flex flex-col gap-2 px-4 pb-3 pt-5'
+                            : 'flex min-h-[5.75rem] items-center px-4 pb-3 pt-5'
+                        }
+                      >
                         {editingStoreId === store.id ? (
                           <form
                             data-edit-surface
@@ -1058,17 +1085,13 @@ export function FoldersPage() {
               </span>
               」を削除しますか？
             </p>
-            {getRecordCount(deleteConfirmFolder.id) > 0 ? (
+            {getRecordCount(deleteConfirmFolder.id) > 0 && (
               <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
                 このフォルダ内の記録{' '}
                 <span className="font-medium tabular-nums">
                   {getRecordCount(deleteConfirmFolder.id)}
                 </span>
                 件もまとめて削除されます。元に戻せません。
-              </p>
-            ) : (
-              <p className="text-sm text-stone-600">
-                記録はまだありません。買い物メモに載せている場合は、そこからも外れます。
               </p>
             )}
             <div className="flex flex-wrap justify-end gap-2">
