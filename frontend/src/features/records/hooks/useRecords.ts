@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { toUserMessage } from '@/lib/userError'
 import {
   createRecord,
   deleteRecord,
@@ -6,13 +7,6 @@ import {
   updateRecord,
 } from '../api/recordsApi'
 import type { PriceRecord, PriceRecordInput } from '../types'
-
-function errorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'message' in err) {
-    return String((err as { message: string }).message)
-  }
-  return '操作に失敗しました'
-}
 
 export function useRecords(folderId: string | null) {
   const [records, setRecords] = useState<PriceRecord[]>([])
@@ -31,7 +25,7 @@ export function useRecords(folderId: string | null) {
     try {
       setRecords(await listRecords(folderId))
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, '記録の読み込みに失敗しました。'))
     } finally {
       setIsLoading(false)
     }
@@ -51,7 +45,7 @@ export function useRecords(folderId: string | null) {
       }
       return created
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, '記録の追加に失敗しました。'))
       throw err
     } finally {
       setIsMutating(false)
@@ -74,7 +68,7 @@ export function useRecords(folderId: string | null) {
       })
       return updated
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, '記録の更新に失敗しました。'))
       throw err
     } finally {
       setIsMutating(false)
@@ -88,7 +82,7 @@ export function useRecords(folderId: string | null) {
       await deleteRecord(id)
       setRecords((prev) => prev.filter((r) => r.id !== id))
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, '記録の削除に失敗しました。'))
       throw err
     } finally {
       setIsMutating(false)

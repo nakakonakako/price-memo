@@ -27,8 +27,10 @@ import {
   unitLabel,
   unitPrice,
 } from '@/features/records/utils/unitPrice'
+import { toUserMessage } from '@/lib/userError'
 import { useFolders } from '../hooks/useFolders'
 import type { PriceFolder } from '../types'
+import { folderSortKey, parseFolderName } from '../utils/folderName'
 
 type FolderSort = 'added' | 'name'
 
@@ -97,6 +99,8 @@ export function FoldersPage() {
   const [editingBusy, setEditingBusy] = useState(false)
   const [folderQuery, setFolderQuery] = useState('')
   const [folderSort, setFolderSort] = useState<FolderSort>('added')
+  /** New folder stays beside the add tile until rename is saved (name sort). */
+  const [draftFolderId, setDraftFolderId] = useState<string | null>(null)
 
   const addingFolder = folders.find((f) => f.id === addingFolderId) ?? null
   const editingRecordFolder =
@@ -107,11 +111,26 @@ export function FoldersPage() {
   const visibleFolders = useMemo(() => {
     const q = folderQuery.trim().toLocaleLowerCase('ja')
     const filtered = q
-      ? folders.filter((f) => f.name.toLocaleLowerCase('ja').includes(q))
+      ? folders.filter((f) => {
+          const { displayName, reading } = parseFolderName(f.name)
+          const hay = `${displayName} ${reading ?? ''} ${f.name}`.toLocaleLowerCase(
+            'ja',
+          )
+          return hay.includes(q)
+        })
       : folders
     const rows = [...filtered]
     if (folderSort === 'name') {
-      rows.sort((a, b) => nameCollator.compare(a.name, b.name))
+      rows.sort((a, b) =>
+        nameCollator.compare(folderSortKey(a.name), folderSortKey(b.name)),
+      )
+      if (draftFolderId) {
+        const draftIdx = rows.findIndex((f) => f.id === draftFolderId)
+        if (draftIdx > 0) {
+          const [draft] = rows.splice(draftIdx, 1)
+          rows.unshift(draft)
+        }
+      }
     } else {
       rows.sort((a, b) => {
         const byCreated = a.created_at.localeCompare(b.created_at)
@@ -120,7 +139,7 @@ export function FoldersPage() {
       })
     }
     return rows
-  }, [folderQuery, folderSort, folders])
+  }, [draftFolderId, folderQuery, folderSort, folders])
 
   useEffect(() => {
     if (isLoading) return
@@ -157,6 +176,7 @@ export function FoldersPage() {
     if (!editingId) return
     try {
       await rename(editingId, editingName)
+      setDraftFolderId((id) => (id === editingId ? null : id))
       cancelEdit()
     } catch {
       /* hook */
@@ -172,6 +192,7 @@ export function FoldersPage() {
     }
     try {
       const created = await create(name)
+      setDraftFolderId(created.id)
       startEdit(created)
     } catch {
       /* hook */
@@ -197,8 +218,10 @@ export function FoldersPage() {
       setRecordsByFolder((prev) => ({ ...prev, [folderId]: records }))
       setRecordCounts((prev) => ({ ...prev, [folderId]: records.length }))
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : 'フォルダ中身の読み込みに失敗しました。'
+      const msg = toUserMessage(
+        err,
+        'フォルダ中身の読み込みに失敗しました。',
+      )
       setRecordsError(msg)
     } finally {
       setOpenFolderLoadingId(null)
@@ -242,7 +265,7 @@ export function FoldersPage() {
           await reorderRecords(payload.folderId, ids)
         } catch (err) {
           setRecordsError(
-            err instanceof Error ? err.message : '並べ替えの保存に失敗',
+            toUserMessage(err, '並べ替えの保存に失敗しました。'),
           )
           const fresh = await listRecords(payload.folderId)
           setRecordsByFolder((prev) => ({
@@ -260,6 +283,7 @@ export function FoldersPage() {
           if (editingId === payload.id) cancelEdit()
           if (openFolderId === payload.id) setOpenFolderId(null)
           if (editingRecord?.folder_id === payload.id) setEditingRecord(null)
+          setDraftFolderId((id) => (id === payload.id ? null : id))
           setRecordCounts((prev) => {
             const next = { ...prev }
             delete next[payload.id]
@@ -313,7 +337,7 @@ export function FoldersPage() {
               value={folderSort}
               onChange={(e) => setFolderSort(e.target.value as FolderSort)}
               className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-              title="名前順は日本語ロケールの辞書順です。漢字は読みに近い順になりますが、完全な五十音とは限りません。"
+              title="名前順は末尾の () / （）内の読みを優先します。なければ表示名で並べます。"
             >
               <option value="added">追加順</option>
               <option value="name">名前順</option>
@@ -421,7 +445,7 @@ export function FoldersPage() {
                         ) : (
                           <div className="flex min-w-0 items-center gap-0.5">
                             <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
-                              {folder.name}
+                              {parseFolderName(folder.name).displayName}
                             </span>
                             <EditIconButton
                               quiet

@@ -1,5 +1,6 @@
-import { useMemo, useState, type FormEvent, type MouseEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
 import { TrashDragItem } from '@/components/trash/TrashDragItem'
+import { parseFolderName } from '@/features/folders/utils/folderName'
 import { UnitField } from '@/features/records/components/UnitField'
 import { createRecord } from '@/features/records/api/recordsApi'
 import type { PriceRecord, PriceUnit } from '@/features/records/types'
@@ -8,6 +9,7 @@ import {
   todayISODate,
   unitLabel,
 } from '@/features/records/utils/unitPrice'
+import { toUserMessage } from '@/lib/userError'
 import {
   canCompareToStats,
   computeAllFolderStats,
@@ -25,6 +27,9 @@ type Props = {
   folderName: string
   records: PriceRecord[]
   colorClass?: string
+  forceOpen?: boolean
+  onForceOpenHandled?: () => void
+  rootRef?: (el: HTMLElement | null) => void
   onSaved: (record: PriceRecord) => void
 }
 
@@ -33,8 +38,12 @@ export function FolderMemoCard({
   folderName,
   records,
   colorClass = 'border-stone-200 bg-white',
+  forceOpen = false,
+  onForceOpenHandled,
+  rootRef,
   onSaved,
 }: Props) {
+  const displayName = parseFolderName(folderName).displayName
   const allStats = useMemo(() => computeAllFolderStats(records), [records])
   const preferredUnits = useMemo(() => unitsInRecords(records), [records])
   const [statsUnit, setStatsUnit] = useState<PriceUnit | null>(null)
@@ -65,6 +74,14 @@ export function FolderMemoCard({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!forceOpen) return
+    setOpen(true)
+    setError(null)
+    setSavedMsg(null)
+    onForceOpenHandled?.()
+  }, [forceOpen, onForceOpenHandled])
 
   const priceN = Number(price)
   const amountN = Number(amount)
@@ -147,14 +164,14 @@ export function FolderMemoCard({
       setStatsUnit(created.unit)
       onSaved(created)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '保存に失敗しました')
+      setError(toUserMessage(err, '保存に失敗しました。'))
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <li className="list-none">
+    <li className="list-none" ref={rootRef}>
       <TrashDragItem
         payload={{ kind: 'memo-folder', id: folderId }}
         onClick={handleOpen}
@@ -173,7 +190,7 @@ export function FolderMemoCard({
                   ▸
                 </span>
                 <p className="truncate text-base font-semibold text-stone-900 sm:text-lg">
-                  {folderName}
+                  {displayName}
                 </p>
               </div>
             </div>

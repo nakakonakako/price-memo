@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react'
 import { TrashDragProvider } from '@/components/trash/TrashDragProvider'
 import type { DragEndResult } from '@/components/trash/types'
 import {
@@ -8,9 +15,14 @@ import {
   reorderFolders,
 } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
+import {
+  folderSortKey,
+  parseFolderName,
+} from '@/features/folders/utils/folderName'
 import { listAllRecords } from '@/features/records/api/recordsApi'
 import type { PriceRecord } from '@/features/records/types'
 import { reorderIds } from '@/lib/listOrder'
+import { toUserMessage } from '@/lib/userError'
 import { recordsByFolderId } from '../utils/stats'
 import { FolderMemoCard } from './FolderMemoCard'
 import { useTrashDrag } from '@/components/trash/TrashDragProvider'
@@ -26,6 +38,31 @@ const MEMO_PALETTES = [
   'border-fuchsia-200 bg-fuchsia-50/90',
 ]
 
+const nameCollator = new Intl.Collator('ja', {
+  numeric: true,
+  sensitivity: 'base',
+})
+
+function normalizeFolderQuery(value: string): string {
+  return value.trim().toLocaleLowerCase('ja')
+}
+
+function findFolderByInput(
+  folders: PriceFolder[],
+  input: string,
+): PriceFolder | undefined {
+  const q = input.trim()
+  if (!q) return undefined
+  const nq = normalizeFolderQuery(q)
+  return folders.find((f) => {
+    const { displayName } = parseFolderName(f.name)
+    return (
+      normalizeFolderQuery(f.name) === nq ||
+      normalizeFolderQuery(displayName) === nq
+    )
+  })
+}
+
 function MemoListEndMarker({ lastId }: { lastId: string | null }) {
   const { insertBeforeId, activeId, activeKind, dragOverTrash, dragging } =
     useTrashDrag()
@@ -40,8 +77,12 @@ export function ShoppingMemoPage() {
   const [records, setRecords] = useState<PriceRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
+  const [pickId, setPickId] = useState('')
   const [mutating, setMutating] = useState(false)
+  const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
+  const cardRefs = useRef(new Map<string, HTMLElement>())
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setIsLoading(true)
@@ -54,7 +95,7 @@ export function ShoppingMemoPage() {
       setFolders(folderList)
       setRecords(recordList)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '読み込みに失敗しました')
+      setError(toUserMessage(err, '読み込みに失敗しました。'))
     } finally {
       if (!opts?.silent) setIsLoading(false)
     }
@@ -67,66 +108,110 @@ export function ShoppingMemoPage() {
   const byFolder = useMemo(() => recordsByFolderId(records), [records])
   const folderIds = useMemo(() => folders.map((f) => f.id), [folders])
 
+  const foldersForPick = useMemo(() => {
+    return [...folders].sort((a, b) =>
+      nameCollator.compare(folderSortKey(a.name), folderSortKey(b.name)),
+    )
+  }, [folders])
+
+  const clearFocusFolder = useCallback(() => {
+    setFocusFolderId(null)
+  }, [])
+
+  const focusFolder = useCallback((folderId: string) => {
+    setFocusFolderId(folderId)
+    setInfo(null)
+    setError(null)
+    requestAnimationFrame(() => {
+      const el = cardRefs.current.get(folderId)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    })
+  }, [])
+
+  const handlePickExisting = (e: FormEvent) => {
+    e.preventDefault()
+    if (!pickId) return
+    focusFolder(pickId)
+    setInfo('既存のフォルダを開きました。名前はフォルダタブと共通です。')
+  }
+
   const handleCreate = async (e: FormEvent) => {
     e.preventDefault()
-    if (!newName.trim()) return
-    setMutating(true)
+    const trimmed = newName.trim()
+    if (!trimmed) return
     setError(null)
+    setInfo(null)
+
+    const existing = findFolderByInput(folders, trimmed)
+    if (existing) {
+      setNewName('')
+      focusFolder(existing.id)
+      setInfo(
+        `「${parseFolderName(existing.name).displayName}」は既にあるので、そのフォルダを開きました。`,
+      )
+      return
+    }
+
+    setMutating(true)
     try {
-      const created = await createFolder(newName)
+      const created = await createFolder(trimmed)
       setFolders((prev) => [...prev, created])
       setNewName('')
+      focusFolder(created.id)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '追加に失敗しました')
+      setError(toUserMessage(err, '追加に失敗しました。'))
     } finally {
       setMutating(false)
     }
   }
 
-  const handleDragEnd = useCallback(async (result: DragEndResult) => {
-    if (result.action === 'cancel') return
-    if (result.payload.kind !== 'memo-folder') return
+  const handleDragEnd = useCallback(
+    async (result: DragEndResult) => {
+      if (result.action === 'cancel') return
+      if (result.payload.kind !== 'memo-folder') return
 
-    if (result.action === 'delete') {
-      setMutating(true)
-      setError(null)
-      try {
-        await deleteFolder(result.payload.id)
-        setFolders((prev) => prev.filter((f) => f.id !== result.payload.id))
-        setRecords((prev) =>
-          prev.filter((r) => r.folder_id !== result.payload.id),
+      if (result.action === 'delete') {
+        setMutating(true)
+        setError(null)
+        try {
+          await deleteFolder(result.payload.id)
+          setFolders((prev) => prev.filter((f) => f.id !== result.payload.id))
+          setRecords((prev) =>
+            prev.filter((r) => r.folder_id !== result.payload.id),
+          )
+        } catch (err) {
+          setError(toUserMessage(err, '削除に失敗しました。'))
+        } finally {
+          setMutating(false)
+        }
+        return
+      }
+
+      if (result.action === 'reorder') {
+        const prev = folders
+        const ids = reorderIds(
+          prev.map((f) => f.id),
+          result.payload.id,
+          result.beforeId,
         )
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '削除に失敗しました')
-      } finally {
-        setMutating(false)
+        const map = new Map(prev.map((f) => [f.id, f]))
+        const next = ids
+          .map((id, sort_order) => {
+            const f = map.get(id)
+            return f ? { ...f, sort_order } : null
+          })
+          .filter((f): f is PriceFolder => f != null)
+        setFolders(next)
+        try {
+          await reorderFolders(ids)
+        } catch (err) {
+          setError(toUserMessage(err, '並べ替えの保存に失敗しました。'))
+          void load({ silent: true })
+        }
       }
-      return
-    }
-
-    if (result.action === 'reorder') {
-      const prev = folders
-      const ids = reorderIds(
-        prev.map((f) => f.id),
-        result.payload.id,
-        result.beforeId,
-      )
-      const map = new Map(prev.map((f) => [f.id, f]))
-      const next = ids
-        .map((id, sort_order) => {
-          const f = map.get(id)
-          return f ? { ...f, sort_order } : null
-        })
-        .filter((f): f is PriceFolder => f != null)
-      setFolders(next)
-      try {
-        await reorderFolders(ids)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : '並べ替えの保存に失敗')
-        void load({ silent: true })
-      }
-    }
-  }, [folders, load])
+    },
+    [folders, load],
+  )
 
   const handleSaved = (record: PriceRecord) => {
     setRecords((prev) => [record, ...prev])
@@ -139,31 +224,76 @@ export function ShoppingMemoPage() {
         <div className="space-y-2">
           <h2 className="text-lg font-medium text-stone-900">買い物メモ</h2>
           <p className="text-sm text-stone-600">
-            買う候補をメモに追加し、平均・最安・直近を見ながら試算します。ドラッグで並べ替え、右下のゴミ箱へ落とすと削除できます。
+            フォルダタブと同じ棚を使います。既存フォルダを選ぶか、新しい名前で追加してください。ドラッグで並べ替え、右下のゴミ箱へ落とすと削除できます。
           </p>
         </div>
 
-        <form onSubmit={(e) => void handleCreate(e)} className="flex gap-2">
-          <input
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="例: 鶏むね / 牛乳 1L"
-            className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-            disabled={mutating}
-          />
-          <button
-            type="submit"
-            disabled={mutating || !newName.trim()}
-            className="shrink-0 rounded-md bg-stone-900 px-4 py-2 text-sm text-white hover:bg-stone-800 disabled:opacity-50"
+        <div className="space-y-2">
+          <form
+            onSubmit={handlePickExisting}
+            className="flex flex-col gap-2 sm:flex-row"
           >
-            追加
-          </button>
-        </form>
+            <select
+              value={pickId}
+              onChange={(e) => setPickId(e.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+              disabled={mutating || folders.length === 0}
+            >
+              <option value="">フォルダから選ぶ…</option>
+              {foldersForPick.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {parseFolderName(f.name).displayName}
+                </option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              disabled={mutating || !pickId}
+              className="shrink-0 rounded-md border border-stone-300 bg-white px-4 py-2 text-sm text-stone-800 hover:bg-stone-50 disabled:opacity-50"
+            >
+              開く
+            </button>
+          </form>
+
+          <form
+            onSubmit={(e) => void handleCreate(e)}
+            className="flex flex-col gap-2 sm:flex-row"
+          >
+            <input
+              type="text"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="新規フォルダ名（例: 鶏むね / 牛乳（ぎゅうにゅう））"
+              list="memo-folder-suggestions"
+              className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+              disabled={mutating}
+            />
+            <datalist id="memo-folder-suggestions">
+              {foldersForPick.map((f) => (
+                <option
+                  key={f.id}
+                  value={parseFolderName(f.name).displayName}
+                />
+              ))}
+            </datalist>
+            <button
+              type="submit"
+              disabled={mutating || !newName.trim()}
+              className="shrink-0 rounded-md bg-stone-900 px-4 py-2 text-sm text-white hover:bg-stone-800 disabled:opacity-50"
+            >
+              新規追加
+            </button>
+          </form>
+        </div>
 
         {error && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
+          </p>
+        )}
+        {info && (
+          <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+            {info}
           </p>
         )}
 
@@ -171,7 +301,7 @@ export function ShoppingMemoPage() {
           <p className="text-sm text-stone-500">読み込み中...</p>
         ) : folders.length === 0 ? (
           <p className="rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500">
-            まだメモがありません。上から追加してください。
+            まだメモがありません。上から追加するか、フォルダタブで棚を作ってください。
           </p>
         ) : (
           <div className="space-y-2">
@@ -184,6 +314,12 @@ export function ShoppingMemoPage() {
                   folderName={folder.name}
                   records={byFolder.get(folder.id) ?? []}
                   colorClass={MEMO_PALETTES[index % MEMO_PALETTES.length]}
+                  forceOpen={focusFolderId === folder.id}
+                  onForceOpenHandled={clearFocusFolder}
+                  rootRef={(el) => {
+                    if (el) cardRefs.current.set(folder.id, el)
+                    else cardRefs.current.delete(folder.id)
+                  }}
                   onSaved={handleSaved}
                 />
               ))}

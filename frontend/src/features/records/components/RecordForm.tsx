@@ -14,6 +14,7 @@ import {
   unitPrice,
 } from '../utils/unitPrice'
 import { UnitField } from './UnitField'
+import { toUserMessage } from '@/lib/userError'
 
 export type RecordFormState = {
   recorded_at: string
@@ -135,7 +136,7 @@ export function RecordForm({
     try {
       await onSubmit(parsed)
     } catch (err) {
-      setFormError(err instanceof Error ? err.message : '保存に失敗しました')
+      setFormError(toUserMessage(err, '保存に失敗しました。'))
     }
   }
 
@@ -159,7 +160,7 @@ export function RecordForm({
       }
     } catch (err) {
       setSearchError(
-        err instanceof Error ? err.message : 'レシート検索に失敗しました',
+        toUserMessage(err, 'レシート検索に失敗しました。'),
       )
     } finally {
       setSearching(false)
@@ -174,11 +175,9 @@ export function RecordForm({
         </p>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-medium text-stone-800">
-          {isEdit ? 'レコードを編集' : '新規レコード'}
-        </h3>
-        {!isEdit && (
+      {!isEdit && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-stone-800">新規レコード</h3>
           <button
             type="button"
             onClick={() => setShowReceiptSearch((v) => !v)}
@@ -188,8 +187,8 @@ export function RecordForm({
               ? 'レシート検索を閉じる'
               : '（任意）レシート管理から下書き'}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {!isEdit && showReceiptSearch && (
         <div className="space-y-3 rounded-md border border-dashed border-stone-300 bg-stone-50/80 p-3">

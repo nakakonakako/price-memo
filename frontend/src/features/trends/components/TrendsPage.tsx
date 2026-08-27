@@ -12,6 +12,7 @@ import { listFolders } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
 import { listRecords } from '@/features/records/api/recordsApi'
 import type { PriceRecord, PriceUnit } from '@/features/records/types'
+import { toUserMessage } from '@/lib/userError'
 import {
   formatYen,
   supportsPerHundred,
@@ -46,7 +47,7 @@ export function TrendsPage() {
         setFolderId((prev) => prev ?? list[0]?.id ?? null)
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'フォルダの取得に失敗')
+          setError(toUserMessage(err, 'フォルダの取得に失敗しました。'))
         }
       } finally {
         if (!cancelled) setFoldersLoading(false)
@@ -77,7 +78,7 @@ export function TrendsPage() {
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'レコードの取得に失敗')
+          setError(toUserMessage(err, 'レコードの取得に失敗しました。'))
         }
       } finally {
         if (!cancelled) setRecordsLoading(false)

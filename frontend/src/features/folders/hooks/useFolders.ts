@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { toUserMessage } from '@/lib/userError'
 import {
   createFolder,
   deleteFolder,
@@ -7,13 +8,6 @@ import {
   reorderFolders,
 } from '../api/foldersApi'
 import type { PriceFolder } from '../types'
-
-function errorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'message' in err) {
-    return String((err as { message: string }).message)
-  }
-  return '操作に失敗しました'
-}
 
 export function useFolders() {
   const [folders, setFolders] = useState<PriceFolder[]>([])
@@ -27,7 +21,7 @@ export function useFolders() {
     try {
       setFolders(await listFolders())
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
     } finally {
       setIsLoading(false)
     }
@@ -54,7 +48,7 @@ export function useFolders() {
         try {
           await reorderFolders(next.map((f) => f.id))
         } catch (err) {
-          setError(errorMessage(err))
+          setError(toUserMessage(err, '並べ替えの保存に失敗しました。'))
           await refresh()
           throw err
         }
@@ -63,7 +57,7 @@ export function useFolders() {
       setFolders((prev) => [...prev, created])
       return created
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, 'フォルダの追加に失敗しました。'))
       throw err
     } finally {
       setIsMutating(false)
@@ -77,7 +71,7 @@ export function useFolders() {
       const updated = await renameFolder(id, name)
       setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)))
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, 'フォルダ名の変更に失敗しました。'))
       throw err
     } finally {
       setIsMutating(false)
@@ -91,7 +85,7 @@ export function useFolders() {
       await deleteFolder(id)
       setFolders((prev) => prev.filter((f) => f.id !== id))
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, 'フォルダの削除に失敗しました。'))
       throw err
     } finally {
       setIsMutating(false)
@@ -110,7 +104,7 @@ export function useFolders() {
     try {
       await reorderFolders(ids)
     } catch (err) {
-      setError(errorMessage(err))
+      setError(toUserMessage(err, '並べ替えの保存に失敗しました。'))
       await refresh()
       throw err
     }

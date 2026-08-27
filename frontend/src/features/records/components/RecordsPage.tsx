@@ -19,6 +19,7 @@ import {
   unitPrice,
 } from '../utils/unitPrice'
 import { UnitField } from './UnitField'
+import { toUserMessage } from '@/lib/userError'
 
 type FormState = {
   recorded_at: string
@@ -222,7 +223,7 @@ export function RecordsPage() {
         )
       }
     } catch (err) {
-      setAError(err instanceof Error ? err.message : 'A 検索に失敗しました')
+      setAError(toUserMessage(err, 'レシート検索に失敗しました。'))
     } finally {
       setASearching(false)
     }

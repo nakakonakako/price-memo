@@ -8,6 +8,7 @@ import {
 } from '@/features/records/api/recordsApi'
 import type { PriceRecord, ReceiptItemRef } from '@/features/records/types'
 import { formatYen } from '@/features/records/utils/unitPrice'
+import { toUserMessage } from '@/lib/userError'
 
 export function ReceiptLinkPage() {
   const [folders, setFolders] = useState<PriceFolder[]>([])
@@ -34,7 +35,7 @@ export function ReceiptLinkPage() {
         setFolderId(firstFolderId)
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'フォルダ取得に失敗')
+          setError(toUserMessage(err, 'フォルダの取得に失敗しました。'))
         }
       } finally {
         if (!cancelled) setIsLoading(false)
@@ -64,7 +65,7 @@ export function ReceiptLinkPage() {
         })
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'レコード取得に失敗')
+          setError(toUserMessage(err, 'レコードの取得に失敗しました。'))
         }
       } finally {
         if (!cancelled) setIsLoading(false)
@@ -94,7 +95,7 @@ export function ReceiptLinkPage() {
       })
       setResults(rows)
     } catch (err) {
-      setError(err instanceof Error ? err.message : '検索に失敗')
+      setError(toUserMessage(err, '検索に失敗しました。'))
     } finally {
       setIsLoading(false)
     }
@@ -108,7 +109,7 @@ export function ReceiptLinkPage() {
       const updated = await linkReceiptItemToRecord(recordId, receiptItemId)
       setRecords((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
     } catch (err) {
-      setError(err instanceof Error ? err.message : '紐付けに失敗')
+      setError(toUserMessage(err, '紐付けに失敗しました。'))
     } finally {
       setIsLoading(false)
     }
