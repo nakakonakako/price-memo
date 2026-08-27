@@ -10,4 +10,5 @@
 |------|------|
 | [project-overview.md](./project-overview.md) | **プロジェクト概要（生きたドキュメント）** — 目的・機能・環境・スタック |
 | [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md) | レシート管理（A）と厳密単価比較（B）の分離方針 |
-| [spec-shopping-memo.md](./spec-shopping-memo.md) | **買い物メモ** — 店頭の主フロー（統計＋試算）。OCR 店頭照会は非本流 |
+| [spec-shopping-memo.md](./spec-shopping-memo.md) | **買い物メモ** — 店頭リスト（`price_memo_items`）・統計・試算 |
+| [spec-folders-catalog.md](./spec-folders-catalog.md) | **フォルダタブ** — 品目名・店名カタログ、記録管理 |

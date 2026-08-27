@@ -6,15 +6,17 @@
 - **機能 A**（レシート管理・AI カテゴリ）は隣の [`receipt-manager`](../receipt-manager)
 - 分離方針: [docs/spec-split-receipt-and-unit-price.md](./docs/spec-split-receipt-and-unit-price.md)
 - 買い物メモ: [docs/spec-shopping-memo.md](./docs/spec-shopping-memo.md)
+- フォルダタブ: [docs/spec-folders-catalog.md](./docs/spec-folders-catalog.md)
 - 概要: [docs/project-overview.md](./docs/project-overview.md)
 
 ## やること / やらないこと
 
 | やる | やらない |
 |------|----------|
-| 手動フォルダで比較対象を棚分け | AI 自動カテゴリ |
+| 手動フォルダで比較対象を棚分け（品目名・店名カタログ） | AI 自動カテゴリ |
 | 確定データのみの厳密単価 | 仮定パック重量 |
-| 買い物メモ（統計＋店頭試算） | 値札 OCR を本流にすること |
+| 買い物メモ（ピン留めリスト＋統計＋店頭試算） | 全フォルダの自動ミラー |
+| 店舗名カタログ（`StoreField`） | 値札 OCR を本流にすること |
 | A の任意参照・下書き | A 必須／A 待ちの未完成レコード |
 | 値段推移・店舗比較 | ざっくり総額比較の復活 |
 

@@ -14,8 +14,9 @@
 | `20260824183225_remote_schema.sql` | A（履歴ミラー。編集しない） |
 | `20260825100000_remove_memo_and_is_comparable.sql` | A（履歴ミラー。編集しない） |
 | `20260827100000_price_records_free_units.sql` | **B が正。A にもコピー** |
-| `20260828210000_price_stores.sql` | **B が正。店舗名カタログ** |
+| `20260828100000_sort_order.sql` | **B が正。フォルダ／記録の表示順** |
 | `20260828200000_price_memo_items.sql` | **B が正。買い物メモ一覧（フォルダ参照）** |
+| `20260828210000_price_stores.sql` | **B が正。店舗名カタログ** |
 
 現状、`db push` は A リポ側の link / DB パスワードが安定している。B 用テーブルを足すときは:
 

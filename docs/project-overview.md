@@ -7,7 +7,7 @@
 |------|------|
 | リポジトリ名 | `price-memo` |
 | プロダクト名（UI・仮） | 単価メモ / Price Memo |
-| ドキュメント最終更新 | 2026-08-27 |
+| ドキュメント最終更新 | 2026-08-28 |
 | 文書の扱い | **生きた概要**。機能の追加・削除・方針変更のたびに本ファイルを更新する |
 
 ---
@@ -116,8 +116,8 @@ Supabase（A の Dev または Prod）
 
 | 画面 | ラベル（仮） | ステータス | 概要 |
 |------|--------------|------------|------|
-| `memo` | 買い物メモ | **現行** | フォルダ統計＋行内試算＋任意保存。色分け・ドラッグ並べ替え |
-| `folders` | フォルダ | **現行** | 棚の CRUD・中身編集・記録追加（モーダル）・並べ替え |
+| `memo` | 買い物メモ | **現行** | 店頭用ピン留めリスト（`price_memo_items`）。統計＋試算＋保存 |
+| `folders` | フォルダ | **現行** | 品目名／店名カタログ、記録 CRUD、検索・並び。詳細は [spec-folders-catalog.md](./spec-folders-catalog.md) |
 | `trends` | 値段推移 | **現行** | フォルダ内の単価推移グラフ・店舗別平均比較 |
 | `records` | （旧）記録 | **廃止** | フォルダの「＋」モーダルに統合 |
 | `link` | （旧）レシート紐付け | **廃止** | 独立タブ削除。任意下書きは記録追加モーダル内に残す |
@@ -127,9 +127,9 @@ Supabase（A の Dev または Prod）
 
 | 領域 | パス（予定） | ステータス | できること |
 |------|--------------|------------|------------|
-| 買い物メモ | `frontend/src/features/memo/` | **現行** | 統計一覧・試算・任意で `price_records` 追加 |
-| フォルダ | `frontend/src/features/folders/` | **現行** | 手動棚の CRUD（`price_folders`） |
-| 厳密レコード | `frontend/src/features/records/` | **現行** | 記録追加フォーム（フォルダモーダルから）。旧記録タブは廃止 |
+| 買い物メモ | `frontend/src/features/memo/` | **現行** | `price_memo_items` による店頭リスト。フォルダマスタは参照のみ |
+| フォルダ・店舗 | `frontend/src/features/folders/` + `stores/` | **現行** | 品目・店名カタログ、記録管理。`StoreField` で店名統一 |
+| 厳密レコード | `frontend/src/features/records/` | **現行** | `RecordForm`（追加・編集モーダル）。`ensureStore` 連携 |
 | 値段推移 | `frontend/src/features/trends/` | **現行** | 単価推移（Recharts）・店舗比較テーブル |
 | A 参照 | `frontend/src/features/receipt-link/` | **廃止（コード残）** | 独立タブ削除 |
 | 店頭 OCR | `frontend/src/features/inquiry/` | **延期** | 値札 OCR（非本流） |
@@ -151,12 +151,14 @@ Supabase（A の Dev または Prod）
 
 ## 5. データモデル
 
-B 固有テーブル。RLS・`user_id` 分離。マイグレーション: `supabase/migrations/20260826100000_price_folders_and_records.sql`
+B 固有テーブル。RLS・`user_id` 分離。マイグレーション: `supabase/migrations/`（下表）
 
 | テーブル | 概要 | 主なカラム | 備考 |
 |----------|------|------------|------|
-| `price_folders` | 手動フォルダ | `name`, `sort_order`, `user_id`（同一ユーザー内で `name` 一意） | 比較したい集合の棚。表示順は DB 永続 |
-| `price_records` | 厳密レコード | `folder_id`, `recorded_at`（**購入日**）, `store_name`, `price`, `amount`, `unit`（自由文字列。プリセット g/ml/個＋その他）, `sort_order`, `receipt_item_id?`, `label_image_path?` | 完成にレシート管理不要。100単位換算は g/ml のみ |
+| `price_folders` | 手動フォルダ（品目名） | `name`, `sort_order`, `user_id`（`name` 一意） | 末尾 `()` / `（）` で読みソート可。表示は読み非表示 |
+| `price_stores` | 店舗名カタログ | `name`, `user_id`（`name` 一意） | 記録保存時に `ensureStore`。入力は `StoreField` |
+| `price_memo_items` | 買い物メモの掲載 | `folder_id`, `sort_order`, `user_id`（`folder_id` 一意） | フォルダ削除で CASCADE。メモから外すだけなら行削除 |
+| `price_records` | 厳密レコード | `folder_id`, `recorded_at`, `store_name`, `price`, `amount`, `unit`, `sort_order`, `receipt_item_id?` | `store_name` は `price_stores` と整合。単位は自由文字列 |
 
 A 参照（読み取り・紐付け用）:
 
@@ -237,7 +239,7 @@ price-memo/
 │       ├── main.py
 │       ├── schemas/
 │       └── services/
-├── supabase/migrations/   # 未作成（プレースホルダ）
+├── supabase/migrations/   # B 固有（A リポへもコピーして push）
 ├── docs/
 └── package.json           # concurrently で FE+BE
 ```
@@ -250,7 +252,8 @@ price-memo/
 |------|------|
 | [README.md](./README.md) | docs 索引 |
 | [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md) | A/B 分離方針 |
-| [spec-shopping-memo.md](./spec-shopping-memo.md) | 買い物メモ（店頭の主フロー・OCR 非本流） |
+| [spec-shopping-memo.md](./spec-shopping-memo.md) | 買い物メモ（店頭リスト・統計・試算） |
+| [spec-folders-catalog.md](./spec-folders-catalog.md) | フォルダタブ（品目名・店名・記録 UI） |
 | `../receipt-manager/docs/project-overview.md` | A の生きた概要（隣リポジトリ） |
 
 ---
@@ -259,6 +262,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-08-28 | 店舗カタログ（`price_stores`・`StoreField`）。メモ独立（`price_memo_items`）。フォルダタブに品目名／店名切替。記録編集モーダル。フォルダ名読み付きソート。削除確認（中身ありのみ）。フォルダカード間の並べ替えドラッグ廃止 |
 | 2026-08-28 | 並べ替え DB 永続（`sort_order`）。記録・レシート紐付けタブ廃止。フォルダに記録追加モーダル。UI から A/B 表記を排除 |
 | 2026-08-27 | 買い物メモ: 追加削除・入力順・自由単位・複数単位統計・保存のシームレス更新 |
 | 2026-08-27 | 買い物メモ実装（統計＋行内試算＋任意保存）。初期タブに配置 |
