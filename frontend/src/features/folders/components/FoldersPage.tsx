@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { EditIconButton } from '@/components/EditIconButton'
+import { CopyIconButton } from '@/components/CopyIconButton'
+import { ChartIcon } from '@/components/icons/ChartIcon'
 import { Modal } from '@/components/Modal'
 import { TrashDragItem } from '@/components/trash/TrashDragItem'
 import {
@@ -20,7 +22,9 @@ import {
 import {
   RecordForm,
   emptyRecordForm,
+  recordToCopyFormState,
   recordToFormState,
+  type RecordFormState,
 } from '@/features/records/components/RecordForm'
 import type { PriceRecord } from '@/features/records/types'
 import {
@@ -39,6 +43,7 @@ import type { PriceStore } from '@/features/stores/types'
 import { useFolders } from '../hooks/useFolders'
 import type { PriceFolder } from '../types'
 import { folderSortKey, parseFolderName } from '../utils/folderName'
+import { FolderTrendPanel } from '@/features/trends/components/FolderTrendPanel'
 
 type CatalogView = 'folder' | 'store'
 type CatalogSort = 'added' | 'name'
@@ -136,6 +141,9 @@ export function FoldersPage() {
     string | null
   >(null)
   const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false)
+  const [trendsFolderId, setTrendsFolderId] = useState<string | null>(null)
+  const [addRecordInitial, setAddRecordInitial] =
+    useState<RecordFormState | null>(null)
 
   const addingFolder = folders.find((f) => f.id === addingFolderId) ?? null
   const storeAddFolder = folders.find((f) => f.id === storeAddFolderId) ?? null
@@ -147,6 +155,16 @@ export function FoldersPage() {
     editingRecord != null
       ? (folders.find((f) => f.id === editingRecord.folder_id) ?? null)
       : null
+  const trendsFolder =
+    folders.find((f) => f.id === trendsFolderId) ?? null
+  const folderOptions = useMemo(
+    () =>
+      folders.map((f) => ({
+        id: f.id,
+        label: parseFolderName(f.name).displayName,
+      })),
+    [folders],
+  )
 
   const visibleFolders = useMemo(() => {
     const q = folderQuery.trim().toLocaleLowerCase('ja')
@@ -413,11 +431,17 @@ export function FoldersPage() {
     })
   }
 
+  const handleCopyRecord = (record: PriceRecord) => {
+    setAddRecordInitial(recordToCopyFormState(record))
+    setAddingFolderId(record.folder_id)
+  }
+
   const finalizeFolderRemoved = useCallback(
     (folderId: string) => {
       if (editingId === folderId) cancelEdit()
       if (openFolderId === folderId) setOpenFolderId(null)
       if (editingRecord?.folder_id === folderId) setEditingRecord(null)
+      if (trendsFolderId === folderId) setTrendsFolderId(null)
       setDraftFolderId((id) => (id === folderId ? null : id))
       setRecordCounts((prev) => {
         const next = { ...prev }
@@ -430,7 +454,7 @@ export function FoldersPage() {
         return next
       })
     },
-    [cancelEdit, editingId, editingRecord, openFolderId],
+    [cancelEdit, editingId, editingRecord, openFolderId, trendsFolderId],
   )
 
   const confirmDeleteFolder = async () => {
@@ -565,6 +589,7 @@ export function FoldersPage() {
               onClick={() => {
                 setCatalogView('store')
                 setOpenFolderId(null)
+                setTrendsFolderId(null)
               }}
               className={`rounded px-3 py-1.5 text-sm ${
                 catalogView === 'store'
@@ -634,7 +659,23 @@ export function FoldersPage() {
         ) : storesLoading && catalogView === 'store' ? (
           <p className="text-sm text-stone-500">読み込み中...</p>
         ) : catalogView === 'folder' ? (
-          <ul className="grid gap-4 sm:grid-cols-2">
+          <div
+            className={
+              trendsFolderId
+                ? 'lg:flex lg:items-start lg:gap-4'
+                : undefined
+            }
+          >
+            <div
+              className={
+                trendsFolderId ? 'min-w-0 flex-1 lg:max-w-[50%]' : undefined
+              }
+            >
+          <ul
+            className={`grid gap-4 ${
+              trendsFolderId ? 'sm:grid-cols-1' : 'sm:grid-cols-2'
+            }`}
+          >
             <li className="flex flex-col">
               <button
                 type="button"
@@ -735,6 +776,24 @@ export function FoldersPage() {
                               disabled={isMutating}
                             />
                             <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
+                              <button
+                                type="button"
+                                aria-label="値段推移"
+                                title="値段推移"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setTrendsFolderId((id) =>
+                                    id === folder.id ? null : folder.id,
+                                  )
+                                }}
+                                className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-white/70 lg:inline-flex ${
+                                  trendsFolderId === folder.id
+                                    ? 'bg-white/90 text-stone-900'
+                                    : 'text-stone-600'
+                                }`}
+                              >
+                                <ChartIcon className="h-4 w-4" />
+                              </button>
                               <span className="tabular-nums text-sm text-stone-500">
                                 {recordCount}
                               </span>
@@ -755,6 +814,7 @@ export function FoldersPage() {
                                 title="記録を追加"
                                 onClick={(e) => {
                                   e.stopPropagation()
+                                  setAddRecordInitial(null)
                                   setAddingFolderId(folder.id)
                                 }}
                                 className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700 hover:bg-white/70"
@@ -822,12 +882,20 @@ export function FoldersPage() {
                                           </p>
                                         )}
                                       </div>
-                                      <EditIconButton
-                                        label="編集"
-                                        onClick={() =>
-                                          setEditingRecord(record)
-                                        }
-                                      />
+                                      <div className="flex shrink-0 items-center">
+                                        <CopyIconButton
+                                          label="複製"
+                                          onClick={() =>
+                                            handleCopyRecord(record)
+                                          }
+                                        />
+                                        <EditIconButton
+                                          label="編集"
+                                          onClick={() =>
+                                            setEditingRecord(record)
+                                          }
+                                        />
+                                      </div>
                                     </TrashDragItem>
                                   </li>
                                 ),
@@ -849,6 +917,18 @@ export function FoldersPage() {
               })
             )}
           </ul>
+            </div>
+            {trendsFolderId && trendsFolder && (
+              <aside className="hidden min-w-0 flex-1 lg:block">
+                <FolderTrendPanel
+                  folderId={trendsFolderId}
+                  folderName={parseFolderName(trendsFolder.name).displayName}
+                  compact
+                  onClose={() => setTrendsFolderId(null)}
+                />
+              </aside>
+            )}
+          </div>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2">
             <li className="flex flex-col">
@@ -1012,10 +1092,16 @@ export function FoldersPage() {
                                         {unitLabel(record.unit)}
                                       </p>
                                     </div>
-                                    <EditIconButton
-                                      label="編集"
-                                      onClick={() => setEditingRecord(record)}
-                                    />
+                                    <div className="flex shrink-0 items-center">
+                                      <CopyIconButton
+                                        label="複製"
+                                        onClick={() => handleCopyRecord(record)}
+                                      />
+                                      <EditIconButton
+                                        label="編集"
+                                        onClick={() => setEditingRecord(record)}
+                                      />
+                                    </div>
                                   </div>
                                 </li>
                               ))}
@@ -1035,20 +1121,27 @@ export function FoldersPage() {
       <Modal
         title="記録を追加"
         open={addingFolder != null}
-        onClose={() => setAddingFolderId(null)}
+        onClose={() => {
+          setAddingFolderId(null)
+          setAddRecordInitial(null)
+        }}
       >
         {addingFolder && (
           <RecordForm
-            key={`add-${addingFolder.id}`}
+            key={`add-${addingFolder.id}-${addRecordInitial ? 'copy' : 'new'}`}
             folderId={addingFolder.id}
             folderName={addingFolder.name}
+            initial={addRecordInitial ?? emptyRecordForm()}
             preferredUnits={[
               ...new Set(
                 (recordsByFolder[addingFolder.id] ?? []).map((r) => r.unit),
               ),
             ]}
             busy={addingBusy}
-            onCancel={() => setAddingFolderId(null)}
+            onCancel={() => {
+              setAddingFolderId(null)
+              setAddRecordInitial(null)
+            }}
             onSubmit={async (input) => {
               setAddingBusy(true)
               try {
@@ -1062,6 +1155,7 @@ export function FoldersPage() {
                   setOpenFolderId(addingFolder.id)
                 }
                 setAddingFolderId(null)
+                setAddRecordInitial(null)
               } finally {
                 setAddingBusy(false)
               }
@@ -1157,6 +1251,7 @@ export function FoldersPage() {
             mode="edit"
             folderId={editingRecord.folder_id}
             folderName={editingRecordFolder?.name}
+            folderOptions={folderOptions}
             initial={recordToFormState(editingRecord)}
             preferredUnits={[
               ...new Set(
@@ -1170,10 +1265,21 @@ export function FoldersPage() {
             onSubmit={async (input) => {
               setEditingBusy(true)
               try {
+                const oldFolderId = editingRecord.folder_id
                 const updated = await updateRecord(editingRecord.id, input)
-                patchFolderRecords(editingRecord.folder_id, (rows) =>
-                  rows.map((r) => (r.id === updated.id ? updated : r)),
-                )
+                if (updated.folder_id !== oldFolderId) {
+                  patchFolderRecords(oldFolderId, (rows) =>
+                    rows.filter((r) => r.id !== updated.id),
+                  )
+                  patchFolderRecords(updated.folder_id, (rows) => [
+                    ...rows,
+                    updated,
+                  ])
+                } else {
+                  patchFolderRecords(oldFolderId, (rows) =>
+                    rows.map((r) => (r.id === updated.id ? updated : r)),
+                  )
+                }
                 setAllRecords((prev) =>
                   prev.map((r) => (r.id === updated.id ? updated : r)),
                 )

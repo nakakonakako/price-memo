@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { StoreField } from '@/components/StoreField'
 import { searchReceiptItems } from '../api/recordsApi'
 import type {
@@ -51,6 +51,19 @@ export function recordToFormState(record: PriceRecord): RecordFormState {
   }
 }
 
+/** Pre-fill a new record from an existing one (today's date, no receipt link). */
+export function recordToCopyFormState(record: PriceRecord): RecordFormState {
+  return {
+    recorded_at: todayISODate(),
+    store_name: record.store_name,
+    price: String(record.price),
+    amount: String(record.amount),
+    unit: record.unit,
+    note: record.note ?? '',
+    receipt_item_id: null,
+  }
+}
+
 export function parseRecordForm(
   folderId: string,
   form: RecordFormState,
@@ -75,9 +88,12 @@ export function parseRecordForm(
   }
 }
 
+type FolderOption = { id: string; label: string }
+
 type Props = {
   folderId: string
   folderName?: string
+  folderOptions?: FolderOption[]
   preferredUnits?: PriceUnit[]
   busy?: boolean
   submitLabel?: string
@@ -91,6 +107,7 @@ type Props = {
 export function RecordForm({
   folderId,
   folderName,
+  folderOptions,
   preferredUnits = [],
   busy,
   submitLabel,
@@ -100,11 +117,23 @@ export function RecordForm({
   onCancel,
 }: Props) {
   const isEdit = mode === 'edit'
+  const [selectedFolderId, setSelectedFolderId] = useState(folderId)
   const [form, setForm] = useState<RecordFormState>(
     () => initial ?? emptyRecordForm(),
   )
   const [formError, setFormError] = useState<string | null>(null)
   const [showReceiptSearch, setShowReceiptSearch] = useState(false)
+
+  useEffect(() => {
+    setSelectedFolderId(folderId)
+  }, [folderId])
+
+  const resolvedFolderId =
+    isEdit && folderOptions && folderOptions.length > 0
+      ? selectedFolderId
+      : folderId
+  const resolvedFolderLabel =
+    folderOptions?.find((f) => f.id === resolvedFolderId)?.label ?? folderName
   const resolvedSubmitLabel =
     submitLabel ?? (isEdit ? '保存する' : '追加する')
   const [q, setQ] = useState('')
@@ -128,7 +157,7 @@ export function RecordForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const parsed = parseRecordForm(folderId, form)
+    const parsed = parseRecordForm(resolvedFolderId, form)
     if (typeof parsed === 'string') {
       setFormError(parsed)
       return
@@ -170,10 +199,31 @@ export function RecordForm({
 
   return (
     <div className="space-y-3" data-edit-surface>
-      {folderName && (
-        <p className="text-sm text-stone-600">
-          フォルダ: <span className="font-medium text-stone-900">{folderName}</span>
-        </p>
+      {isEdit && folderOptions && folderOptions.length > 0 ? (
+        <label className="block space-y-1">
+          <span className="text-xs text-stone-500">品目（フォルダ）</span>
+          <select
+            className={fieldClass}
+            value={selectedFolderId}
+            onChange={(e) => setSelectedFolderId(e.target.value)}
+            disabled={busy}
+          >
+            {folderOptions.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        resolvedFolderLabel && (
+          <p className="text-sm text-stone-600">
+            フォルダ:{' '}
+            <span className="font-medium text-stone-900">
+              {resolvedFolderLabel}
+            </span>
+          </p>
+        )
       )}
 
       {!isEdit && (
