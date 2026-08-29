@@ -14,6 +14,8 @@ type Props = {
   children: ReactNode
   userLabel: string
   onLogout: () => void
+  /** Hidden from nav (e.g. trends on PC — use folder tab split panel instead). */
+  hiddenTabs?: TabId[]
 }
 
 export function MainLayout({
@@ -22,7 +24,9 @@ export function MainLayout({
   children,
   userLabel,
   onLogout,
+  hiddenTabs = [],
 }: Props) {
+  const visibleTabs = TABS.filter((tab) => !hiddenTabs.includes(tab.id))
   return (
     <div className="min-h-screen">
       <header className="border-b border-stone-300/80 bg-[#f6f4f0]/80 backdrop-blur">
@@ -50,7 +54,7 @@ export function MainLayout({
             </div>
           </div>
           <nav className="flex gap-1" aria-label="メイン">
-            {TABS.map((tab) => {
+            {visibleTabs.map((tab) => {
               const active = tab.id === activeTab
               return (
                 <button
