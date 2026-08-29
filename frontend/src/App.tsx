@@ -28,7 +28,6 @@ export default function App() {
       onTabChange={setTab}
       userLabel={session.user.email ?? 'ユーザー'}
       onLogout={logout}
-      wideContent={tab === 'folders'}
     >
       {tab === 'memo' && <ShoppingMemoPage />}
       {tab === 'folders' && <FoldersPage />}

@@ -436,6 +436,35 @@ export function FoldersPage() {
     setAddingFolderId(record.folder_id)
   }
 
+  const ensureFolderRecords = useCallback(
+    async (folderId: string) => {
+      if (recordsByFolder[folderId]) return
+      setRecordsError(null)
+      try {
+        setOpenFolderLoadingId(folderId)
+        const records = await listRecords(folderId)
+        setRecordsByFolder((prev) => ({ ...prev, [folderId]: records }))
+        setRecordCounts((prev) => ({ ...prev, [folderId]: records.length }))
+      } catch (err) {
+        setRecordsError(
+          toUserMessage(err, 'フォルダ中身の読み込みに失敗しました。'),
+        )
+      } finally {
+        setOpenFolderLoadingId(null)
+      }
+    },
+    [recordsByFolder],
+  )
+
+  const toggleTrendsPanel = (folderId: string) => {
+    if (trendsFolderId === folderId) {
+      setTrendsFolderId(null)
+      return
+    }
+    setTrendsFolderId(folderId)
+    void ensureFolderRecords(folderId)
+  }
+
   const finalizeFolderRemoved = useCallback(
     (folderId: string) => {
       if (editingId === folderId) cancelEdit()
@@ -557,18 +586,17 @@ export function FoldersPage() {
 
   const showTrendsSplit =
     catalogView === 'folder' && trendsFolderId != null && trendsFolder != null
+  const trendsRecords =
+    trendsFolderId != null ? recordsByFolder[trendsFolderId] : undefined
+  const trendsRecordsLoading =
+    trendsFolderId != null &&
+    trendsRecords === undefined &&
+    openFolderLoadingId === trendsFolderId
 
-  return (
-    <TrashDragProvider
-      onDragEnd={handleDragEnd}
-      reorderKinds={['folder-record']}
+  const catalogSection = (
+    <section
+      className={`space-y-6 pb-28 ${showTrendsSplit ? 'min-w-0 flex-1' : ''}`}
     >
-      <div
-        className={showTrendsSplit ? 'lg:flex lg:items-start lg:gap-8' : undefined}
-      >
-        <section
-          className={`space-y-6 pb-28 ${showTrendsSplit ? 'min-w-0 lg:w-1/2' : 'w-full'}`}
-        >
         <div className="space-y-2">
           <h2 className="text-lg font-medium text-stone-900">フォルダ</h2>
           <p className="text-sm text-stone-600">
@@ -774,9 +802,7 @@ export function FoldersPage() {
                                 title="値段推移"
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  setTrendsFolderId((id) =>
-                                    id === folder.id ? null : folder.id,
-                                  )
+                                  toggleTrendsPanel(folder.id)
                                 }}
                                 className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-white/70 lg:inline-flex ${
                                   trendsFolderId === folder.id
@@ -1096,18 +1122,32 @@ export function FoldersPage() {
             )}
           </ul>
         )}
-      </section>
+    </section>
+  )
 
-      {showTrendsSplit && (
-        <aside className="hidden min-w-0 lg:block lg:w-1/2 lg:sticky lg:top-8 lg:self-start">
-          <FolderTrendPanel
-            folderId={trendsFolderId}
-            folderName={parseFolderName(trendsFolder.name).displayName}
-            onClose={() => setTrendsFolderId(null)}
-          />
-        </aside>
+  return (
+    <TrashDragProvider
+      onDragEnd={handleDragEnd}
+      reorderKinds={['folder-record']}
+    >
+      {showTrendsSplit ? (
+        <div className="relative left-1/2 w-screen -translate-x-1/2 px-4 lg:px-8">
+          <div className="flex items-start gap-6 lg:gap-8">
+            {catalogSection}
+            <aside className="hidden min-w-0 flex-1 lg:block lg:sticky lg:top-8 lg:self-start">
+              <FolderTrendPanel
+                folderId={trendsFolderId}
+                folderName={parseFolderName(trendsFolder.name).displayName}
+                records={trendsRecords ?? []}
+                recordsLoading={trendsRecordsLoading}
+                onClose={() => setTrendsFolderId(null)}
+              />
+            </aside>
+          </div>
+        </div>
+      ) : (
+        catalogSection
       )}
-      </div>
 
       <Modal
         title="記録を追加"

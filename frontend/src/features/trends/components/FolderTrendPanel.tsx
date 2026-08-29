@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -27,6 +27,9 @@ import {
 type Props = {
   folderId: string
   folderName?: string
+  /** When set, chart follows parent data (e.g. folder tab) without refetching. */
+  records?: PriceRecord[]
+  recordsLoading?: boolean
   compact?: boolean
   onClose?: () => void
 }
@@ -34,41 +37,63 @@ type Props = {
 export function FolderTrendPanel({
   folderId,
   folderName,
+  records: recordsProp,
+  recordsLoading: recordsLoadingProp,
   compact = false,
   onClose,
 }: Props) {
-  const [records, setRecords] = useState<PriceRecord[]>([])
-  const [recordsLoading, setRecordsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [fetchedRecords, setFetchedRecords] = useState<PriceRecord[]>([])
+  const [fetchLoading, setFetchLoading] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const [unit, setUnit] = useState<PriceUnit>('g')
   const [basis, setBasis] = useState<PriceBasis>('per_100')
+  const initializedFolderRef = useRef<string | null>(null)
+  const hadRecordsRef = useRef(false)
+
+  const usesExternalRecords = recordsProp !== undefined
 
   useEffect(() => {
+    if (usesExternalRecords) return
     let cancelled = false
     ;(async () => {
-      setRecordsLoading(true)
-      setError(null)
+      setFetchLoading(true)
+      setFetchError(null)
       try {
         const list = await listRecords(folderId)
         if (cancelled) return
-        setRecords(list)
-        const dom = dominantUnit(list)
-        if (dom) {
-          setUnit(dom)
-          setBasis(supportsPerHundred(dom) ? 'per_100' : 'per_unit')
-        }
+        setFetchedRecords(list)
       } catch (err) {
         if (!cancelled) {
-          setError(toUserMessage(err, 'レコードの取得に失敗しました。'))
+          setFetchError(toUserMessage(err, 'レコードの取得に失敗しました。'))
         }
       } finally {
-        if (!cancelled) setRecordsLoading(false)
+        if (!cancelled) setFetchLoading(false)
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [folderId])
+  }, [folderId, usesExternalRecords])
+
+  const records = recordsProp ?? fetchedRecords
+  const recordsLoading = recordsLoadingProp ?? fetchLoading
+  const error = fetchError
+
+  useEffect(() => {
+    if (initializedFolderRef.current !== folderId) {
+      initializedFolderRef.current = folderId
+      hadRecordsRef.current = false
+    }
+    if (records.length === 0) return
+    if (!hadRecordsRef.current) {
+      const dom = dominantUnit(records)
+      if (dom) {
+        setUnit(dom)
+        setBasis(supportsPerHundred(dom) ? 'per_100' : 'per_unit')
+      }
+      hadRecordsRef.current = true
+    }
+  }, [folderId, records])
 
   const unitsInFolder = useMemo(() => {
     return [...new Set(records.map((r) => r.unit.trim()).filter(Boolean))].sort(
