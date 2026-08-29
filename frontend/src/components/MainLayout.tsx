@@ -14,6 +14,7 @@ type Props = {
   children: ReactNode
   userLabel: string
   onLogout: () => void
+  wideContent?: boolean
 }
 
 export function MainLayout({
@@ -22,11 +23,16 @@ export function MainLayout({
   children,
   userLabel,
   onLogout,
+  wideContent = false,
 }: Props) {
+  const containerClass = wideContent
+    ? 'mx-auto w-full max-w-none px-4 lg:px-8'
+    : 'mx-auto max-w-3xl px-4'
+
   return (
     <div className="min-h-screen">
       <header className="border-b border-stone-300/80 bg-[#f6f4f0]/80 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
+        <div className={`${containerClass} flex flex-col gap-3 py-4`}>
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs tracking-wide text-stone-500">
@@ -70,7 +76,7 @@ export function MainLayout({
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-4 py-8">{children}</main>
+      <main className={`${containerClass} py-8`}>{children}</main>
     </div>
   )
 }

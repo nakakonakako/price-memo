@@ -131,8 +131,8 @@ Supabase（A の Dev または Prod）
 | フォルダ・店舗 | `frontend/src/features/folders/` + `stores/` | **現行** | 品目・店名カタログ、記録管理。`StoreField` で店名統一 |
 | 厳密レコード | `frontend/src/features/records/` | **現行** | `RecordForm`（追加・編集モーダル）。`ensureStore` 連携 |
 | 値段推移 | `frontend/src/features/trends/` | **現行** | 単価推移（Recharts）・店舗比較テーブル |
-| A 参照 | `frontend/src/features/receipt-link/` | **廃止（コード残）** | 独立タブ削除 |
-| 店頭 OCR | `frontend/src/features/inquiry/` | **延期** | 値札 OCR（非本流） |
+| A 参照 | `RecordForm` 内のレシート下書き検索 | **現行** | 独立タブ・`receipt-link` モジュールは削除済み |
+| 店頭 OCR | — | **延期** | 値札 OCR（非本流）。`inquiry` プレースホルダ削除済み |
 
 ### 4.3 バックエンド API
 
@@ -262,7 +262,8 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
-| 2026-08-28 | 店舗カタログ（`price_stores`・`StoreField`）。メモ独立（`price_memo_items`）。フォルダタブに品目名／店名切替。記録編集モーダル。フォルダ名読み付きソート。削除確認（中身ありのみ）。フォルダカード間の並べ替えドラッグ廃止 |
+| 2026-08-29 | 買い物メモ: 店名入力で統計を店舗スコープに切替。フォルダタブ全幅＋推移分割パネル。死コード削除（RecordsPage / receipt-link / inquiry） |
+| 2026-08-28 | 記録複製・フォルダ間移動・フォルダタブ内推移パネル（PC） |
 | 2026-08-28 | 並べ替え DB 永続（`sort_order`）。記録・レシート紐付けタブ廃止。フォルダに記録追加モーダル。UI から A/B 表記を排除 |
 | 2026-08-27 | 買い物メモ: 追加削除・入力順・自由単位・複数単位統計・保存のシームレス更新 |
 | 2026-08-27 | 買い物メモ実装（統計＋行内試算＋任意保存）。初期タブに配置 |

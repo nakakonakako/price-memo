@@ -555,12 +555,20 @@ export function FoldersPage() {
     ],
   )
 
+  const showTrendsSplit =
+    catalogView === 'folder' && trendsFolderId != null && trendsFolder != null
+
   return (
     <TrashDragProvider
       onDragEnd={handleDragEnd}
       reorderKinds={['folder-record']}
     >
-      <section className="space-y-6 pb-28">
+      <div
+        className={showTrendsSplit ? 'lg:flex lg:items-start lg:gap-8' : undefined}
+      >
+        <section
+          className={`space-y-6 pb-28 ${showTrendsSplit ? 'min-w-0 lg:w-1/2' : 'w-full'}`}
+        >
         <div className="space-y-2">
           <h2 className="text-lg font-medium text-stone-900">フォルダ</h2>
           <p className="text-sm text-stone-600">
@@ -659,23 +667,7 @@ export function FoldersPage() {
         ) : storesLoading && catalogView === 'store' ? (
           <p className="text-sm text-stone-500">読み込み中...</p>
         ) : catalogView === 'folder' ? (
-          <div
-            className={
-              trendsFolderId
-                ? 'lg:flex lg:items-start lg:gap-4'
-                : undefined
-            }
-          >
-            <div
-              className={
-                trendsFolderId ? 'min-w-0 flex-1 lg:max-w-[50%]' : undefined
-              }
-            >
-          <ul
-            className={`grid gap-4 ${
-              trendsFolderId ? 'sm:grid-cols-1' : 'sm:grid-cols-2'
-            }`}
-          >
+          <ul className="grid gap-4 sm:grid-cols-2">
             <li className="flex flex-col">
               <button
                 type="button"
@@ -917,18 +909,6 @@ export function FoldersPage() {
               })
             )}
           </ul>
-            </div>
-            {trendsFolderId && trendsFolder && (
-              <aside className="hidden min-w-0 flex-1 lg:block">
-                <FolderTrendPanel
-                  folderId={trendsFolderId}
-                  folderName={parseFolderName(trendsFolder.name).displayName}
-                  compact
-                  onClose={() => setTrendsFolderId(null)}
-                />
-              </aside>
-            )}
-          </div>
         ) : (
           <ul className="grid gap-4 sm:grid-cols-2">
             <li className="flex flex-col">
@@ -1117,6 +1097,17 @@ export function FoldersPage() {
           </ul>
         )}
       </section>
+
+      {showTrendsSplit && (
+        <aside className="hidden min-w-0 lg:block lg:w-1/2 lg:sticky lg:top-8 lg:self-start">
+          <FolderTrendPanel
+            folderId={trendsFolderId}
+            folderName={parseFolderName(trendsFolder.name).displayName}
+            onClose={() => setTrendsFolderId(null)}
+          />
+        </aside>
+      )}
+      </div>
 
       <Modal
         title="記録を追加"

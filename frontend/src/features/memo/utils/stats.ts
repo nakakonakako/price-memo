@@ -36,6 +36,15 @@ export function unitsInRecords(records: PriceRecord[]): PriceUnit[] {
   return [...set].sort((a, b) => a.localeCompare(b, 'ja'))
 }
 
+export function recordsForStoreScope(
+  records: PriceRecord[],
+  storeName: string,
+): PriceRecord[] {
+  const name = storeName.trim()
+  if (!name) return records
+  return records.filter((r) => r.store_name === name)
+}
+
 export function computeStatsForUnit(
   records: PriceRecord[],
   unit: PriceUnit,

@@ -143,24 +143,6 @@ export async function reorderRecords(
   if (failed?.error) throw failed.error
 }
 
-export async function linkReceiptItemToRecord(
-  recordId: string,
-  receiptItemId: string | null,
-): Promise<PriceRecord> {
-  const { data, error } = await supabase
-    .from('price_records')
-    .update({
-      receipt_item_id: receiptItemId,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', recordId)
-    .select('*')
-    .single()
-
-  if (error) throw error
-  return normalize(data as PriceRecord)
-}
-
 export type ReceiptSearchParams = {
   q?: string
   store?: string

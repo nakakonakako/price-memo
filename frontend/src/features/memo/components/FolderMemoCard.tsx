@@ -17,6 +17,7 @@ import {
   defaultBasis,
   diffVs,
   formatDiff,
+  recordsForStoreScope,
   trialDisplayValue,
   unitsInRecords,
   valueLabelFor,
@@ -45,9 +46,28 @@ export function FolderMemoCard({
   onSaved,
 }: Props) {
   const displayName = parseFolderName(folderName).displayName
-  const allStats = useMemo(() => computeAllFolderStats(records), [records])
-  const preferredUnits = useMemo(() => unitsInRecords(records), [records])
+  const [open, setOpen] = useState(false)
+  const [amount, setAmount] = useState('')
+  const [unit, setUnit] = useState<PriceUnit>('g')
+  const [price, setPrice] = useState('')
+  const [store, setStore] = useState('')
+  const [note, setNote] = useState('')
+  const [recordedAt, setRecordedAt] = useState(todayISODate())
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [statsUnit, setStatsUnit] = useState<PriceUnit | null>(null)
+
+  const statsRecords = useMemo(
+    () => recordsForStoreScope(records, store),
+    [records, store],
+  )
+  const statsScopeLabel = store.trim() ? store.trim() : '全体'
+  const allStats = useMemo(
+    () => computeAllFolderStats(statsRecords),
+    [statsRecords],
+  )
+  const preferredUnits = useMemo(() => unitsInRecords(records), [records])
   const activeStats: FolderStats | null = useMemo(() => {
     if (allStats.length === 0) return null
     if (statsUnit) {
@@ -64,17 +84,6 @@ export function FolderMemoCard({
     }
     return cols
   }, [allStats])
-
-  const [open, setOpen] = useState(false)
-  const [amount, setAmount] = useState('')
-  const [unit, setUnit] = useState<PriceUnit>('g')
-  const [price, setPrice] = useState('')
-  const [store, setStore] = useState('')
-  const [note, setNote] = useState('')
-  const [recordedAt, setRecordedAt] = useState(todayISODate())
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [savedMsg, setSavedMsg] = useState<string | null>(null)
 
   useEffect(() => {
     if (!forceOpen) return
@@ -193,6 +202,11 @@ export function FolderMemoCard({
                 <p className="truncate text-base font-semibold text-stone-900 sm:text-lg">
                   {displayName}
                 </p>
+                {records.length > 0 && (
+                  <p className="truncate text-[11px] text-stone-500">
+                    {statsScopeLabel}の統計
+                  </p>
+                )}
               </div>
             </div>
 
@@ -206,6 +220,10 @@ export function FolderMemoCard({
                   sub={activeStats.latestDate}
                 />
               </div>
+            ) : records.length > 0 && store.trim() ? (
+              <p className="shrink-0 text-right text-[11px] text-stone-500">
+                この店の記録なし
+              </p>
             ) : null}
 
             {unitColumns.length > 0 && (

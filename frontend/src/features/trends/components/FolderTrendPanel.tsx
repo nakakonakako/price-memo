@@ -101,7 +101,8 @@ export function FolderTrendPanel({
     'w-full rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500'
 
   const skipped = records.filter((r) => r.unit !== unit).length
-  const chartHeight = compact ? 220 : 280
+  const chartHeight = compact ? 220 : 320
+  const tableTextClass = compact ? 'text-xs' : 'text-sm'
 
   return (
     <div className="space-y-3 rounded-lg border border-stone-200 bg-white/80 p-3 shadow-sm">
@@ -256,13 +257,19 @@ export function FolderTrendPanel({
                 compact ? 'max-h-48 overflow-y-auto' : ''
               }`}
             >
-              <table className="w-full min-w-[20rem] text-left text-xs">
+              <table className={`w-full min-w-[28rem] text-left ${tableTextClass}`}>
                 <thead className="sticky top-0 border-b border-stone-200 bg-stone-50 text-stone-500">
                   <tr>
                     <th className="px-2 py-1.5 font-medium">店舗</th>
                     <th className="px-2 py-1.5 font-medium">件</th>
                     <th className="px-2 py-1.5 font-medium">平均</th>
                     <th className="px-2 py-1.5 font-medium">最安</th>
+                    {!compact && (
+                      <>
+                        <th className="px-2 py-1.5 font-medium">最高</th>
+                        <th className="px-2 py-1.5 font-medium">直近</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
@@ -278,6 +285,16 @@ export function FolderTrendPanel({
                       <td className="px-2 py-1.5 text-stone-600">
                         {formatYen(s.min, 2)}
                       </td>
+                      {!compact && (
+                        <>
+                          <td className="px-2 py-1.5 text-stone-600">
+                            {formatYen(s.max, 2)}
+                          </td>
+                          <td className="px-2 py-1.5 text-stone-600">
+                            {s.latestDate} · {formatYen(s.latestValue, 2)}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
