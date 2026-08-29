@@ -1,6 +1,6 @@
 # 仕様: 買い物メモ（店頭での使い方）
 
-最終更新: 2026-08-28
+最終更新: 2026-08-29
 
 関連: [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md) / [project-overview.md](./project-overview.md) / [spec-folders-catalog.md](./spec-folders-catalog.md)
 
@@ -61,7 +61,9 @@ B は支出管理アプリではなく **厳密単価の統計アプリ** であ
 
 ### 帰宅後
 
-- フォルダタブで記録の修正・追加、値段推移タブで分析
+- フォルダタブで記録の修正・追加
+- **PC**: フォルダタブの値段推移パネルで分析
+- **スマホ**: 値段推移タブで分析
 
 ## 8. 非目標
 
