@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type ReactNode,
 } from 'react'
+import { createPortal } from 'react-dom'
 import type { TrashDragPayload } from './types'
 import { useTrashDrag } from './TrashDragProvider'
 
@@ -150,13 +151,23 @@ export function TrashDragItem({
     clearLift()
   }
 
+  const liftPreview =
+    isDragging && liftStyle
+      ? createPortal(
+          <div
+            className={`touch-none select-none shadow-xl ring-2 ring-stone-400 ${className}`}
+            style={liftStyle}
+          >
+            {children}
+          </div>,
+          document.body,
+        )
+      : null
+
   return (
     <>
       {showInsertLine && (
-        <div
-          className="h-1 rounded-full bg-stone-800"
-          aria-hidden
-        />
+        <div className="h-1 rounded-full bg-stone-800" aria-hidden />
       )}
       {isDragging && (
         <div
@@ -171,11 +182,12 @@ export function TrashDragItem({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        className={`touch-none select-none ${isDragging ? 'shadow-xl ring-2 ring-stone-400' : ''} ${className}`}
-        style={liftStyle ?? undefined}
+        className={`touch-none select-none ${className}`}
+        style={isDragging ? { visibility: 'hidden' } : undefined}
       >
         {children}
       </div>
+      {liftPreview}
     </>
   )
 }

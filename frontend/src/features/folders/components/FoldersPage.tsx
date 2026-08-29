@@ -10,6 +10,7 @@ import {
 } from '@/components/trash/TrashDragProvider'
 import type { DragEndResult, TrashDragPayload } from '@/components/trash/types'
 import { useOutsidePointerDown } from '@/hooks/useOutsidePointerDown'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { reorderIds } from '@/lib/listOrder'
 import {
   createRecord,
@@ -54,6 +55,26 @@ const nameCollator = new Intl.Collator('ja', {
 })
 
 const catalogCardMinH = 'min-h-[4rem]'
+
+const TRENDS_ANIM_MS = 500
+
+const collapsedLayoutStyle = {
+  width: '100%',
+  maxWidth: '100%',
+  marginLeft: 0,
+  marginRight: 0,
+  paddingLeft: 0,
+  paddingRight: 0,
+} as const
+
+const expandedLayoutStyle = {
+  width: '100vw',
+  maxWidth: '100vw',
+  marginLeft: 'calc(50% - 50vw)',
+  marginRight: 'calc(50% - 50vw)',
+  paddingLeft: '2rem',
+  paddingRight: '2rem',
+} as const
 
 function ListRegistrar({
   kind,
@@ -142,6 +163,7 @@ export function FoldersPage() {
   >(null)
   const [deleteConfirmBusy, setDeleteConfirmBusy] = useState(false)
   const [trendsFolderId, setTrendsFolderId] = useState<string | null>(null)
+  const [trendsLayoutOpen, setTrendsLayoutOpen] = useState(false)
   const [addRecordInitial, setAddRecordInitial] =
     useState<RecordFormState | null>(null)
 
@@ -456,21 +478,41 @@ export function FoldersPage() {
     [recordsByFolder],
   )
 
+  const closeTrendsPanel = useCallback(() => {
+    setTrendsLayoutOpen(false)
+    window.setTimeout(() => setTrendsFolderId(null), TRENDS_ANIM_MS)
+  }, [])
+
   const toggleTrendsPanel = (folderId: string) => {
-    if (trendsFolderId === folderId) {
-      setTrendsFolderId(null)
+    if (trendsFolderId === folderId && trendsLayoutOpen) {
+      closeTrendsPanel()
       return
     }
+    setTrendsLayoutOpen(false)
     setTrendsFolderId(folderId)
     void ensureFolderRecords(folderId)
   }
+
+  const isLargeScreen = useMediaQuery('(min-width: 1024px)')
+
+  useEffect(() => {
+    if (!trendsFolderId || catalogView !== 'folder' || !isLargeScreen) {
+      setTrendsLayoutOpen(false)
+      return
+    }
+    const frame = requestAnimationFrame(() => setTrendsLayoutOpen(true))
+    return () => cancelAnimationFrame(frame)
+  }, [trendsFolderId, catalogView, isLargeScreen])
 
   const finalizeFolderRemoved = useCallback(
     (folderId: string) => {
       if (editingId === folderId) cancelEdit()
       if (openFolderId === folderId) setOpenFolderId(null)
       if (editingRecord?.folder_id === folderId) setEditingRecord(null)
-      if (trendsFolderId === folderId) setTrendsFolderId(null)
+      if (trendsFolderId === folderId) {
+        setTrendsLayoutOpen(false)
+        setTrendsFolderId(null)
+      }
       setDraftFolderId((id) => (id === folderId ? null : id))
       setRecordCounts((prev) => {
         const next = { ...prev }
@@ -586,6 +628,8 @@ export function FoldersPage() {
 
   const showTrendsSplit =
     catalogView === 'folder' && trendsFolderId != null && trendsFolder != null
+  const layoutExpanded =
+    showTrendsSplit && trendsLayoutOpen && isLargeScreen
   const trendsRecords =
     trendsFolderId != null ? recordsByFolder[trendsFolderId] : undefined
   const trendsRecordsLoading =
@@ -594,13 +638,11 @@ export function FoldersPage() {
     openFolderLoadingId === trendsFolderId
 
   const catalogSection = (
-    <section
-      className={`space-y-6 pb-28 ${showTrendsSplit ? 'min-w-0 flex-1' : ''}`}
-    >
+    <section className="min-w-0 space-y-6 pb-28">
         <div className="space-y-2">
           <h2 className="text-lg font-medium text-stone-900">フォルダ</h2>
           <p className="text-sm text-stone-600">
-            品目名（フォルダ）と店名を管理し、記録の追加・編集もここから行います。先頭のカードで追加。ゴミ箱へ落とすと削除（フォルダは確認あり）。
+            記録の追加・編集ができます。ゴミ箱へ移すと削除です。値段推移も確認できます。
           </p>
         </div>
 
@@ -626,6 +668,7 @@ export function FoldersPage() {
                 setCatalogView('store')
                 setOpenFolderId(null)
                 setTrendsFolderId(null)
+                setTrendsLayoutOpen(false)
               }}
               className={`rounded px-3 py-1.5 text-sm ${
                 catalogView === 'store'
@@ -805,7 +848,7 @@ export function FoldersPage() {
                                   toggleTrendsPanel(folder.id)
                                 }}
                                 className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-white/70 lg:inline-flex ${
-                                  trendsFolderId === folder.id
+                                  trendsFolderId === folder.id && trendsLayoutOpen
                                     ? 'bg-white/90 text-stone-900'
                                     : 'text-stone-600'
                                 }`}
@@ -1130,24 +1173,37 @@ export function FoldersPage() {
       onDragEnd={handleDragEnd}
       reorderKinds={['folder-record']}
     >
-      {showTrendsSplit ? (
-        <div className="relative left-1/2 w-screen -translate-x-1/2 px-4 lg:px-8">
-          <div className="flex items-start gap-6 lg:gap-8">
-            {catalogSection}
-            <aside className="hidden min-w-0 flex-1 lg:block lg:sticky lg:top-8 lg:self-start">
+      <div
+        className="ease-[cubic-bezier(0.4,0,0.2,1)] transition-[margin,width,padding,max-width] duration-500"
+        style={layoutExpanded ? expandedLayoutStyle : collapsedLayoutStyle}
+      >
+        <div
+          className="grid items-start gap-0 transition-[grid-template-columns,gap] duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] lg:gap-8"
+          style={{
+            gridTemplateColumns: layoutExpanded
+              ? 'minmax(0, 1fr) minmax(0, 1fr)'
+              : 'minmax(0, 1fr) minmax(0, 0fr)',
+          }}
+        >
+          {catalogSection}
+          <aside
+            className={`hidden min-w-0 overflow-hidden transition-opacity duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] lg:block lg:sticky lg:top-8 lg:self-start ${
+              layoutExpanded ? 'opacity-100' : 'pointer-events-none opacity-0'
+            }`}
+            aria-hidden={!layoutExpanded}
+          >
+            {showTrendsSplit && (
               <FolderTrendPanel
                 folderId={trendsFolderId}
                 folderName={parseFolderName(trendsFolder.name).displayName}
                 records={trendsRecords ?? []}
                 recordsLoading={trendsRecordsLoading}
-                onClose={() => setTrendsFolderId(null)}
+                onClose={closeTrendsPanel}
               />
-            </aside>
-          </div>
+            )}
+          </aside>
         </div>
-      ) : (
-        catalogSection
-      )}
+      </div>
 
       <Modal
         title="記録を追加"
