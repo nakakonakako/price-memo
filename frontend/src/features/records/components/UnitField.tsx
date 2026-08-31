@@ -117,6 +117,11 @@ export function UnitField({
       value={selectValue}
       disabled={disabled}
       onChange={(e) => handleSelectChange(e.target.value)}
+      onClick={() => {
+        if (customInputMode === 'modal' && selectValue === CUSTOM_UNIT_VALUE) {
+          openCustomModal()
+        }
+      }}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -155,7 +160,7 @@ export function UnitField({
         modalOpen &&
         createPortal(
           <div
-            className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center"
+            className="fixed inset-0 z-[90] flex items-end justify-center p-4 sm:items-center"
             role="presentation"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) cancelCustomModal()

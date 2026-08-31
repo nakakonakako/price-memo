@@ -2,6 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 
 const REVEAL_WIDTH = 72
 const SNAP_THRESHOLD = 40
+const COMMIT_DELETE_EXTRA = 48
 const AXIS_LOCK_DISTANCE = 8
 
 function isInteractive(target: EventTarget | null) {
@@ -35,7 +36,7 @@ export function SwipeToDeleteRow({
     pointerId: -1,
   })
 
-  const clamp = (v: number) => Math.min(0, Math.max(-REVEAL_WIDTH, v))
+  const clamp = (v: number) => Math.min(0, v)
 
   const reset = () => {
     setAnimate(true)
@@ -86,7 +87,14 @@ export function SwipeToDeleteRow({
     g.axis = null
     if (wasHorizontal) {
       setAnimate(true)
-      setOffset((o) => (o < -SNAP_THRESHOLD ? -REVEAL_WIDTH : 0))
+      setOffset((o) => {
+        if (o <= -(REVEAL_WIDTH + COMMIT_DELETE_EXTRA)) {
+          onDelete()
+          return 0
+        }
+        if (o < -SNAP_THRESHOLD) return -REVEAL_WIDTH
+        return 0
+      })
       try {
         e.currentTarget.releasePointerCapture(e.pointerId)
       } catch {
@@ -105,9 +113,15 @@ export function SwipeToDeleteRow({
     g.axis = null
   }
 
+  const revealWidth = Math.max(0, -offset)
+
   return (
     <div className={`relative overflow-hidden ${className}`}>
-      <div className="absolute inset-y-0 right-0 flex w-[72px] items-stretch justify-center bg-red-500">
+      <div
+        className="absolute inset-y-0 right-0 flex items-stretch justify-end overflow-hidden bg-red-500"
+        style={{ width: revealWidth }}
+        aria-hidden={revealWidth === 0}
+      >
         <button
           type="button"
           onClick={(e) => {
@@ -115,7 +129,7 @@ export function SwipeToDeleteRow({
             onDelete()
             reset()
           }}
-          className="flex w-full items-center justify-center text-sm font-medium text-white"
+          className="flex w-[72px] shrink-0 items-center justify-center text-sm font-medium text-white"
         >
           削除
         </button>

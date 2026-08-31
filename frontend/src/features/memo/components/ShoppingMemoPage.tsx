@@ -82,7 +82,6 @@ export function ShoppingMemoPage() {
   const [records, setRecords] = useState<PriceRecord[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [pickQuery, setPickQuery] = useState('')
   const [mutating, setMutating] = useState(false)
@@ -148,7 +147,6 @@ export function ShoppingMemoPage() {
 
   const focusFolder = useCallback((folderId: string) => {
     setFocusFolderId(folderId)
-    setInfo(null)
     setError(null)
     requestAnimationFrame(() => {
       const el = cardRefs.current.get(folderId)
@@ -168,14 +166,10 @@ export function ShoppingMemoPage() {
   const addFolderToMemo = async (folder: PriceFolder) => {
     setMutating(true)
     setError(null)
-    setInfo(null)
     try {
       await putOnMemo(folder)
       setPickQuery('')
       focusFolder(folder.id)
-      setInfo(
-        `「${parseFolderName(folder.name).displayName}」をメモに追加しました。`,
-      )
     } catch (err) {
       setError(toUserMessage(err, 'メモへの追加に失敗しました。'))
     } finally {
@@ -188,7 +182,6 @@ export function ShoppingMemoPage() {
     const trimmed = newName.trim()
     if (!trimmed) return
     setError(null)
-    setInfo(null)
     setMutating(true)
     try {
       const existing = findFolderByInput(allFolders, trimmed)
@@ -201,15 +194,6 @@ export function ShoppingMemoPage() {
       const alreadyOnMemo = memoFolderIds.has(folder.id)
       if (!alreadyOnMemo) {
         await putOnMemo(folder)
-        setInfo(
-          existing
-            ? `既存フォルダ「${parseFolderName(folder.name).displayName}」をメモに追加しました。`
-            : null,
-        )
-      } else {
-        setInfo(
-          `「${parseFolderName(folder.name).displayName}」はすでにメモにあります。`,
-        )
       }
       setNewName('')
       focusFolder(folder.id)
@@ -369,11 +353,6 @@ export function ShoppingMemoPage() {
         {error && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
             {error}
-          </p>
-        )}
-        {info && (
-          <p className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
-            {info}
           </p>
         )}
 

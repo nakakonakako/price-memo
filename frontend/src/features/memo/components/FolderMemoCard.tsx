@@ -221,13 +221,9 @@ export function FolderMemoCard({
                     label="直近"
                     value={activeStats.latest}
                     sub={activeStats.latestDate}
+                    footnote={store.trim() || undefined}
                   />
                 </div>
-                {store.trim() ? (
-                  <p className="mt-0.5 max-w-[10rem] truncate text-[10px] text-stone-500">
-                    {store.trim()}
-                  </p>
-                ) : null}
               </div>
             ) : records.length > 0 && store.trim() ? (
               <p className="shrink-0 text-right text-[11px] text-stone-500">
@@ -285,8 +281,8 @@ export function FolderMemoCard({
           <p className="text-sm text-stone-600">
             内容量と値段を入れると単価が出ます。
           </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="space-y-1">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="min-w-0 space-y-1">
               <span className="text-xs text-stone-500">確認日</span>
               <input
                 type="date"
@@ -295,7 +291,7 @@ export function FolderMemoCard({
                 onChange={(e) => setRecordedAt(e.target.value)}
               />
             </label>
-            <label className="space-y-1">
+            <label className="min-w-0 space-y-1">
               <span className="text-xs text-stone-500">店名（保存時必須）</span>
               <StoreField
                 value={store}
@@ -422,11 +418,13 @@ function StatCell({
   value,
   highlight,
   sub,
+  footnote,
 }: {
   label: string
   value: number
   highlight?: boolean
   sub?: string
+  footnote?: string
 }) {
   return (
     <div className="min-w-[3.5rem]">
@@ -441,6 +439,9 @@ function StatCell({
         {formatYen(value, 1)}
       </p>
       {sub && <p className="text-[9px] text-stone-400">{sub}</p>}
+      {footnote && (
+        <p className="max-w-full truncate text-[9px] text-stone-400">{footnote}</p>
+      )}
     </div>
   )
 }
