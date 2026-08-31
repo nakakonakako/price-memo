@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
-import { TrashDragItem } from '@/components/trash/TrashDragItem'
+import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
 import { StoreField } from '@/components/StoreField'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { parseFolderName } from '@/features/folders/utils/folderName'
 import { UnitField } from '@/features/records/components/UnitField'
 import { createRecord } from '@/features/records/api/recordsApi'
@@ -33,6 +34,8 @@ type Props = {
   onForceOpenHandled?: () => void
   rootRef?: (el: HTMLElement | null) => void
   onSaved: (record: PriceRecord) => void
+  dragEnabled?: boolean
+  onRemoveFromMemo?: () => void
 }
 
 export function FolderMemoCard({
@@ -44,7 +47,10 @@ export function FolderMemoCard({
   onForceOpenHandled,
   rootRef,
   onSaved,
+  dragEnabled = true,
+  onRemoveFromMemo,
 }: Props) {
+  const isMobile = useMediaQuery('(max-width: 1023px)')
   const displayName = parseFolderName(folderName).displayName
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
@@ -62,7 +68,6 @@ export function FolderMemoCard({
     () => recordsForStoreScope(records, store),
     [records, store],
   )
-  const statsScopeLabel = store.trim() ? store.trim() : '全体'
   const allStats = useMemo(
     () => computeAllFolderStats(statsRecords),
     [statsRecords],
@@ -182,9 +187,11 @@ export function FolderMemoCard({
 
   return (
     <li className="list-none" ref={rootRef}>
-      <TrashDragItem
+      <DraggableCatalogItem
+        dragEnabled={dragEnabled}
         payload={{ kind: 'memo-folder', id: folderId }}
         onClick={handleOpen}
+        onDelete={() => onRemoveFromMemo?.()}
         className={`overflow-hidden rounded-lg border shadow-sm transition-colors ${colorClass} ${
           open ? 'ring-1 ring-stone-400' : 'hover:brightness-[0.99]'
         }`}
@@ -202,23 +209,25 @@ export function FolderMemoCard({
                 <p className="truncate text-base font-semibold text-stone-900 sm:text-lg">
                   {displayName}
                 </p>
-                {records.length > 0 && (
-                  <p className="truncate text-[11px] text-stone-500">
-                    {statsScopeLabel}の統計
-                  </p>
-                )}
               </div>
             </div>
 
             {activeStats ? (
-              <div className="grid shrink-0 grid-cols-3 gap-3 text-center sm:gap-4">
-                <StatCell label="平均" value={activeStats.avg} />
-                <StatCell label="最安" value={activeStats.min} highlight />
-                <StatCell
-                  label="直近"
-                  value={activeStats.latest}
-                  sub={activeStats.latestDate}
-                />
+              <div className="shrink-0 text-center">
+                <div className="grid grid-cols-3 gap-3 sm:gap-4">
+                  <StatCell label="平均" value={activeStats.avg} />
+                  <StatCell label="最安" value={activeStats.min} highlight />
+                  <StatCell
+                    label="直近"
+                    value={activeStats.latest}
+                    sub={activeStats.latestDate}
+                  />
+                </div>
+                {store.trim() ? (
+                  <p className="mt-0.5 max-w-[10rem] truncate text-[10px] text-stone-500">
+                    {store.trim()}
+                  </p>
+                ) : null}
               </div>
             ) : records.length > 0 && store.trim() ? (
               <p className="shrink-0 text-right text-[11px] text-stone-500">
@@ -259,7 +268,9 @@ export function FolderMemoCard({
 
           {!open && (
             <p className="mt-2 border-t border-dashed border-stone-200 pt-2 text-center text-[11px] text-stone-400">
-              タップして入力 · ドラッグで並べ替え / 削除
+              {isMobile
+                ? 'タップして入力 · 左にスワイプで削除'
+                : 'タップして入力 · ドラッグで並べ替え / 削除'}
             </p>
           )}
         </div>
@@ -401,7 +412,7 @@ export function FolderMemoCard({
           {savedMsg && <p className="text-sm text-teal-800">{savedMsg}</p>}
         </form>
       )}
-      </TrashDragItem>
+      </DraggableCatalogItem>
     </li>
   )
 }

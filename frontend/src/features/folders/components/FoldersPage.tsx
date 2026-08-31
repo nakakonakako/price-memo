@@ -3,7 +3,7 @@ import { EditIconButton } from '@/components/EditIconButton'
 import { CopyIconButton } from '@/components/CopyIconButton'
 import { ChartIcon } from '@/components/icons/ChartIcon'
 import { Modal } from '@/components/Modal'
-import { TrashDragItem } from '@/components/trash/TrashDragItem'
+import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
 import {
   TrashDragProvider,
   useTrashDrag,
@@ -494,6 +494,7 @@ export function FoldersPage() {
   }
 
   const isLargeScreen = useMediaQuery('(min-width: 1024px)')
+  const isMobile = !isLargeScreen
 
   useEffect(() => {
     if (!trendsFolderId || catalogView !== 'folder' || !isLargeScreen) {
@@ -543,6 +544,51 @@ export function FoldersPage() {
     }
   }
 
+  const requestDeleteFolder = useCallback(
+    (folderId: string) => {
+      const count =
+        recordsByFolder[folderId]?.length ?? recordCounts[folderId] ?? 0
+      if (count > 0) {
+        setDeleteConfirmFolderId(folderId)
+      } else {
+        void remove(folderId)
+          .then(() => finalizeFolderRemoved(folderId))
+          .catch(() => {})
+      }
+    },
+    [finalizeFolderRemoved, recordCounts, recordsByFolder, remove],
+  )
+
+  const requestDeleteStore = useCallback(
+    (storeId: string) => {
+      const count = storeRecordCounts[storeId] ?? 0
+      if (count > 0) {
+        setDeleteConfirmStoreId(storeId)
+      } else {
+        void deleteStore(storeId)
+          .then(() => finalizeStoreRemoved(storeId))
+          .catch(() => {})
+      }
+    },
+    [finalizeStoreRemoved, storeRecordCounts],
+  )
+
+  const requestDeleteRecord = useCallback(
+    async (recordId: string, folderId: string) => {
+      try {
+        await deleteRecord(recordId)
+        patchFolderRecords(folderId, (rows) =>
+          rows.filter((r) => r.id !== recordId),
+        )
+        setAllRecords((prev) => prev.filter((r) => r.id !== recordId))
+        if (editingRecord?.id === recordId) setEditingRecord(null)
+      } catch {
+        /* hook */
+      }
+    },
+    [editingRecord, patchFolderRecords],
+  )
+
   const handleDragEnd = useCallback(
     async (result: DragEndResult) => {
       if (result.action === 'cancel') return
@@ -581,49 +627,15 @@ export function FoldersPage() {
       }
 
       if (result.action !== 'delete') return
-      try {
-        if (payload.kind === 'folder') {
-          const count =
-            recordsByFolder[payload.id]?.length ??
-            recordCounts[payload.id] ??
-            0
-          if (count > 0) {
-            setDeleteConfirmFolderId(payload.id)
-          } else {
-            await remove(payload.id)
-            finalizeFolderRemoved(payload.id)
-          }
-        } else if (payload.kind === 'store') {
-          const count = storeRecordCounts[payload.id] ?? 0
-          if (count > 0) {
-            setDeleteConfirmStoreId(payload.id)
-          } else {
-            await deleteStore(payload.id)
-            finalizeStoreRemoved(payload.id)
-          }
-        } else if (payload.kind === 'folder-record') {
-          await deleteRecord(payload.id)
-          patchFolderRecords(payload.folderId, (rows) =>
-            rows.filter((r) => r.id !== payload.id),
-          )
-          setAllRecords((prev) =>
-            prev.filter((r) => r.id !== payload.id),
-          )
-          if (editingRecord?.id === payload.id) setEditingRecord(null)
-        }
-      } catch {
-        /* hook */
+      if (payload.kind === 'folder') {
+        requestDeleteFolder(payload.id)
+      } else if (payload.kind === 'store') {
+        requestDeleteStore(payload.id)
+      } else if (payload.kind === 'folder-record') {
+        void requestDeleteRecord(payload.id, payload.folderId)
       }
     },
-    [
-      editingRecord,
-      finalizeFolderRemoved,
-      finalizeStoreRemoved,
-      recordsByFolder,
-      recordCounts,
-      remove,
-      storeRecordCounts,
-    ],
+    [patchFolderRecords, recordsByFolder, requestDeleteFolder, requestDeleteRecord, requestDeleteStore],
   )
 
   const showTrendsSplit =
@@ -642,7 +654,11 @@ export function FoldersPage() {
         <div className="space-y-2">
           <h2 className="text-lg font-medium text-stone-900">フォルダ</h2>
           <p className="text-sm text-stone-600">
-            記録の追加・編集ができます。ゴミ箱へ移すと削除です。値段推移も確認できます。
+            記録の追加・編集ができます。
+            {isMobile
+              ? '左にスワイプすると削除です。'
+              : 'ゴミ箱へ移すと削除です。'}
+            値段推移も確認できます。
           </p>
         </div>
 
@@ -772,12 +788,14 @@ export function FoldersPage() {
                 const recordCount = getRecordCount(folder.id)
                 return (
                   <li key={folder.id} className="flex flex-col">
-                    <TrashDragItem
+                    <DraggableCatalogItem
+                      dragEnabled={!isMobile}
                       payload={{ kind: 'folder', id: folder.id }}
                       onClick={() => {
                         if (editingId === folder.id) return
                         void toggleFolderDetail(folder.id)
                       }}
+                      onDelete={() => requestDeleteFolder(folder.id)}
                       className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
                         isOpen
                           ? 'border-amber-400/80 shadow-md'
@@ -900,22 +918,31 @@ export function FoldersPage() {
                             </p>
                           ) : (
                             <ul className="max-h-64 space-y-2 overflow-y-auto">
-                              <ListRegistrar
-                                kind="folder-record"
-                                ids={(recordsByFolder[folder.id] ?? []).map(
-                                  (r) => r.id,
-                                )}
-                                scope={folder.id}
-                              />
+                              {!isMobile && (
+                                <ListRegistrar
+                                  kind="folder-record"
+                                  ids={(recordsByFolder[folder.id] ?? []).map(
+                                    (r) => r.id,
+                                  )}
+                                  scope={folder.id}
+                                />
+                              )}
                               {(recordsByFolder[folder.id] ?? []).map(
                                 (record) => (
                                   <li key={record.id} className="list-none">
-                                    <TrashDragItem
+                                    <DraggableCatalogItem
+                                      dragEnabled={!isMobile}
                                       payload={{
                                         kind: 'folder-record',
                                         id: record.id,
                                         folderId: folder.id,
                                       }}
+                                      onDelete={() =>
+                                        void requestDeleteRecord(
+                                          record.id,
+                                          folder.id,
+                                        )
+                                      }
                                       className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
                                     >
                                       <div className="min-w-0 flex-1 py-0.5">
@@ -957,22 +984,24 @@ export function FoldersPage() {
                                           }
                                         />
                                       </div>
-                                    </TrashDragItem>
+                                    </DraggableCatalogItem>
                                   </li>
                                 ),
                               )}
-                              <DropEndMarker
-                                kind="folder-record"
-                                lastId={
-                                  (recordsByFolder[folder.id] ?? []).at(-1)
-                                    ?.id ?? null
-                                }
-                              />
+                              {!isMobile && (
+                                <DropEndMarker
+                                  kind="folder-record"
+                                  lastId={
+                                    (recordsByFolder[folder.id] ?? []).at(-1)
+                                      ?.id ?? null
+                                  }
+                                />
+                              )}
                             </ul>
                           )}
                         </div>
                       )}
-                    </TrashDragItem>
+                    </DraggableCatalogItem>
                   </li>
                 )
               })
@@ -1014,12 +1043,14 @@ export function FoldersPage() {
                 const storeRecords = getStoreRecords(store.name)
                 return (
                   <li key={store.id} className="flex flex-col">
-                    <TrashDragItem
+                    <DraggableCatalogItem
+                      dragEnabled={!isMobile}
                       payload={{ kind: 'store', id: store.id }}
                       onClick={() => {
                         if (editingStoreId === store.id) return
                         toggleStoreDetail(store.id)
                       }}
+                      onDelete={() => requestDeleteStore(store.id)}
                       className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
                         isOpen
                           ? 'border-emerald-400/80 shadow-md'
@@ -1158,7 +1189,7 @@ export function FoldersPage() {
                           )}
                         </div>
                       )}
-                    </TrashDragItem>
+                    </DraggableCatalogItem>
                   </li>
                 )
               })
@@ -1168,11 +1199,8 @@ export function FoldersPage() {
     </section>
   )
 
-  return (
-    <TrashDragProvider
-      onDragEnd={handleDragEnd}
-      reorderKinds={['folder-record']}
-    >
+  const foldersPageBody = (
+    <>
       <div
         className="ease-[cubic-bezier(0.4,0,0.2,1)] transition-[margin,width,padding,max-width] duration-500"
         style={layoutExpanded ? expandedLayoutStyle : collapsedLayoutStyle}
@@ -1472,6 +1500,19 @@ export function FoldersPage() {
           </div>
         )}
       </Modal>
+    </>
+  )
+
+  if (isMobile) {
+    return foldersPageBody
+  }
+
+  return (
+    <TrashDragProvider
+      onDragEnd={handleDragEnd}
+      reorderKinds={['folder-record']}
+    >
+      {foldersPageBody}
     </TrashDragProvider>
   )
 }

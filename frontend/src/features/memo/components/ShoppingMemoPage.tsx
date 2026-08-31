@@ -8,6 +8,7 @@ import {
 } from 'react'
 import { TrashDragProvider } from '@/components/trash/TrashDragProvider'
 import type { DragEndResult } from '@/components/trash/types'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { createFolder, listFolders } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
 import {
@@ -75,6 +76,7 @@ function MemoListEndMarker({ lastId }: { lastId: string | null }) {
 }
 
 export function ShoppingMemoPage() {
+  const isMobile = useMediaQuery('(max-width: 1023px)')
   const [allFolders, setAllFolders] = useState<PriceFolder[]>([])
   const [memoItems, setMemoItems] = useState<PriceMemoItem[]>([])
   const [records, setRecords] = useState<PriceRecord[]>([])
@@ -218,24 +220,26 @@ export function ShoppingMemoPage() {
     }
   }
 
+  const removeFromMemo = useCallback(async (folderId: string) => {
+    setMutating(true)
+    setError(null)
+    try {
+      await removeMemoItem(folderId)
+      setMemoItems((prev) => prev.filter((m) => m.folder_id !== folderId))
+    } catch (err) {
+      setError(toUserMessage(err, 'メモからの削除に失敗しました。'))
+    } finally {
+      setMutating(false)
+    }
+  }, [])
+
   const handleDragEnd = useCallback(
     async (result: DragEndResult) => {
       if (result.action === 'cancel') return
       if (result.payload.kind !== 'memo-folder') return
 
       if (result.action === 'delete') {
-        setMutating(true)
-        setError(null)
-        try {
-          await removeMemoItem(result.payload.id)
-          setMemoItems((prev) =>
-            prev.filter((m) => m.folder_id !== result.payload.id),
-          )
-        } catch (err) {
-          setError(toUserMessage(err, 'メモからの削除に失敗しました。'))
-        } finally {
-          setMutating(false)
-        }
+        await removeFromMemo(result.payload.id)
         return
       }
 
@@ -262,21 +266,22 @@ export function ShoppingMemoPage() {
         }
       }
     },
-    [load, memoItems],
+    [load, memoItems, removeFromMemo],
   )
 
   const handleSaved = (record: PriceRecord) => {
     setRecords((prev) => [record, ...prev])
   }
 
-  return (
-    <TrashDragProvider onDragEnd={handleDragEnd} trashSize="memo">
-      <MemoListRegistrar ids={dragIds} />
+  const page = (
       <section className="space-y-6 pb-44">
         <div className="space-y-2">
           <h2 className="text-lg font-medium text-stone-900">買い物メモ</h2>
           <p className="text-sm text-stone-600">
-            店頭用のリストです。フォルダタブの棚から選ぶか、新規名で追加できます。統計の保存はフォルダ側の記録になります。ゴミ箱へ落とすとメモから外れるだけで、フォルダ自体は残ります。
+            店頭用のリストです。フォルダタブの棚から選ぶか、新規名で追加できます。統計の保存はフォルダ側の記録になります。
+            {isMobile
+              ? '左にスワイプするとメモから外れるだけで、フォルダ自体は残ります。'
+              : 'ゴミ箱へ落とすとメモから外れるだけで、フォルダ自体は残ります。'}
           </p>
         </div>
 
@@ -396,15 +401,29 @@ export function ShoppingMemoPage() {
                     else cardRefs.current.delete(item.folder_id)
                   }}
                   onSaved={handleSaved}
+                  dragEnabled={!isMobile}
+                  onRemoveFromMemo={() => void removeFromMemo(item.folder_id)}
                 />
               ))}
-              <MemoListEndMarker
-                lastId={memoItems[memoItems.length - 1]?.folder_id ?? null}
-              />
+              {!isMobile && (
+                <MemoListEndMarker
+                  lastId={memoItems[memoItems.length - 1]?.folder_id ?? null}
+                />
+              )}
             </ul>
           </div>
         )}
       </section>
+  )
+
+  if (isMobile) {
+    return page
+  }
+
+  return (
+    <TrashDragProvider onDragEnd={handleDragEnd} trashSize="memo">
+      <MemoListRegistrar ids={dragIds} />
+      {page}
     </TrashDragProvider>
   )
 }
