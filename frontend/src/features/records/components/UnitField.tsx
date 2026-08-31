@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PriceUnit } from '../types'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 import {
   CUSTOM_UNIT_VALUE,
   mergeUnitOptions,
@@ -111,6 +112,8 @@ export function UnitField({
   const showInlineCustom =
     customInputMode === 'inline' && inlineCustomActive
 
+  useBodyScrollLock(customInputMode === 'modal' && modalOpen)
+
   const select = (
     <select
       className={fieldClass}
@@ -160,10 +163,13 @@ export function UnitField({
         modalOpen &&
         createPortal(
           <div
-            className="fixed inset-0 z-[90] flex items-end justify-center p-4 sm:items-center"
+            className="fixed inset-0 z-[90] flex items-center justify-center overscroll-none p-4"
             role="presentation"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) cancelCustomModal()
+            }}
+            onTouchMove={(e) => {
+              if (e.target === e.currentTarget) e.preventDefault()
             }}
           >
             <div

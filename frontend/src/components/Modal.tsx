@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom'
 import type { ReactNode } from 'react'
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
 
 type Props = {
   title: string
@@ -9,13 +10,18 @@ type Props = {
 }
 
 export function Modal({ title, open, onClose, children }: Props) {
+  useBodyScrollLock(open)
+
   if (!open) return null
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-end justify-center p-3 sm:items-center"
+      className="fixed inset-0 z-[80] flex items-center justify-center overscroll-none p-3"
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
+      }}
+      onTouchMove={(e) => {
+        if (e.target === e.currentTarget) e.preventDefault()
       }}
     >
       <div className="absolute inset-0 bg-black/40" aria-hidden />

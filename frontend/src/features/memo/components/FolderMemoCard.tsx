@@ -217,13 +217,26 @@ export function FolderMemoCard({
                 <div className="grid grid-cols-3 gap-3 sm:gap-4">
                   <StatCell label="平均" value={activeStats.avg} />
                   <StatCell label="最安" value={activeStats.min} highlight />
-                  <StatCell
-                    label="直近"
-                    value={activeStats.latest}
-                    sub={activeStats.latestDate}
-                    footnote={store.trim() || undefined}
-                  />
+                  <StatCell label="直近" value={activeStats.latest} />
                 </div>
+                {(store.trim() || activeStats.latestDate) && (
+                  <div className="mt-0.5 grid grid-cols-3 gap-3 sm:gap-4">
+                    {store.trim() ? (
+                      <p className="col-span-2 truncate text-[9px] text-stone-400">
+                        {store.trim()}
+                      </p>
+                    ) : (
+                      <div className="col-span-2" aria-hidden />
+                    )}
+                    {activeStats.latestDate ? (
+                      <p className="text-[9px] text-stone-400">
+                        {activeStats.latestDate}
+                      </p>
+                    ) : (
+                      <div aria-hidden />
+                    )}
+                  </div>
+                )}
               </div>
             ) : records.length > 0 && store.trim() ? (
               <p className="shrink-0 text-right text-[11px] text-stone-500">
@@ -281,7 +294,7 @@ export function FolderMemoCard({
           <p className="text-sm text-stone-600">
             内容量と値段を入れると単価が出ます。
           </p>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-x-2 gap-y-3 sm:gap-x-3">
             <label className="min-w-0 space-y-1">
               <span className="text-xs text-stone-500">確認日</span>
               <input
@@ -299,70 +312,66 @@ export function FolderMemoCard({
                 className={fieldClass}
               />
             </label>
-          </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 sm:items-end">
-            <div className="grid grid-cols-2 gap-2">
-              <label className="space-y-1">
-                <span className="text-xs text-stone-500">値段（円・総額）</span>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-stone-400">
-                    ¥
-                  </span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1}
-                    className="w-full rounded-md border border-stone-300 bg-white py-2 pl-7 pr-2.5 text-sm outline-none focus:border-stone-500"
-                    value={price}
-                    onChange={(e) => setPrice(e.target.value)}
-                    placeholder="398"
-                  />
-                </div>
-              </label>
+            <label className="min-w-0 space-y-1">
+              <span className="text-xs text-stone-500">値段（円・総額）</span>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-stone-400">
+                  ¥
+                </span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  className="w-full rounded-md border border-stone-300 bg-white py-2 pl-7 pr-2.5 text-sm outline-none focus:border-stone-500"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="398"
+                />
+              </div>
+            </label>
 
-              <div className="space-y-1">
-                <span className="text-xs text-stone-500">内容量</span>
-                <div className="flex min-w-0 overflow-hidden rounded-md border border-stone-300 bg-white focus-within:border-stone-500">
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    step="any"
-                    className="min-w-0 flex-1 border-0 bg-transparent px-2.5 py-2 text-sm outline-none"
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="250"
+            <div className="min-w-0 space-y-1">
+              <span className="text-xs text-stone-500">内容量</span>
+              <div className="flex min-w-0 overflow-hidden rounded-md border border-stone-300 bg-white focus-within:border-stone-500">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min={0}
+                  step="any"
+                  className="min-w-0 flex-1 border-0 bg-transparent px-2.5 py-2 text-sm outline-none"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="250"
+                />
+                <div className="w-[4.5rem] shrink-0 border-l border-stone-200 bg-stone-50 [&_select]:border-0 [&_select]:bg-transparent [&_select]:py-2 [&_select]:text-sm">
+                  <UnitField
+                    value={unit}
+                    onChange={setTrialUnit}
+                    preferredUnits={preferredUnits}
+                    className="w-full border-0 bg-transparent px-1 py-2 text-sm outline-none"
                   />
-                  <div className="w-[4.5rem] shrink-0 border-l border-stone-200 bg-stone-50 [&_select]:border-0 [&_select]:bg-transparent [&_select]:py-2 [&_select]:text-sm">
-                    <UnitField
-                      value={unit}
-                      onChange={setTrialUnit}
-                      preferredUnits={preferredUnits}
-                      className="w-full border-0 bg-transparent px-1 py-2 text-sm outline-none"
-                    />
-                  </div>
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-[1fr_auto] items-end gap-2">
-              <label className="space-y-1">
-                <span className="text-xs text-stone-500">補足など</span>
-                <input
-                  type="text"
-                  className={fieldClass}
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder=""
-                />
-              </label>
+            <label className="col-span-2 min-w-0 space-y-1 sm:col-span-1">
+              <span className="text-xs text-stone-500">補足など</span>
+              <input
+                type="text"
+                className={fieldClass}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder=""
+              />
+            </label>
 
+            <div className="col-span-2 flex items-end sm:col-span-1 sm:justify-end">
               <button
                 type="submit"
                 disabled={saving || trialValue == null}
-                className="h-[42px] shrink-0 rounded-md bg-stone-900 px-4 text-sm text-white hover:bg-stone-800 disabled:opacity-50 sm:whitespace-nowrap"
+                className="h-[42px] w-full shrink-0 rounded-md bg-stone-900 px-4 text-sm text-white hover:bg-stone-800 disabled:opacity-50 sm:w-auto sm:whitespace-nowrap"
               >
                 {saving ? '保存中...' : '統計に残す'}
               </button>
@@ -417,14 +426,10 @@ function StatCell({
   label,
   value,
   highlight,
-  sub,
-  footnote,
 }: {
   label: string
   value: number
   highlight?: boolean
-  sub?: string
-  footnote?: string
 }) {
   return (
     <div className="min-w-[3.5rem]">
@@ -438,10 +443,6 @@ function StatCell({
       >
         {formatYen(value, 1)}
       </p>
-      {sub && <p className="text-[9px] text-stone-400">{sub}</p>}
-      {footnote && (
-        <p className="max-w-full truncate text-[9px] text-stone-400">{footnote}</p>
-      )}
     </div>
   )
 }
