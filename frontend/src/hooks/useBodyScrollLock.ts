@@ -4,13 +4,17 @@ import { useEffect } from 'react'
  * Locks background scroll without position:fixed on body.
  * position:fixed breaks iOS virtual keyboard / tap hit-testing.
  */
-export function useBodyScrollLock(locked: boolean) {
+export function useBodyScrollLock(
+  locked: boolean,
+  options?: { touchGuard?: boolean },
+) {
   useEffect(() => {
     if (!locked) return
 
     const html = document.documentElement
     const body = document.body
     const scrollY = window.scrollY
+    const touchGuard = options?.touchGuard !== false
 
     const prev = {
       htmlOverflow: html.style.overflow,
@@ -40,10 +44,14 @@ export function useBodyScrollLock(locked: boolean) {
       e.preventDefault()
     }
 
-    document.addEventListener('touchmove', onTouchMove, { passive: false })
+    if (touchGuard) {
+      document.addEventListener('touchmove', onTouchMove, { passive: false })
+    }
 
     return () => {
-      document.removeEventListener('touchmove', onTouchMove)
+      if (touchGuard) {
+        document.removeEventListener('touchmove', onTouchMove)
+      }
       html.style.overflow = prev.htmlOverflow
       body.style.overflow = prev.bodyOverflow
       html.style.overscrollBehavior = prev.htmlOverscroll
@@ -51,5 +59,5 @@ export function useBodyScrollLock(locked: boolean) {
       html.style.paddingRight = prev.htmlPaddingRight
       window.scrollTo(0, scrollY)
     }
-  }, [locked])
+  }, [locked, options?.touchGuard])
 }
