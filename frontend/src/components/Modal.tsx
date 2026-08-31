@@ -1,6 +1,7 @@
 import { createPortal } from 'react-dom'
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import { useVisualViewportOverlay } from '@/hooks/useVisualViewportOverlay'
 
 type Props = {
   title: string
@@ -10,12 +11,15 @@ type Props = {
 }
 
 export function Modal({ title, open, onClose, children }: Props) {
+  const overlayRef = useRef<HTMLDivElement>(null)
   useBodyScrollLock(open)
+  useVisualViewportOverlay(overlayRef, open)
 
   if (!open) return null
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center overscroll-none p-3"
+      ref={overlayRef}
+      className="fixed left-0 z-[80] flex items-center justify-center overscroll-none p-3"
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose()
@@ -29,7 +33,8 @@ export function Modal({ title, open, onClose, children }: Props) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg border border-stone-200 bg-white p-4 shadow-xl"
+        data-scroll-lock-scrollable
+        className="relative max-h-full w-full max-w-lg overflow-y-auto overscroll-contain rounded-lg border border-stone-200 bg-white p-4 shadow-xl"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-2">

@@ -294,12 +294,12 @@ export function FolderMemoCard({
           <p className="text-sm text-stone-600">
             内容量と値段を入れると単価が出ます。
           </p>
-          <div className="grid grid-cols-2 gap-x-2 gap-y-3 sm:gap-x-3">
-            <label className="min-w-0 space-y-1">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-3 sm:gap-x-3">
+            <label className="date-field-wrap min-w-0 space-y-1">
               <span className="text-xs text-stone-500">確認日</span>
               <input
                 type="date"
-                className={fieldClass}
+                className={`${fieldClass} min-w-0 max-w-full`}
                 value={recordedAt}
                 onChange={(e) => setRecordedAt(e.target.value)}
               />

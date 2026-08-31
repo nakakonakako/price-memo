@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { PriceUnit } from '../types'
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock'
+import { useVisualViewportOverlay } from '@/hooks/useVisualViewportOverlay'
 import {
   CUSTOM_UNIT_VALUE,
   mergeUnitOptions,
@@ -44,6 +45,7 @@ export function UnitField({
   const [modalOpen, setModalOpen] = useState(false)
   const previousUnitRef = useRef<PriceUnit>(value)
   const inputRef = useRef<HTMLInputElement>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isKnownOption) {
@@ -113,6 +115,7 @@ export function UnitField({
     customInputMode === 'inline' && inlineCustomActive
 
   useBodyScrollLock(customInputMode === 'modal' && modalOpen)
+  useVisualViewportOverlay(overlayRef, customInputMode === 'modal' && modalOpen)
 
   const select = (
     <select
@@ -163,7 +166,8 @@ export function UnitField({
         modalOpen &&
         createPortal(
           <div
-            className="fixed inset-0 z-[90] flex items-center justify-center overscroll-none p-4"
+            ref={overlayRef}
+            className="fixed left-0 z-[90] flex items-center justify-center overscroll-none p-4"
             role="presentation"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) cancelCustomModal()
