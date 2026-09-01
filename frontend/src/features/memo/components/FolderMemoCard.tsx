@@ -197,6 +197,83 @@ export function FolderMemoCard({
         }`}
       >
         <div className="px-3 py-2.5">
+          {isMobile ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-center gap-1.5">
+                <span
+                  className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-90' : ''}`}
+                  aria-hidden
+                >
+                  ▸
+                </span>
+                <p className="truncate text-center text-base font-semibold text-stone-900">
+                  {displayName}
+                </p>
+              </div>
+
+              {activeStats ? (
+                <div className="text-center">
+                  <div className="inline-grid grid-cols-3 gap-3">
+                    <StatCell label="平均" value={activeStats.avg} />
+                    <StatCell label="最安" value={activeStats.min} highlight />
+                    <StatCell label="直近" value={activeStats.latest} />
+                  </div>
+                  {(store.trim() || activeStats.latestDate) && (
+                    <div className="mt-0.5 inline-grid grid-cols-3 gap-3">
+                      {store.trim() ? (
+                        <p className="col-span-2 truncate text-[9px] text-stone-400">
+                          {store.trim()}
+                        </p>
+                      ) : (
+                        <div className="col-span-2" aria-hidden />
+                      )}
+                      {activeStats.latestDate ? (
+                        <p className="text-[9px] text-stone-400">
+                          {activeStats.latestDate}
+                        </p>
+                      ) : (
+                        <div aria-hidden />
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : records.length > 0 && store.trim() ? (
+                <p className="text-center text-[11px] text-stone-500">
+                  この店の記録なし
+                </p>
+              ) : null}
+
+              {unitColumns.length > 0 && (
+                <div
+                  className="flex justify-center gap-1"
+                  data-no-trash-drag
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {unitColumns.map((col, colIdx) => (
+                    <div key={colIdx} className="flex flex-col gap-0.5">
+                      {col.map((u) => {
+                        const active = u === activeStats?.unit
+                        return (
+                          <button
+                            key={u}
+                            type="button"
+                            onClick={(e) => handleStatsUnitChange(u, e)}
+                            className={
+                              active
+                                ? 'min-w-[2rem] rounded bg-stone-900 px-1.5 py-0.5 text-[11px] text-white'
+                                : 'min-w-[2rem] rounded border border-stone-300 bg-white px-1.5 py-0.5 text-[11px] text-stone-600 hover:bg-stone-50'
+                            }
+                          >
+                            {unitLabel(u)}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
           <div className="flex items-start gap-2 sm:items-center">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
@@ -274,6 +351,7 @@ export function FolderMemoCard({
               </div>
             )}
           </div>
+          )}
 
           {!open && (
             <p className="mt-2 border-t border-dashed border-stone-200 pt-2 text-center text-[11px] text-stone-400">

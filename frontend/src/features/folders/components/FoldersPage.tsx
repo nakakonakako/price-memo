@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { EditIconButton } from '@/components/EditIconButton'
 import { CopyIconButton } from '@/components/CopyIconButton'
 import { ChartIcon } from '@/components/icons/ChartIcon'
+import { SearchIcon } from '@/components/icons/SearchIcon'
 import { Modal } from '@/components/Modal'
 import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
 import {
@@ -137,6 +138,8 @@ export function FoldersPage() {
   const [addingBusy, setAddingBusy] = useState(false)
   const [editingBusy, setEditingBusy] = useState(false)
   const [folderQuery, setFolderQuery] = useState('')
+  const [catalogSearchOpen, setCatalogSearchOpen] = useState(false)
+  const catalogSearchRef = useRef<HTMLInputElement>(null)
   const [folderSort, setFolderSort] = useState<CatalogSort>('added')
   const [catalogView, setCatalogView] = useState<CatalogView>('folder')
   const [stores, setStores] = useState<PriceStore[]>([])
@@ -497,6 +500,12 @@ export function FoldersPage() {
   const isMobile = !isLargeScreen
 
   useEffect(() => {
+    if (!catalogSearchOpen) return
+    const t = window.setTimeout(() => catalogSearchRef.current?.focus(), 0)
+    return () => window.clearTimeout(t)
+  }, [catalogSearchOpen, catalogView])
+
+  useEffect(() => {
     if (!trendsFolderId || catalogView !== 'folder' || !isLargeScreen) {
       setTrendsLayoutOpen(false)
       return
@@ -650,18 +659,7 @@ export function FoldersPage() {
     openFolderLoadingId === trendsFolderId
 
   const catalogSection = (
-    <section className="min-w-0 space-y-6 pb-28">
-        <div className="space-y-2">
-          <h2 className="text-lg font-medium text-stone-900">フォルダ</h2>
-          <p className="text-sm text-stone-600">
-            記録の追加・編集ができます。
-            {isMobile
-              ? '左にスワイプすると削除です。'
-              : 'ゴミ箱へ移すと削除です。'}
-            値段推移も確認できます。
-          </p>
-        </div>
-
+    <section className="min-w-0 space-y-4 pb-28">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex rounded-md border border-stone-300 bg-white p-0.5">
             <button
@@ -695,9 +693,30 @@ export function FoldersPage() {
               店名
             </button>
           </div>
-          <label className="flex shrink-0 items-center gap-2 text-sm text-stone-600">
-            <span className="sr-only">並び</span>
-            <select
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setCatalogSearchOpen((open) => {
+                  const next = !open
+                  if (!next) {
+                    setFolderQuery('')
+                    setStoreQuery('')
+                  }
+                  return next
+                })
+              }
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white hover:bg-stone-50 ${
+                catalogSearchOpen ? 'bg-stone-100 text-stone-900' : 'text-stone-600'
+              }`}
+              aria-label="検索"
+              aria-expanded={catalogSearchOpen}
+            >
+              <SearchIcon />
+            </button>
+            <label className="flex shrink-0 items-center gap-2 text-sm text-stone-600">
+              <span className="sr-only">並び</span>
+              <select
               value={catalogView === 'folder' ? folderSort : storeSort}
               onChange={(e) => {
                 const next = e.target.value as CatalogSort
@@ -715,21 +734,25 @@ export function FoldersPage() {
               <option value="name">名前順</option>
             </select>
           </label>
+          </div>
         </div>
 
-        <input
-          type="search"
-          value={catalogView === 'folder' ? folderQuery : storeQuery}
-          onChange={(e) =>
-            catalogView === 'folder'
-              ? setFolderQuery(e.target.value)
-              : setStoreQuery(e.target.value)
-          }
-          placeholder={
-            catalogView === 'folder' ? 'フォルダ名で検索' : '店舗名で検索'
-          }
-          className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-        />
+        {catalogSearchOpen && (
+          <input
+            ref={catalogSearchRef}
+            type="search"
+            value={catalogView === 'folder' ? folderQuery : storeQuery}
+            onChange={(e) =>
+              catalogView === 'folder'
+                ? setFolderQuery(e.target.value)
+                : setStoreQuery(e.target.value)
+            }
+            placeholder={
+              catalogView === 'folder' ? 'フォルダ名で検索' : '店舗名で検索'
+            }
+            className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+          />
+        )}
 
         {error && catalogView === 'folder' && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -946,10 +969,40 @@ export function FoldersPage() {
                                       className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
                                     >
                                       <div className="min-w-0 flex-1 py-0.5">
-                                        <p className="text-sm font-medium text-stone-900">
-                                          {record.recorded_at} ·{' '}
-                                          {record.store_name}
-                                        </p>
+                                        <div
+                                          className={
+                                            isMobile
+                                              ? 'flex items-center gap-0.5'
+                                              : 'contents'
+                                          }
+                                        >
+                                          <p
+                                            className={
+                                              isMobile
+                                                ? 'min-w-0 flex-1 text-sm font-medium text-stone-900'
+                                                : 'text-sm font-medium text-stone-900'
+                                            }
+                                          >
+                                            {record.recorded_at} ·{' '}
+                                            {record.store_name}
+                                          </p>
+                                          {isMobile && (
+                                            <div className="flex shrink-0 items-center">
+                                              <CopyIconButton
+                                                label="複製"
+                                                onClick={() =>
+                                                  handleCopyRecord(record)
+                                                }
+                                              />
+                                              <EditIconButton
+                                                label="編集"
+                                                onClick={() =>
+                                                  setEditingRecord(record)
+                                                }
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
                                         <p className="text-xs text-stone-600">
                                           {formatYen(record.price, 0)} /{' '}
                                           {record.amount}
@@ -970,20 +1023,22 @@ export function FoldersPage() {
                                           </p>
                                         )}
                                       </div>
-                                      <div className="flex shrink-0 items-center">
-                                        <CopyIconButton
-                                          label="複製"
-                                          onClick={() =>
-                                            handleCopyRecord(record)
-                                          }
-                                        />
-                                        <EditIconButton
-                                          label="編集"
-                                          onClick={() =>
-                                            setEditingRecord(record)
-                                          }
-                                        />
-                                      </div>
+                                      {!isMobile && (
+                                        <div className="flex shrink-0 items-center">
+                                          <CopyIconButton
+                                            label="複製"
+                                            onClick={() =>
+                                              handleCopyRecord(record)
+                                            }
+                                          />
+                                          <EditIconButton
+                                            label="編集"
+                                            onClick={() =>
+                                              setEditingRecord(record)
+                                            }
+                                          />
+                                        </div>
+                                      )}
                                     </DraggableCatalogItem>
                                   </li>
                                 ),

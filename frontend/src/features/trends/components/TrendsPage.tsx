@@ -38,14 +38,7 @@ export function TrendsPage() {
   const selectedFolder = folders.find((f) => f.id === folderId) ?? null
 
   return (
-    <section className="space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-lg font-medium text-stone-900">値段推移</h2>
-        <p className="text-sm text-stone-600">
-          フォルダ内の厳密単価の推移と、店舗ごとの平均を比較します。
-        </p>
-      </div>
-
+    <section className="space-y-4">
       {foldersLoading ? (
         <p className="text-sm text-stone-500">フォルダを読み込み中...</p>
       ) : folders.length === 0 ? (
