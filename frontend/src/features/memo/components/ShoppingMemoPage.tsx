@@ -83,7 +83,6 @@ export function ShoppingMemoPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
-  const [pickQuery, setPickQuery] = useState('')
   const [mutating, setMutating] = useState(false)
   const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -131,7 +130,7 @@ export function ShoppingMemoPage() {
   }, [allFolders, memoFolderIds])
 
   const pickableFolders = useMemo(() => {
-    const q = pickQuery.trim().toLocaleLowerCase('ja')
+    const q = newName.trim().toLocaleLowerCase('ja')
     if (!q) return []
     return foldersForPick.filter((f) => {
       const { displayName, reading } = parseFolderName(f.name)
@@ -140,7 +139,7 @@ export function ShoppingMemoPage() {
       )
       return hay.includes(q)
     })
-  }, [foldersForPick, pickQuery])
+  }, [foldersForPick, newName])
 
   const clearFocusFolder = useCallback(() => {
     setFocusFolderId(null)
@@ -169,7 +168,7 @@ export function ShoppingMemoPage() {
     setError(null)
     try {
       await putOnMemo(folder)
-      setPickQuery('')
+      setNewName('')
       setAddOpen(false)
       focusFolder(folder.id)
     } catch (err) {
@@ -275,54 +274,7 @@ export function ShoppingMemoPage() {
         </button>
 
         {addOpen && (
-          <div className="space-y-3 rounded-lg border border-stone-200 bg-white/80 p-3">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-stone-800">
-                フォルダからメモに追加
-              </label>
-              <input
-                type="search"
-                value={pickQuery}
-                onChange={(e) => setPickQuery(e.target.value)}
-                placeholder="フォルダ名で検索"
-                className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-                disabled={mutating}
-              />
-              {allFolders.length > 0 && foldersForPick.length === 0 ? (
-                <p className="text-sm text-stone-500">
-                  追加できるフォルダはありません（すべてメモに載っています）。
-                </p>
-              ) : !pickQuery.trim() ? (
-                <p className="text-sm text-stone-500">
-                  フォルダ名を入力すると候補が表示されます。
-                </p>
-              ) : pickableFolders.length === 0 ? (
-                <p className="text-sm text-stone-500">
-                  一致するフォルダがありません。
-                </p>
-              ) : (
-                <ul className="max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-md border border-stone-200 bg-white">
-                  {pickableFolders.map((f) => (
-                    <li key={f.id}>
-                      <button
-                        type="button"
-                        disabled={mutating}
-                        onClick={() => void addFolderToMemo(f)}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-stone-50 disabled:opacity-50"
-                      >
-                        <span className="min-w-0 truncate font-medium text-stone-900">
-                          {parseFolderName(f.name).displayName}
-                        </span>
-                        <span className="shrink-0 text-xs text-stone-500">
-                          メモに追加
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-
+          <div className="space-y-2 rounded-lg border border-stone-200 bg-white/80 p-3">
             <form
               onSubmit={(e) => void handleCreate(e)}
               className="flex flex-col gap-2 sm:flex-row"
@@ -331,13 +283,14 @@ export function ShoppingMemoPage() {
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="新規フォルダ名（例: 鶏むね / 牛乳（ぎゅうにゅう））"
+                placeholder="品目名（例: 鶏むね / 牛乳（ぎゅうにゅう））"
                 list="memo-folder-suggestions"
                 className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
                 disabled={mutating}
+                autoFocus
               />
               <datalist id="memo-folder-suggestions">
-                {allFolders.map((f) => (
+                {foldersForPick.map((f) => (
                   <option
                     key={f.id}
                     value={parseFolderName(f.name).displayName}
@@ -349,9 +302,42 @@ export function ShoppingMemoPage() {
                 disabled={mutating || !newName.trim()}
                 className="shrink-0 rounded-md bg-stone-900 px-4 py-2 text-sm text-white hover:bg-stone-800 disabled:opacity-50"
               >
-                新規追加
+                追加
               </button>
             </form>
+            {allFolders.length > 0 && foldersForPick.length === 0 ? (
+              <p className="text-sm text-stone-500">
+                追加できるフォルダはありません（すべてメモに載っています）。
+              </p>
+            ) : newName.trim() && pickableFolders.length > 0 ? (
+              <ul className="max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-md border border-stone-200 bg-white">
+                {pickableFolders.map((f) => (
+                  <li key={f.id}>
+                    <button
+                      type="button"
+                      disabled={mutating}
+                      onClick={() => void addFolderToMemo(f)}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-stone-50 disabled:opacity-50"
+                    >
+                      <span className="min-w-0 truncate font-medium text-stone-900">
+                        {parseFolderName(f.name).displayName}
+                      </span>
+                      <span className="shrink-0 text-xs text-stone-500">
+                        メモに追加
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : newName.trim() && foldersForPick.length > 0 ? (
+              <p className="text-sm text-stone-500">
+                一致するフォルダがありません。追加ボタンで新規作成できます。
+              </p>
+            ) : foldersForPick.length > 0 ? (
+              <p className="text-sm text-stone-500">
+                品目名を入力すると、既存フォルダの候補が表示されます。
+              </p>
+            ) : null}
           </div>
         )}
 

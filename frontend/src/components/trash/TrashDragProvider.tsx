@@ -326,20 +326,25 @@ type MemoTrashZoneProps = {
 
 /** Full-height strip from main content right edge to viewport right. */
 export function MemoTrashZone({ className = '' }: MemoTrashZoneProps) {
-  const { trashRef, dragOverTrash } = useTrashDrag()
+  const { trashRef, dragOverTrash, dragging } = useTrashDrag()
 
   return (
     <div
       ref={trashRef}
       aria-label="ゴミ箱"
-      className={`fixed bottom-0 z-40 hidden flex-col items-center justify-center border-l-2 border-dashed transition-colors duration-150 lg:flex ${
-        dragOverTrash
-          ? 'border-red-400 bg-red-50'
-          : 'border-stone-300 bg-stone-50/40'
+      aria-hidden={!dragging}
+      className={`fixed bottom-0 z-40 hidden flex-col items-center justify-center transition-all duration-150 lg:flex ${
+        dragging
+          ? `border-l-2 border-dashed ${
+              dragOverTrash
+                ? 'border-red-400 bg-red-50'
+                : 'border-stone-300 bg-stone-50/60'
+            }`
+          : 'pointer-events-none border-transparent bg-transparent opacity-0'
       } ${className}`}
       style={{
         top: 'var(--app-header-h, 7.75rem)',
-        left: 'max(1rem, calc((100vw + min(48rem, 100vw)) / 2 - 1rem + 2.5rem))',
+        left: 'max(1rem, calc((100vw + min(48rem, 100vw)) / 2 - 1rem + 4.5rem))',
         right: 0,
       }}
     >
@@ -348,7 +353,11 @@ export function MemoTrashZone({ className = '' }: MemoTrashZoneProps) {
         alt=""
         draggable={false}
         className={`pointer-events-none h-28 w-28 select-none object-contain transition-transform duration-150 xl:h-36 xl:w-36 ${
-          dragOverTrash ? 'scale-110' : 'scale-100'
+          dragging
+            ? dragOverTrash
+              ? 'scale-110 opacity-100'
+              : 'scale-100 opacity-100'
+            : 'scale-95 opacity-0'
         }`}
       />
     </div>

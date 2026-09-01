@@ -6,6 +6,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { FoldersPage } from '@/features/folders/components/FoldersPage'
 import { ShoppingMemoPage } from '@/features/memo/components/ShoppingMemoPage'
 import { TrendsPage } from '@/features/trends/components/TrendsPage'
+import { HowToPage } from '@/features/guide/components/HowToPage'
 
 export default function App() {
   const { session, isLoading, logout } = useAuth()
@@ -41,6 +42,7 @@ export default function App() {
       {tab === 'memo' && <ShoppingMemoPage />}
       {tab === 'folders' && <FoldersPage />}
       {tab === 'trends' && <TrendsPage />}
+      {tab === 'howto' && <HowToPage />}
     </MainLayout>
   )
 }

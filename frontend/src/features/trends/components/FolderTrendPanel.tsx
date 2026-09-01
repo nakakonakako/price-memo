@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import {
   CartesianGrid,
   Line,
   LineChart,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
@@ -52,6 +51,11 @@ export function FolderTrendPanel({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const initializedFolderRef = useRef<string | null>(null)
   const hadRecordsRef = useRef(false)
+  const chartWrapRef = useRef<HTMLDivElement>(null)
+
+  const CHART_PAD = 8
+  const Y_AXIS_WIDTH = 44
+  const CHART_MARGIN_RIGHT = 8
 
   const usesExternalRecords = recordsProp !== undefined
 
@@ -141,6 +145,22 @@ export function FolderTrendPanel({
 
   const basisLabel =
     effectiveBasis === 'per_100' ? '100単位あたり' : '単位あたり'
+
+  const handleChartMouseMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (isMobile || points.length === 0) return
+    const el = chartWrapRef.current
+    if (!el) return
+    const rect = el.getBoundingClientRect()
+    const plotLeft = CHART_PAD + Y_AXIS_WIDTH
+    const plotRight = CHART_MARGIN_RIGHT + CHART_PAD
+    const x = e.clientX - rect.left - plotLeft
+    const plotWidth = rect.width - plotLeft - plotRight
+    if (plotWidth <= 0) return
+    const ratio = Math.max(0, Math.min(1, x / plotWidth))
+    const idx =
+      points.length === 1 ? 0 : Math.round(ratio * (points.length - 1))
+    setSelectedIndex(idx)
+  }
 
   const filterControls = (
     <>
@@ -233,8 +253,10 @@ export function FolderTrendPanel({
           )}
 
           <div
+            ref={chartWrapRef}
             className="w-full rounded-md border border-stone-200 bg-white/70 p-2"
             style={{ height: chartHeight }}
+            onMouseMove={handleChartMouseMove}
             onMouseLeave={() => {
               if (!isMobile) setSelectedIndex(null)
             }}
@@ -245,20 +267,8 @@ export function FolderTrendPanel({
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={chartRows}
-                margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                onMouseMove={(state) => {
-                  if (isMobile) return
-                  const idx = state?.activeTooltipIndex
-                  if (typeof idx === 'number') setSelectedIndex(idx)
-                }}
+                margin={{ top: 8, right: CHART_MARGIN_RIGHT, left: 0, bottom: 0 }}
               >
-                {!isMobile && (
-                  <Tooltip
-                    content={() => null}
-                    cursor={{ stroke: '#d6d3d1', strokeWidth: 1 }}
-                    isAnimationActive={false}
-                  />
-                )}
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
@@ -290,8 +300,8 @@ export function FolderTrendPanel({
                     const { cx, cy, index } = props
                     if (cx == null || cy == null || index == null) return null
                     const active = selectedIndex === index
-                    const hitR = isMobile ? 18 : 10
-                    const visR = isMobile ? 6 : 3
+                    const hitR = isMobile ? 18 : 14
+                    const visR = isMobile ? 6 : 5
                     return (
                       <g key={`dot-${index}`}>
                         <circle
@@ -397,48 +407,50 @@ function StoreComparison({
   if (useCards) {
     return (
       <div className="space-y-2">
-        <h4 className="text-sm font-medium text-stone-800">
+        <h4 className="text-base font-medium text-stone-800">
           店舗比較（{valueLabel}）
         </h4>
         <ul className="space-y-2">
           {summaries.map((s) => (
             <li
               key={s.store}
-              className="rounded-md border border-stone-200 bg-white/70 px-3 py-2.5 text-sm"
+              className="rounded-md border border-stone-200 bg-white/70 px-3 py-2.5"
             >
-              <p className="truncate font-medium text-stone-900">{s.store}</p>
+              <p className="truncate text-base font-medium text-stone-900">
+                {s.store}
+              </p>
               <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-stone-700">
                 <div>
-                  <dt className="text-xs text-stone-500">件数</dt>
-                  <dd className="text-sm">{s.count}</dd>
+                  <dt className="text-sm text-stone-500">件数</dt>
+                  <dd className="text-base">{s.count}</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-stone-500">平均</dt>
-                  <dd className="text-sm font-medium text-stone-900">
+                  <dt className="text-sm text-stone-500">平均</dt>
+                  <dd className="text-base font-medium text-stone-900">
                     {formatYen(s.avg, 2)}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-stone-500">最安</dt>
-                  <dd className="text-sm">{formatYen(s.min, 2)}</dd>
+                  <dt className="text-sm text-stone-500">最安</dt>
+                  <dd className="text-base">{formatYen(s.min, 2)}</dd>
                 </div>
                 {!compact ? (
                   <>
                     <div>
-                      <dt className="text-xs text-stone-500">最高</dt>
-                      <dd className="text-sm">{formatYen(s.max, 2)}</dd>
+                      <dt className="text-sm text-stone-500">最高</dt>
+                      <dd className="text-base">{formatYen(s.max, 2)}</dd>
                     </div>
                     <div className="col-span-2">
-                      <dt className="text-xs text-stone-500">直近</dt>
-                      <dd className="text-sm">
+                      <dt className="text-sm text-stone-500">直近</dt>
+                      <dd className="text-base">
                         {s.latestDate} · {formatYen(s.latestValue, 2)}
                       </dd>
                     </div>
                   </>
                 ) : (
                   <div>
-                    <dt className="text-xs text-stone-500">直近</dt>
-                    <dd className="text-sm">
+                    <dt className="text-sm text-stone-500">直近</dt>
+                    <dd className="text-base">
                       {s.latestDate} · {formatYen(s.latestValue, 2)}
                     </dd>
                   </div>
@@ -453,7 +465,7 @@ function StoreComparison({
 
   return (
     <div className="space-y-1">
-      <h4 className="text-sm font-medium text-stone-800">
+      <h4 className="text-base font-medium text-stone-800">
         店舗比較（{valueLabel}）
       </h4>
       <div
@@ -461,8 +473,8 @@ function StoreComparison({
           compact ? 'max-h-48 overflow-y-auto' : ''
         }`}
       >
-        <table className="w-full table-fixed text-left text-base">
-          <thead className="sticky top-0 border-b border-stone-200 bg-stone-50 text-sm text-stone-600">
+        <table className="w-full table-fixed text-left text-lg">
+          <thead className="sticky top-0 border-b border-stone-200 bg-stone-50 text-base text-stone-600">
             <tr>
               <th className="w-[34%] px-2 py-2 font-medium">店舗</th>
               <th className="w-[10%] px-2 py-2 font-medium">件</th>
@@ -476,7 +488,7 @@ function StoreComparison({
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-stone-100 text-sm">
+          <tbody className="divide-y divide-stone-100 text-base">
             {summaries.map((s) => (
               <tr key={s.store}>
                 <td className="truncate px-2 py-2 font-medium text-stone-900">
