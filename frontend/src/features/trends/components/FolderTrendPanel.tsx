@@ -4,10 +4,10 @@ import {
   Line,
   LineChart,
   ResponsiveContainer,
-  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
+import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { listRecords } from '@/features/records/api/recordsApi'
 import type { PriceRecord, PriceUnit } from '@/features/records/types'
 import { toUserMessage } from '@/lib/userError'
@@ -22,6 +22,8 @@ import {
   toChronologicalChartData,
   toTrendPoints,
   type PriceBasis,
+  type StoreSummary,
+  type TrendPoint,
 } from '../utils/aggregate'
 
 type Props = {
@@ -31,22 +33,21 @@ type Props = {
   records?: PriceRecord[]
   recordsLoading?: boolean
   compact?: boolean
-  onClose?: () => void
 }
 
 export function FolderTrendPanel({
   folderId,
-  folderName,
   records: recordsProp,
   recordsLoading: recordsLoadingProp,
   compact = false,
-  onClose,
 }: Props) {
+  const isMobile = useMediaQuery('(max-width: 1023px)')
   const [fetchedRecords, setFetchedRecords] = useState<PriceRecord[]>([])
   const [fetchLoading, setFetchLoading] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [unit, setUnit] = useState<PriceUnit>('g')
   const [basis, setBasis] = useState<PriceBasis>('per_100')
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
   const initializedFolderRef = useRef<string | null>(null)
   const hadRecordsRef = useRef(false)
 
@@ -95,6 +96,10 @@ export function FolderTrendPanel({
     }
   }, [folderId, records])
 
+  useEffect(() => {
+    setSelectedIndex(null)
+  }, [folderId, unit, basis, records])
+
   const unitsInFolder = useMemo(() => {
     return [...new Set(records.map((r) => r.unit.trim()).filter(Boolean))].sort(
       (a, b) => a.localeCompare(b, 'ja'),
@@ -117,6 +122,9 @@ export function FolderTrendPanel({
 
   const summaries = useMemo(() => summarizeByStore(points), [points])
 
+  const selectedPoint: TrendPoint | null =
+    selectedIndex != null ? (points[selectedIndex] ?? null) : null
+
   const valueLabel =
     effectiveBasis === 'per_100'
       ? `円/100${unitLabel(unit)}`
@@ -127,28 +135,10 @@ export function FolderTrendPanel({
 
   const skipped = records.filter((r) => r.unit !== unit).length
   const chartHeight = compact ? 220 : 320
-  const tableTextClass = compact ? 'text-xs' : 'text-sm'
+  const useStoreCards = compact || isMobile
 
   return (
     <div className="space-y-3 rounded-lg border border-stone-200 bg-white/80 p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h3 className="text-sm font-medium text-stone-900">値段推移</h3>
-          {folderName && (
-            <p className="truncate text-xs text-stone-600">{folderName}</p>
-          )}
-        </div>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-md px-2 py-1 text-xs text-stone-600 hover:bg-stone-100"
-          >
-            閉じる
-          </button>
-        )}
-      </div>
-
       <div className={`grid gap-2 ${compact ? 'grid-cols-2' : 'sm:grid-cols-3'}`}>
         <label className="block space-y-1">
           <span className="text-xs font-medium text-stone-500">単位</span>
@@ -232,102 +222,218 @@ export function FolderTrendPanel({
                     Number.isFinite(v) ? String(Math.round(v * 10) / 10) : ''
                   }
                 />
-                <Tooltip
-                  formatter={(value) => {
-                    const n =
-                      typeof value === 'number' ? value : Number(value)
-                    if (!Number.isFinite(n)) return ['—', valueLabel]
-                    return [formatYen(n, 2), valueLabel]
-                  }}
-                  labelFormatter={(_, payload) => {
-                    const row = payload?.[0]?.payload as
-                      | { date?: string; store?: string }
-                      | undefined
-                    if (!row?.date) return ''
-                    return row.store
-                      ? `${row.date} · ${row.store}`
-                      : row.date
-                  }}
-                  contentStyle={{
-                    fontSize: 12,
-                    borderRadius: 6,
-                    borderColor: '#d6d3d1',
-                  }}
-                />
                 <Line
                   type="linear"
                   dataKey="value"
                   name={valueLabel}
                   stroke="#1c1917"
                   strokeWidth={2.5}
-                  dot={{
-                    r: 3,
-                    fill: '#1c1917',
-                    stroke: '#ffffff',
-                    strokeWidth: 2,
-                  }}
-                  activeDot={{ r: 5, fill: '#0f766e' }}
                   connectNulls
+                  dot={(props) => {
+                    const { cx, cy, index } = props
+                    if (cx == null || cy == null || index == null) return null
+                    const active = selectedIndex === index
+                    return (
+                      <circle
+                        key={`dot-${index}`}
+                        cx={cx}
+                        cy={cy}
+                        r={active ? 5 : 3}
+                        fill={active ? '#0f766e' : '#1c1917'}
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                        style={{ cursor: 'pointer' }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedIndex(index)
+                        }}
+                      />
+                    )
+                  }}
+                  activeDot={false}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
 
-          <div className="space-y-1">
-            <h4 className="text-xs font-medium text-stone-800">
-              店舗比較（{valueLabel}）
-            </h4>
-            <div
-              className={`overflow-x-auto border border-stone-200 bg-white/70 ${
-                compact ? 'max-h-48 overflow-y-auto' : ''
-              }`}
-            >
-              <table className={`w-full min-w-[28rem] text-left ${tableTextClass}`}>
-                <thead className="sticky top-0 border-b border-stone-200 bg-stone-50 text-stone-500">
-                  <tr>
-                    <th className="px-2 py-1.5 font-medium">店舗</th>
-                    <th className="px-2 py-1.5 font-medium">件</th>
-                    <th className="px-2 py-1.5 font-medium">平均</th>
-                    <th className="px-2 py-1.5 font-medium">最安</th>
-                    {!compact && (
-                      <>
-                        <th className="px-2 py-1.5 font-medium">最高</th>
-                        <th className="px-2 py-1.5 font-medium">直近</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {summaries.map((s) => (
-                    <tr key={s.store}>
-                      <td className="px-2 py-1.5 font-medium text-stone-900">
-                        {s.store}
-                      </td>
-                      <td className="px-2 py-1.5 text-stone-600">{s.count}</td>
-                      <td className="px-2 py-1.5 text-stone-800">
-                        {formatYen(s.avg, 2)}
-                      </td>
-                      <td className="px-2 py-1.5 text-stone-600">
-                        {formatYen(s.min, 2)}
-                      </td>
-                      {!compact && (
-                        <>
-                          <td className="px-2 py-1.5 text-stone-600">
-                            {formatYen(s.max, 2)}
-                          </td>
-                          <td className="px-2 py-1.5 text-stone-600">
-                            {s.latestDate} · {formatYen(s.latestValue, 2)}
-                          </td>
-                        </>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <PointDetail
+            point={selectedPoint}
+            valueLabel={valueLabel}
+            hint={points.length > 0}
+          />
+
+          <StoreComparison
+            summaries={summaries}
+            valueLabel={valueLabel}
+            compact={compact}
+            useCards={useStoreCards}
+          />
         </>
       )}
+    </div>
+  )
+}
+
+function PointDetail({
+  point,
+  valueLabel,
+  hint,
+}: {
+  point: TrendPoint | null
+  valueLabel: string
+  hint: boolean
+}) {
+  if (!point) {
+    if (!hint) return null
+    return (
+      <p className="rounded-md border border-dashed border-stone-200 bg-stone-50/80 px-3 py-2 text-center text-xs text-stone-500">
+        グラフの点をタップすると記録の詳細が表示されます
+      </p>
+    )
+  }
+
+  return (
+    <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm">
+      <p className="font-medium text-stone-900">
+        {point.date} · {point.store}
+      </p>
+      <p className="mt-1 font-semibold tabular-nums text-stone-900">
+        {formatYen(point.value, 2)}
+        <span className="ml-1 text-xs font-normal text-stone-500">
+          {valueLabel}
+        </span>
+      </p>
+      <p className="mt-0.5 text-xs text-stone-600">
+        {formatYen(point.price, 0)} / {point.amount}
+        {unitLabel(point.unit)}
+      </p>
+    </div>
+  )
+}
+
+function StoreComparison({
+  summaries,
+  valueLabel,
+  compact,
+  useCards,
+}: {
+  summaries: StoreSummary[]
+  valueLabel: string
+  compact: boolean
+  useCards: boolean
+}) {
+  if (useCards) {
+    return (
+      <div className="space-y-2">
+        <h4 className="text-xs font-medium text-stone-800">
+          店舗比較（{valueLabel}）
+        </h4>
+        <ul className="space-y-2">
+          {summaries.map((s) => (
+            <li
+              key={s.store}
+              className="rounded-md border border-stone-200 bg-white/70 px-2.5 py-2 text-xs"
+            >
+              <p className="truncate font-medium text-stone-900">{s.store}</p>
+              <dl className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-stone-600">
+                <div>
+                  <dt className="text-[10px] text-stone-400">件数</dt>
+                  <dd>{s.count}</dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] text-stone-400">平均</dt>
+                  <dd className="font-medium text-stone-800">
+                    {formatYen(s.avg, 2)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[10px] text-stone-400">最安</dt>
+                  <dd>{formatYen(s.min, 2)}</dd>
+                </div>
+                {!compact ? (
+                  <>
+                    <div>
+                      <dt className="text-[10px] text-stone-400">最高</dt>
+                      <dd>{formatYen(s.max, 2)}</dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-[10px] text-stone-400">直近</dt>
+                      <dd>
+                        {s.latestDate} · {formatYen(s.latestValue, 2)}
+                      </dd>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <dt className="text-[10px] text-stone-400">直近</dt>
+                    <dd>
+                      {s.latestDate} · {formatYen(s.latestValue, 2)}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1">
+      <h4 className="text-xs font-medium text-stone-800">
+        店舗比較（{valueLabel}）
+      </h4>
+      <div
+        className={`overflow-x-auto border border-stone-200 bg-white/70 ${
+          compact ? 'max-h-48 overflow-y-auto' : ''
+        }`}
+      >
+        <table className="w-full table-fixed text-left text-sm">
+          <thead className="sticky top-0 border-b border-stone-200 bg-stone-50 text-stone-500">
+            <tr>
+              <th className="w-[34%] px-2 py-1.5 font-medium">店舗</th>
+              <th className="w-[10%] px-2 py-1.5 font-medium">件</th>
+              <th className="w-[18%] px-2 py-1.5 font-medium">平均</th>
+              <th className="w-[18%] px-2 py-1.5 font-medium">最安</th>
+              {!compact && (
+                <>
+                  <th className="w-[10%] px-2 py-1.5 font-medium">最高</th>
+                  <th className="w-[10%] px-2 py-1.5 font-medium">直近</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-stone-100">
+            {summaries.map((s) => (
+              <tr key={s.store}>
+                <td className="truncate px-2 py-1.5 font-medium text-stone-900">
+                  {s.store}
+                </td>
+                <td className="px-2 py-1.5 text-stone-600">{s.count}</td>
+                <td className="px-2 py-1.5 text-stone-800">
+                  {formatYen(s.avg, 2)}
+                </td>
+                <td className="px-2 py-1.5 text-stone-600">
+                  {formatYen(s.min, 2)}
+                </td>
+                {!compact && (
+                  <>
+                    <td className="px-2 py-1.5 text-stone-600">
+                      {formatYen(s.max, 2)}
+                    </td>
+                    <td className="px-2 py-1.5 text-stone-600">
+                      <span className="block truncate">
+                        {s.latestDate} · {formatYen(s.latestValue, 2)}
+                      </span>
+                    </td>
+                  </>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

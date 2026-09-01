@@ -199,14 +199,14 @@ export function FolderMemoCard({
         <div className="px-3 py-2.5">
           {isMobile ? (
             <div className="space-y-2">
-              <div className="flex items-center justify-center gap-1.5">
+              <div className="flex items-center justify-start gap-1.5">
                 <span
                   className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-90' : ''}`}
                   aria-hidden
                 >
                   ▸
                 </span>
-                <p className="truncate text-center text-base font-semibold text-stone-900">
+                <p className="truncate text-left text-base font-semibold text-stone-900">
                   {displayName}
                 </p>
               </div>

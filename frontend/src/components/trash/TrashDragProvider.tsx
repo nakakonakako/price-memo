@@ -25,6 +25,7 @@ type TrashDragContextValue = {
   insertBeforeId: string | null | undefined
   activeId: string | null
   activeKind: TrashDragPayload['kind'] | null
+  trashRef: React.RefObject<HTMLDivElement | null>
   beginDrag: (payload: TrashDragPayload) => void
   moveDrag: (x: number, y: number) => void
   endDrag: (x: number, y: number) => void
@@ -61,6 +62,8 @@ type Props = {
   onDragEnd: (result: DragEndResult) => void | Promise<void>
   /** memo = large easy drop target; folder = compact */
   trashSize?: 'memo' | 'folder'
+  /** fixed = corner overlay; external = MemoTrashZone in page layout */
+  trashPlacement?: 'fixed' | 'external'
   /**
    * Kinds that show insert markers and persist reorder.
    * Omit to allow reorder for all kinds. Trash-delete still works for every kind.
@@ -72,6 +75,7 @@ export function TrashDragProvider({
   children,
   onDragEnd,
   trashSize = 'folder',
+  trashPlacement = 'fixed',
   reorderKinds,
 }: Props) {
   const trashRef = useRef<HTMLDivElement>(null)
@@ -246,6 +250,7 @@ export function TrashDragProvider({
       insertBeforeId,
       activeId,
       activeKind,
+      trashRef,
       beginDrag,
       moveDrag,
       endDrag: finishDrag,
@@ -259,6 +264,7 @@ export function TrashDragProvider({
       insertBeforeId,
       activeId,
       activeKind,
+      trashRef,
       beginDrag,
       moveDrag,
       finishDrag,
@@ -272,6 +278,7 @@ export function TrashDragProvider({
     <TrashDragContext.Provider value={value}>
       {children}
 
+      {trashPlacement === 'fixed' && (
       <div
         ref={trashRef}
         aria-label="ゴミ箱"
@@ -298,6 +305,36 @@ export function TrashDragProvider({
           />
         </div>
       </div>
+      )}
     </TrashDragContext.Provider>
+  )
+}
+
+type MemoTrashZoneProps = {
+  className?: string
+}
+
+export function MemoTrashZone({ className = '' }: MemoTrashZoneProps) {
+  const { trashRef, dragOverTrash } = useTrashDrag()
+
+  return (
+    <div
+      ref={trashRef}
+      aria-label="ゴミ箱"
+      className={`flex flex-col items-center justify-center border-l-2 border-dashed transition-colors duration-150 ${
+        dragOverTrash
+          ? 'border-red-400 bg-red-50'
+          : 'border-stone-300 bg-stone-50/40'
+      } ${className}`}
+    >
+      <img
+        src="/trashbox.png"
+        alt=""
+        draggable={false}
+        className={`pointer-events-none h-28 w-28 select-none object-contain transition-transform duration-150 xl:h-36 xl:w-36 ${
+          dragOverTrash ? 'scale-110' : 'scale-100'
+        }`}
+      />
+    </div>
   )
 }

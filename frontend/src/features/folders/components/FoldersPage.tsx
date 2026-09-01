@@ -972,7 +972,7 @@ export function FoldersPage() {
                                         <div
                                           className={
                                             isMobile
-                                              ? 'flex items-center gap-0.5'
+                                              ? 'flex items-center justify-between gap-1'
                                               : 'contents'
                                           }
                                         >
@@ -987,7 +987,7 @@ export function FoldersPage() {
                                             {record.store_name}
                                           </p>
                                           {isMobile && (
-                                            <div className="flex shrink-0 items-center">
+                                            <div className="ml-2 flex shrink-0 items-center">
                                               <CopyIconButton
                                                 label="複製"
                                                 onClick={() =>
@@ -1278,10 +1278,9 @@ export function FoldersPage() {
             {showTrendsSplit && (
               <FolderTrendPanel
                 folderId={trendsFolderId}
-                folderName={parseFolderName(trendsFolder.name).displayName}
                 records={trendsRecords ?? []}
                 recordsLoading={trendsRecordsLoading}
-                onClose={closeTrendsPanel}
+                compact
               />
             )}
           </aside>

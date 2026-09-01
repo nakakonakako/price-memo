@@ -35,8 +35,6 @@ export function TrendsPage() {
   const fieldClass =
     'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500'
 
-  const selectedFolder = folders.find((f) => f.id === folderId) ?? null
-
   return (
     <section className="space-y-4">
       {foldersLoading ? (
@@ -69,10 +67,7 @@ export function TrendsPage() {
           )}
 
           {folderId && (
-            <FolderTrendPanel
-              folderId={folderId}
-              folderName={selectedFolder?.name}
-            />
+            <FolderTrendPanel folderId={folderId} />
           )}
         </>
       )}

@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from 'react'
-import { TrashDragProvider } from '@/components/trash/TrashDragProvider'
+import { TrashDragProvider, MemoTrashZone } from '@/components/trash/TrashDragProvider'
 import type { DragEndResult } from '@/components/trash/types'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { createFolder, listFolders } from '@/features/folders/api/foldersApi'
@@ -261,7 +261,7 @@ export function ShoppingMemoPage() {
   }
 
   const page = (
-      <section className="space-y-4 pb-44">
+      <section className="space-y-4 pb-44 lg:pb-4">
         <button
           type="button"
           onClick={() => setAddOpen((v) => !v)}
@@ -402,9 +402,12 @@ export function ShoppingMemoPage() {
   }
 
   return (
-    <TrashDragProvider onDragEnd={handleDragEnd} trashSize="memo">
+    <TrashDragProvider onDragEnd={handleDragEnd} trashPlacement="external">
       <MemoListRegistrar ids={dragIds} />
-      {page}
+      <div className="flex items-stretch">
+        <div className="min-w-0 flex-1">{page}</div>
+        <MemoTrashZone className="sticky top-24 hidden min-h-[min(70vh,40rem)] w-[30%] max-w-[10rem] shrink-0 self-start lg:flex" />
+      </div>
     </TrashDragProvider>
   )
 }
