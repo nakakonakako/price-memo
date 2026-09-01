@@ -41,7 +41,7 @@ export function TrendsPage() {
         <p className="text-sm text-stone-500">フォルダを読み込み中...</p>
       ) : folders.length === 0 ? (
         <p className="rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500">
-          先にフォルダと厳密レコードを追加してください。
+          記録がありません
         </p>
       ) : (
         <>

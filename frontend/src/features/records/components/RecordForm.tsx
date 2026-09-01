@@ -343,7 +343,7 @@ export function RecordForm({
         )}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block space-y-1">
+          <label className="date-field-wrap block min-w-0 space-y-1">
             <span className="text-xs text-stone-500">購入日</span>
             <input
               type="date"
@@ -356,7 +356,7 @@ export function RecordForm({
               disabled={busy}
             />
           </label>
-          <label className="block space-y-1">
+          <label className="block min-w-0 space-y-1">
             <span className="text-xs text-stone-500">店舗</span>
             <StoreField
               value={form.store_name}
@@ -377,7 +377,7 @@ export function RecordForm({
           >
             {({ select, customInput }) => (
               <>
-                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-2">
+                <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-2">
                   <label className="block space-y-1">
                     <span className="text-xs text-stone-500">数量</span>
                     <input

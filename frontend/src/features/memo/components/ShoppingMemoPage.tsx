@@ -337,7 +337,7 @@ export function ShoppingMemoPage() {
           <p className="text-sm text-stone-500">読み込み中...</p>
         ) : memoItems.length === 0 ? (
           <p className="rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500">
-            まだメモがありません。フォルダから選ぶか、新規追加してください。
+            まだメモがありません
           </p>
         ) : (
           <ul className="space-y-2">

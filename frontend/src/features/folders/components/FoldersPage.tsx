@@ -806,7 +806,7 @@ export function FoldersPage() {
               <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500 sm:col-span-1">
                 {folderQuery.trim()
                   ? '一致するフォルダがありません。'
-                  : 'まだフォルダがありません。左のカードから追加してください。'}
+                  : 'まだフォルダがありません'}
               </li>
             ) : (
               visibleFolders.map((folder) => {
@@ -940,7 +940,7 @@ export function FoldersPage() {
                           ) : (recordsByFolder[folder.id] ?? []).length ===
                             0 ? (
                             <p className="text-sm text-stone-500">
-                              このフォルダにレコードはまだありません。「＋」から追加できます。
+                              このフォルダにレコードはまだありません
                             </p>
                           ) : (
                             <ul className="max-h-64 space-y-2 overflow-y-auto">
@@ -969,42 +969,28 @@ export function FoldersPage() {
                                           folder.id,
                                         )
                                       }
-                                      className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
+                                      className="rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
                                     >
-                                      <div className="min-w-0 flex-1 py-0.5">
-                                        <div
-                                          className={
-                                            isMobile
-                                              ? 'flex items-center justify-between gap-1'
-                                              : 'contents'
-                                          }
-                                        >
-                                          <p
-                                            className={
-                                              isMobile
-                                                ? 'min-w-0 flex-1 text-sm font-medium text-stone-900'
-                                                : 'text-sm font-medium text-stone-900'
-                                            }
-                                          >
+                                      <div className="min-w-0 py-0.5">
+                                        <div className="flex min-w-0 items-center gap-0.5">
+                                          <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
                                             {record.recorded_at} ·{' '}
                                             {record.store_name}
                                           </p>
-                                          {isMobile && (
-                                            <div className="ml-2 flex shrink-0 items-center">
-                                              <CopyIconButton
-                                                label="複製"
-                                                onClick={() =>
-                                                  handleCopyRecord(record)
-                                                }
-                                              />
-                                              <EditIconButton
-                                                label="編集"
-                                                onClick={() =>
-                                                  setEditingRecord(record)
-                                                }
-                                              />
-                                            </div>
-                                          )}
+                                          <div className="flex shrink-0 items-center">
+                                            <CopyIconButton
+                                              label="複製"
+                                              onClick={() =>
+                                                handleCopyRecord(record)
+                                              }
+                                            />
+                                            <EditIconButton
+                                              label="編集"
+                                              onClick={() =>
+                                                setEditingRecord(record)
+                                              }
+                                            />
+                                          </div>
                                         </div>
                                         <p className="text-xs text-stone-600">
                                           {formatYen(record.price, 0)} /{' '}
@@ -1026,22 +1012,6 @@ export function FoldersPage() {
                                           </p>
                                         )}
                                       </div>
-                                      {!isMobile && (
-                                        <div className="flex shrink-0 items-center">
-                                          <CopyIconButton
-                                            label="複製"
-                                            onClick={() =>
-                                              handleCopyRecord(record)
-                                            }
-                                          />
-                                          <EditIconButton
-                                            label="編集"
-                                            onClick={() =>
-                                              setEditingRecord(record)
-                                            }
-                                          />
-                                        </div>
-                                      )}
                                     </DraggableCatalogItem>
                                   </li>
                                 ),

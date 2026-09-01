@@ -383,7 +383,7 @@ export function FolderMemoCard({
               />
             </label>
             <label className="min-w-0 space-y-1">
-              <span className="text-xs text-stone-500">店名（保存時必須）</span>
+              <span className="text-xs text-stone-500">店名</span>
               <StoreField
                 value={store}
                 onChange={setStore}
@@ -392,7 +392,7 @@ export function FolderMemoCard({
             </label>
 
             <label className="min-w-0 space-y-1">
-              <span className="text-xs text-stone-500">値段（円・総額）</span>
+              <span className="text-xs text-stone-500">値段</span>
               <div className="relative">
                 <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-stone-400">
                   ¥
