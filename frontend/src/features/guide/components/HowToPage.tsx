@@ -69,8 +69,10 @@ export function HowToPage() {
             スマホでは「値段推移」タブから同様のグラフを表示します。
           </p>
           <ul className="list-inside list-disc space-y-2 text-base text-stone-700 lg:text-lg">
-            <li>グラフ上で横軸の位置に合わせると、記録の詳細が下に表示されます</li>
+            <li>上からグラフ、記録の詳細、店舗一覧の順に表示されます</li>
+            <li>グラフ上で横軸の位置に合わせると、記録の詳細が表示されます</li>
             <li>店舗一覧から店を選ぶと、その店の記録だけでグラフを表示できます</li>
+            <li>もう一度同じ店を選ぶか「すべて表示」で全店舗に戻せます</li>
           </ul>
         </div>
       )}
@@ -79,8 +81,14 @@ export function HowToPage() {
         <div className="space-y-3">
           <h3 className="text-xl font-semibold text-stone-900">値段推移</h3>
           <p className="text-base leading-relaxed text-stone-700">
-            フォルダを選んで、単価の推移グラフと店舗一覧を見られます。店舗をタップするとその店の記録だけをグラフに表示できます。
+            フォルダを選ぶと、単価の推移グラフと店舗一覧が表示されます。
           </p>
+          <ul className="list-inside list-disc space-y-2 text-base text-stone-700">
+            <li>上からグラフ、記録の詳細、店舗一覧の順に表示されます</li>
+            <li>グラフの点をタップすると記録の詳細が表示されます</li>
+            <li>店舗一覧から店をタップすると、その店の記録だけでグラフを表示できます</li>
+            <li>もう一度同じ店をタップすると全店舗に戻せます</li>
+          </ul>
         </div>
       )}
 

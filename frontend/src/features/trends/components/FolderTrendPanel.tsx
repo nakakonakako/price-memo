@@ -263,16 +263,6 @@ export function FolderTrendPanel({
             </p>
           )}
 
-          <StoreList
-            summaries={storeSummaries}
-            valueLabel={valueLabel}
-            selectedStore={selectedStore}
-            onSelectStore={setSelectedStore}
-            compact={compact}
-            useCards={useStoreCards}
-            isMobile={isMobile}
-          />
-
           {selectedStore && (
             <p className="text-sm text-stone-600">
               <span className="font-medium text-stone-900">「{selectedStore}」</span>
@@ -293,95 +283,101 @@ export function FolderTrendPanel({
             </p>
           ) : (
             <>
-          <div
-            ref={chartWrapRef}
-            className="w-full rounded-md border border-stone-200 bg-white/70 p-2"
-            style={{ height: chartHeight }}
-            onMouseMove={handleChartMouseMove}
-            onMouseLeave={() => {
-              if (!isMobile) setSelectedIndex(null)
-            }}
-            onClick={() => {
-              if (isMobile) setSelectedIndex(null)
-            }}
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={chartRows}
-                margin={{ top: 8, right: CHART_MARGIN_RIGHT, left: 0, bottom: 0 }}
+              <div
+                ref={chartWrapRef}
+                className="w-full rounded-md border border-stone-200 bg-white/70 p-2"
+                style={{ height: chartHeight }}
+                onMouseMove={handleChartMouseMove}
+                onMouseLeave={() => {
+                  if (!isMobile) setSelectedIndex(null)
+                }}
+                onClick={() => {
+                  if (isMobile) setSelectedIndex(null)
+                }}
               >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke="#e7e5e4"
-                />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fontSize: 10, fill: '#78716c' }}
-                  tickMargin={6}
-                />
-                <YAxis
-                  tick={{ fontSize: 10, fill: '#78716c' }}
-                  tickMargin={4}
-                  width={44}
-                  tickFormatter={(v: number) =>
-                    Number.isFinite(v) ? String(Math.round(v * 10) / 10) : ''
-                  }
-                />
-                <Line
-                  type="linear"
-                  dataKey="value"
-                  name={valueLabel}
-                  stroke="#1c1917"
-                  strokeWidth={2.5}
-                  connectNulls
-                  isAnimationActive={false}
-                  style={{ pointerEvents: 'none' }}
-                  dot={(props) => {
-                    const { cx, cy, index } = props
-                    if (cx == null || cy == null || index == null) return null
-                    const active = selectedIndex === index
-                    const hitR = isMobile ? 18 : 14
-                    const visR = isMobile ? 6 : 5
-                    return (
-                      <g key={`dot-${index}`}>
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={hitR}
-                          fill="transparent"
-                          style={{ cursor: 'pointer' }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            if (isMobile) setSelectedIndex(index)
-                          }}
-                        />
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={active ? visR + 2 : visR}
-                          fill={active ? '#0f766e' : '#1c1917'}
-                          stroke="#ffffff"
-                          strokeWidth={2}
-                          pointerEvents="none"
-                        />
-                      </g>
-                    )
-                  }}
-                  activeDot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart
+                    data={chartRows}
+                    margin={{ top: 8, right: CHART_MARGIN_RIGHT, left: 0, bottom: 0 }}
+                  >
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="#e7e5e4"
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: '#78716c' }}
+                      tickMargin={6}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: '#78716c' }}
+                      tickMargin={4}
+                      width={44}
+                      tickFormatter={(v: number) =>
+                        Number.isFinite(v) ? String(Math.round(v * 10) / 10) : ''
+                      }
+                    />
+                    <Line
+                      type="linear"
+                      dataKey="value"
+                      name={valueLabel}
+                      stroke="#1c1917"
+                      strokeWidth={2.5}
+                      connectNulls
+                      isAnimationActive={false}
+                      style={{ pointerEvents: 'none' }}
+                      dot={(props) => {
+                        const { cx, cy, index } = props
+                        if (cx == null || cy == null || index == null) return null
+                        const active = selectedIndex === index
+                        const hitR = isMobile ? 18 : 14
+                        const visR = isMobile ? 6 : 5
+                        return (
+                          <g key={`dot-${index}`}>
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={hitR}
+                              fill="transparent"
+                              style={{ cursor: 'pointer' }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (isMobile) setSelectedIndex(index)
+                              }}
+                            />
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={active ? visR + 2 : visR}
+                              fill={active ? '#0f766e' : '#1c1917'}
+                              stroke="#ffffff"
+                              strokeWidth={2}
+                              pointerEvents="none"
+                            />
+                          </g>
+                        )
+                      }}
+                      activeDot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
 
-          <PointDetail
-            point={selectedPoint}
-            valueLabel={valueLabel}
-            hint={points.length > 0}
-            hoverMode={!isMobile}
-          />
+              {selectedPoint && (
+                <PointDetail point={selectedPoint} valueLabel={valueLabel} />
+              )}
             </>
           )}
+
+          <StoreList
+            summaries={storeSummaries}
+            selectedStore={selectedStore}
+            onSelectStore={setSelectedStore}
+            compact={compact}
+            useCards={useStoreCards}
+            isMobile={isMobile}
+          />
         </>
       )}
     </div>
@@ -391,25 +387,10 @@ export function FolderTrendPanel({
 function PointDetail({
   point,
   valueLabel,
-  hint,
-  hoverMode,
 }: {
-  point: TrendPoint | null
+  point: TrendPoint
   valueLabel: string
-  hint: boolean
-  hoverMode: boolean
 }) {
-  if (!point) {
-    if (!hint) return null
-    return (
-      <p className="rounded-md border border-dashed border-stone-200 bg-stone-50/80 px-3 py-2 text-center text-xs text-stone-500">
-        {hoverMode
-          ? 'グラフ上で横軸の位置に合わせると記録の詳細が表示されます'
-          : 'グラフの点をタップすると記録の詳細が表示されます'}
-      </p>
-    )
-  }
-
   return (
     <div className="rounded-md border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm">
       <p className="font-medium text-stone-900">
@@ -431,7 +412,6 @@ function PointDetail({
 
 function StoreList({
   summaries,
-  valueLabel,
   selectedStore,
   onSelectStore,
   compact,
@@ -439,7 +419,6 @@ function StoreList({
   isMobile,
 }: {
   summaries: StoreSummary[]
-  valueLabel: string
   selectedStore: string | null
   onSelectStore: (store: string | null) => void
   compact: boolean
@@ -473,9 +452,6 @@ function StoreList({
     return (
       <div className="space-y-2">
         <h4 className="text-base font-medium text-stone-800">店舗一覧</h4>
-        <p className="text-xs text-stone-500">
-          店舗をタップすると、その店の記録だけでグラフを表示します（{valueLabel}）
-        </p>
         <ul className={isMobile ? 'space-y-2' : 'grid grid-cols-2 gap-2'}>
           {summaries.map((s) => {
             const active = selectedStore === s.store
@@ -506,9 +482,6 @@ function StoreList({
   return (
     <div className="space-y-1">
       <h4 className="text-base font-medium text-stone-800">店舗一覧</h4>
-      <p className="text-xs text-stone-500">
-        店舗をクリックすると、その店の記録だけでグラフを表示します（{valueLabel}）
-      </p>
       <div
         className={`overflow-x-auto border border-stone-200 bg-white/70 ${
           compact ? 'max-h-48 overflow-y-auto' : ''
