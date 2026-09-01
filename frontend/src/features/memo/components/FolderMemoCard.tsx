@@ -358,7 +358,6 @@ export function FolderMemoCard({
         {open && (
           <form
             onSubmit={(e) => void handleSave(e)}
-            data-no-trash-drag
             className="space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3"
             onClick={(e) => e.stopPropagation()}
           >
