@@ -288,9 +288,6 @@ export function FolderTrendPanel({
                 className="w-full rounded-md border border-stone-200 bg-white/70 p-2"
                 style={{ height: chartHeight }}
                 onMouseMove={handleChartMouseMove}
-                onMouseLeave={() => {
-                  if (!isMobile) setSelectedIndex(null)
-                }}
                 onClick={() => {
                   if (isMobile) setSelectedIndex(null)
                 }}
