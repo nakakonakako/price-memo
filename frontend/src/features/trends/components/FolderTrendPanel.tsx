@@ -423,47 +423,40 @@ function StoreComparison({
                 {s.store}
               </p>
               {isMobile ? (
-                <>
-                  <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1.5 text-stone-700">
-                    <div>
-                      <dt className="text-sm text-stone-500">件数</dt>
-                      <dd className="text-base">{s.count}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm text-stone-500">平均</dt>
-                      <dd className="text-base font-medium text-stone-900">
-                        {formatYen(s.avg, 2)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-sm text-stone-500">最安</dt>
-                      <dd className="text-base">{formatYen(s.min, 2)}</dd>
-                    </div>
-                  </dl>
+                <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1.5 text-stone-700">
+                  <div>
+                    <dt className="text-sm text-stone-500">件数</dt>
+                    <dd className="text-base">{s.count}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-stone-500">平均</dt>
+                    <dd className="text-base font-medium text-stone-900">
+                      {formatYen(s.avg, 2)}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-stone-500">最安</dt>
+                    <dd className="text-base">{formatYen(s.min, 2)}</dd>
+                  </div>
                   {!compact ? (
-                    <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1.5 text-stone-700">
-                      <div>
-                        <dt className="text-sm text-stone-500">最高</dt>
-                        <dd className="text-base">{formatYen(s.max, 2)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-sm text-stone-500">直近</dt>
-                        <dd className="text-base">
-                          {s.latestDate} · {formatYen(s.latestValue, 2)}
-                        </dd>
-                      </div>
-                    </dl>
+                    <div>
+                      <dt className="text-sm text-stone-500">最高</dt>
+                      <dd className="text-base">{formatYen(s.max, 2)}</dd>
+                    </div>
                   ) : (
-                    <dl className="mt-1.5 text-stone-700">
-                      <div>
-                        <dt className="text-sm text-stone-500">直近</dt>
-                        <dd className="text-base">
-                          {s.latestDate} · {formatYen(s.latestValue, 2)}
-                        </dd>
-                      </div>
-                    </dl>
+                    <div aria-hidden />
                   )}
-                </>
+                  <div>
+                    <dt className="text-sm text-stone-500">直近</dt>
+                    <dd className="text-sm leading-snug">
+                      <span className="block">{s.latestDate}</span>
+                      <span className="block font-medium tabular-nums text-stone-900">
+                        {formatYen(s.latestValue, 2)}
+                      </span>
+                    </dd>
+                  </div>
+                  <div aria-hidden />
+                </dl>
               ) : (
                 <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-stone-700">
                   <div>
