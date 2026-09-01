@@ -23,14 +23,20 @@ export function HowToPage() {
           店頭で見るためのリストです。フォルダに登録した品目をメモに載せ、現場で値段を入力できます。
         </p>
         <ul className="list-inside list-disc space-y-2 text-base text-stone-700 lg:text-lg">
-          <li>「メモを追加」から既存フォルダを選ぶか、新しい品目名で追加</li>
-          <li>カードを開いて内容量・値段・店名を入力すると単価が表示されます</li>
+          <li>「メモを追加」から品目名を入力。未掲載の既存フォルダが候補に出ます（ひらがな入力でもカタカナ名にヒット）</li>
+          <li>候補から選ぶか「追加」で新規作成。一致しなければ新規作成できます</li>
+          <li>カードをタップして開き、確認日・店名・値段（総額）・内容量を入力すると試算単価が表示されます</li>
+          <li>「統計に残す」でフォルダの記録として保存（店名は保存時に必須）</li>
+          <li>単位は g / ml / 個 のほか「その他…」で自由入力（内容量の下に欄が出ます）</li>
           <li>保存するとフォルダ側の記録にも残り、平均・最安・直近の統計が更新されます</li>
           <li>店名を入れると、その店の記録だけに絞った統計を表示できます</li>
           {isMobile ? (
-            <li>左にスワイプするとメモから外れます（フォルダ自体は残ります）</li>
+            <li>閉じたカードはタップで入力フォームを開きます。左にスワイプするとメモから外れます（フォルダ自体は残ります）</li>
           ) : (
-            <li>ドラッグで並べ替え、右側の削除エリアへドロップでメモから外せます</li>
+            <>
+              <li>閉じたカードをタップして入力フォームを開きます</li>
+              <li>ドラッグで並べ替え、右側の削除エリアへドロップでメモから外せます</li>
+            </>
           )}
         </ul>
       </div>
@@ -91,6 +97,32 @@ export function HowToPage() {
           </ul>
         </div>
       )}
+
+      <div className="space-y-3">
+        <h3 className="text-xl font-semibold text-stone-900 lg:text-2xl">
+          記録の入力（フォルダ・メモ共通）
+        </h3>
+        <ul className="list-inside list-disc space-y-2 text-base text-stone-700 lg:text-lg">
+          <li>
+            <strong>購入日 / 確認日</strong> … いつ確認・購入したか（メモでは「確認日」）
+          </li>
+          <li>
+            <strong>店舗</strong> … カタログから選ぶか新規登録。メモ保存時は必須
+          </li>
+          <li>
+            <strong>値段</strong> … 税込など、その場で見た総額（円・整数）
+          </li>
+          <li>
+            <strong>数量 / 内容量</strong> … パックの量（g・ml・個など）。単位とセットで単価を計算
+          </li>
+          <li>
+            <strong>単位</strong> … プリセット以外は「その他…」→ 内容量の下の欄に入力。確定は欄からフォーカスが外れたとき
+          </li>
+          <li>
+            <strong>メモ（任意）</strong> … 補足メモ
+          </li>
+        </ul>
+      </div>
 
       <div className="space-y-3">
         <h3 className="text-xl font-semibold text-stone-900 lg:text-2xl">

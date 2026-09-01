@@ -293,7 +293,7 @@ export function ShoppingMemoPage() {
             </form>
             {allFolders.length > 0 && foldersForPick.length === 0 ? (
               <p className="text-sm text-stone-500">
-                追加できるフォルダはありません（すべてメモに載っています）。
+                追加できるフォルダはありません
               </p>
             ) : newName.trim() && pickableFolders.length > 0 ? (
               <ul className="max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-md border border-stone-200 bg-white">
@@ -318,10 +318,6 @@ export function ShoppingMemoPage() {
             ) : newName.trim() && foldersForPick.length > 0 ? (
               <p className="text-sm text-stone-500">
                 一致するフォルダがありません。追加ボタンで新規作成できます。
-              </p>
-            ) : foldersForPick.length > 0 ? (
-              <p className="text-sm text-stone-500">
-                品目名を入力すると、既存フォルダの候補が表示されます。
               </p>
             ) : null}
           </div>

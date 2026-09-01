@@ -353,13 +353,6 @@ export function FolderMemoCard({
           </div>
           )}
 
-          {!open && (
-            <p className="mt-2 border-t border-dashed border-stone-200 pt-2 text-center text-[11px] text-stone-400">
-              {isMobile
-                ? 'タップして入力 · 左にスワイプで削除'
-                : 'タップして入力 · ドラッグで並べ替え / 削除'}
-            </p>
-          )}
         </div>
 
         {open && (
@@ -369,9 +362,6 @@ export function FolderMemoCard({
             className="space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3"
             onClick={(e) => e.stopPropagation()}
           >
-          <p className="text-sm text-stone-600">
-            内容量と値段を入れると単価が出ます。
-          </p>
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-3 sm:gap-x-3">
             <label className="date-field-wrap min-w-0 space-y-1">
               <span className="text-xs text-stone-500">確認日</span>
