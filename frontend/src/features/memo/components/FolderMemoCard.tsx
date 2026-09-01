@@ -410,29 +410,35 @@ export function FolderMemoCard({
               </div>
             </label>
 
-            <div className="min-w-0 space-y-1">
-              <span className="text-xs text-stone-500">内容量</span>
-              <div className="flex min-w-0 overflow-hidden rounded-md border border-stone-300 bg-white focus-within:border-stone-500">
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  min={0}
-                  step="any"
-                  className="min-w-0 flex-1 border-0 bg-transparent px-2.5 py-2 text-sm outline-none"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="250"
-                />
-                <div className="w-[4.5rem] shrink-0 border-l border-stone-200 bg-stone-50 [&_select]:border-0 [&_select]:bg-transparent [&_select]:py-2 [&_select]:text-sm">
-                  <UnitField
-                    value={unit}
-                    onChange={setTrialUnit}
-                    preferredUnits={preferredUnits}
-                    className="w-full border-0 bg-transparent px-1 py-2 text-sm outline-none"
-                  />
+            <UnitField
+              value={unit}
+              onChange={setTrialUnit}
+              preferredUnits={preferredUnits}
+              className="w-full border-0 bg-transparent px-1 py-2 text-sm outline-none"
+              customInputClassName={fieldClass}
+            >
+              {({ select, customInput }) => (
+                <div className="min-w-0 space-y-1">
+                  <span className="text-xs text-stone-500">内容量</span>
+                  <div className="flex min-w-0 overflow-hidden rounded-md border border-stone-300 bg-white focus-within:border-stone-500">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="any"
+                      className="min-w-0 flex-1 border-0 bg-transparent px-2.5 py-2 text-sm outline-none"
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="250"
+                    />
+                    <div className="w-[4.5rem] shrink-0 border-l border-stone-200 bg-stone-50 [&_select]:border-0 [&_select]:bg-transparent [&_select]:py-2 [&_select]:text-sm">
+                      {select}
+                    </div>
+                  </div>
+                  {customInput}
                 </div>
-              </div>
-            </div>
+              )}
+            </UnitField>
 
             <label className="col-span-2 min-w-0 space-y-1 sm:col-span-1">
               <span className="text-xs text-stone-500">補足など</span>

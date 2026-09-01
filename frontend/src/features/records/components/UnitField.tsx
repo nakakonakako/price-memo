@@ -1,11 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { DialogShell } from '@/components/DialogShell'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PriceUnit } from '../types'
 import {
   CUSTOM_UNIT_VALUE,
   mergeUnitOptions,
   UNIT_PRESETS,
 } from '../utils/unitPrice'
+
+type Parts = {
+  select: ReactNode
+  customInput: ReactNode | null
+}
 
 type Props = {
   value: PriceUnit
@@ -14,8 +18,8 @@ type Props = {
   preferredUnits?: PriceUnit[]
   disabled?: boolean
   className?: string
-  /** inline = input below select; modal = dialog for custom unit (no layout shift) */
-  customInputMode?: 'inline' | 'modal'
+  customInputClassName?: string
+  children?: (parts: Parts) => ReactNode
 }
 
 export function UnitField({
@@ -24,92 +28,72 @@ export function UnitField({
   preferredUnits = [],
   disabled,
   className = '',
-  customInputMode = 'modal',
+  customInputClassName = '',
+  children,
 }: Props) {
   const options = useMemo(
     () => mergeUnitOptions(preferredUnits, value),
     [preferredUnits, value],
   )
-  const optionValues = useMemo(
-    () => new Set(options.map((o) => o.value)),
-    [options],
+  const presetValues = useMemo(
+    () => new Set(UNIT_PRESETS.map((p) => p.value)),
+    [],
   )
-  const isKnownOption = optionValues.has(value)
+  const isPresetOption = presetValues.has(value)
 
   const [customDraft, setCustomDraft] = useState(() =>
-    isKnownOption ? '' : value,
+    isPresetOption ? '' : value,
   )
-  const [inlineCustomActive, setInlineCustomActive] = useState(!isKnownOption)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [customActive, setCustomActive] = useState(!isPresetOption)
   const previousUnitRef = useRef<PriceUnit>(value)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const customInputFocusedRef = useRef(false)
 
   useEffect(() => {
-    if (isKnownOption) {
+    if (customInputFocusedRef.current) return
+    if (isPresetOption && !customActive) {
       setCustomDraft('')
-      setInlineCustomActive(false)
-    } else if (value) {
+    } else if (!isPresetOption && value) {
       setCustomDraft(value)
-      setInlineCustomActive(true)
+      setCustomActive(true)
     }
-  }, [value, isKnownOption])
-
-  useEffect(() => {
-    if (!modalOpen) return
-    const t = window.setTimeout(() => inputRef.current?.focus(), 0)
-    return () => window.clearTimeout(t)
-  }, [modalOpen])
+  }, [value, isPresetOption, customActive])
 
   const fieldClass =
     className ||
     'w-full rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500'
 
-  const selectValue = modalOpen
+  const customClass =
+    customInputClassName ||
+    'w-full rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500'
+
+  const selectValue = customActive
     ? CUSTOM_UNIT_VALUE
-    : isKnownOption
+    : isPresetOption
       ? value
       : CUSTOM_UNIT_VALUE
 
-  const openCustomModal = () => {
-    previousUnitRef.current = value
-    const fromPreset = UNIT_PRESETS.some((p) => p.value === value)
-    setCustomDraft(fromPreset ? '' : value)
-    setModalOpen(true)
-  }
-
-  const closeCustomModal = () => setModalOpen(false)
-
-  const confirmCustomUnit = () => {
+  const commitCustom = () => {
     const trimmed = customDraft.trim()
-    if (!trimmed) return
-    onChange(trimmed)
-    closeCustomModal()
-  }
-
-  const cancelCustomModal = () => {
-    closeCustomModal()
-    if (!optionValues.has(previousUnitRef.current)) {
-      onChange(previousUnitRef.current)
+    if (trimmed) {
+      onChange(trimmed)
+      return
     }
+    setCustomActive(false)
+    onChange(previousUnitRef.current)
+    setCustomDraft('')
   }
 
   const handleSelectChange = (next: string) => {
     if (next === CUSTOM_UNIT_VALUE) {
-      if (customInputMode === 'modal') {
-        openCustomModal()
-        return
-      }
-      setInlineCustomActive(true)
-      if (customDraft.trim()) onChange(customDraft.trim())
+      previousUnitRef.current = isPresetOption ? value : value
+      setCustomActive(true)
+      setCustomDraft(isPresetOption ? '' : value)
       return
     }
-    closeCustomModal()
-    setInlineCustomActive(false)
+    setCustomActive(false)
+    setCustomDraft('')
     onChange(next)
   }
-
-  const showInlineCustom =
-    customInputMode === 'inline' && inlineCustomActive
 
   const select = (
     <select
@@ -117,11 +101,6 @@ export function UnitField({
       value={selectValue}
       disabled={disabled}
       onChange={(e) => handleSelectChange(e.target.value)}
-      onClick={() => {
-        if (customInputMode === 'modal' && selectValue === CUSTOM_UNIT_VALUE) {
-          openCustomModal()
-        }
-      }}
     >
       {options.map((o) => (
         <option key={o.value} value={o.value}>
@@ -132,75 +111,39 @@ export function UnitField({
     </select>
   )
 
-  return (
-    <>
-      {customInputMode === 'inline' ? (
-        <div className="space-y-1">
-          {select}
-          {showInlineCustom && (
-            <input
-              type="text"
-              className={fieldClass}
-              value={customDraft}
-              disabled={disabled}
-              placeholder="kg / 枚 / L"
-              onChange={(e) => {
-                const v = e.target.value
-                setCustomDraft(v)
-                if (v.trim()) onChange(v.trim())
-              }}
-            />
-          )}
-        </div>
-      ) : (
-        select
-      )}
+  const customInput =
+    customActive ? (
+      <input
+        type="text"
+        className={customClass}
+        value={customDraft}
+        disabled={disabled}
+        placeholder="kg / 枚 / L"
+        onFocus={() => {
+          customInputFocusedRef.current = true
+        }}
+        onBlur={() => {
+          customInputFocusedRef.current = false
+          commitCustom()
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            e.currentTarget.blur()
+          }
+        }}
+        onChange={(e) => setCustomDraft(e.target.value)}
+      />
+    ) : null
 
-      {customInputMode === 'modal' && (
-        <DialogShell
-          open={modalOpen}
-          onClose={cancelCustomModal}
-          title="単位を入力"
-          titleId="unit-custom-title"
-          zIndexClass="z-[90]"
-        >
-          <p className="text-sm text-stone-600">
-            リストにない単位（kg、枚、L など）を入力してください。
-          </p>
-          <input
-            ref={inputRef}
-            type="text"
-            className="mt-3 w-full rounded-md border border-stone-300 px-3 py-2 text-sm outline-none focus:border-stone-500"
-            value={customDraft}
-            placeholder="例: kg / 枚 / L"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                confirmCustomUnit()
-              }
-              if (e.key === 'Escape') cancelCustomModal()
-            }}
-            onChange={(e) => setCustomDraft(e.target.value)}
-          />
-          <div className="mt-4 flex justify-end gap-2">
-            <button
-              type="button"
-              className="rounded-md px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-100"
-              onClick={cancelCustomModal}
-            >
-              キャンセル
-            </button>
-            <button
-              type="button"
-              className="rounded-md bg-stone-900 px-3 py-1.5 text-sm text-white hover:bg-stone-800 disabled:opacity-50"
-              disabled={!customDraft.trim()}
-              onClick={confirmCustomUnit}
-            >
-              決定
-            </button>
-          </div>
-        </DialogShell>
-      )}
-    </>
+  if (children) {
+    return <>{children({ select, customInput })}</>
+  }
+
+  return (
+    <div className="space-y-1">
+      {select}
+      {customInput}
+    </div>
   )
 }

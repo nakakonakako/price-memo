@@ -368,34 +368,41 @@ export function RecordForm({
               className={fieldClass}
             />
           </label>
-          <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-2">
-            <label className="block space-y-1">
-              <span className="text-xs text-stone-500">数量</span>
-              <input
-                type="number"
-                inputMode="decimal"
-                min={0}
-                step="any"
-                className={fieldClass}
-                value={form.amount}
-                onChange={(e) =>
-                  setForm((s) => ({ ...s, amount: e.target.value }))
-                }
-                required
-                disabled={busy}
-              />
-            </label>
-            <label className="block min-w-0 space-y-1">
-              <span className="text-xs text-stone-500">単位</span>
-              <UnitField
-                value={form.unit}
-                onChange={(unit) => setForm((s) => ({ ...s, unit }))}
-                preferredUnits={preferredUnits}
-                disabled={busy}
-                className={fieldClass}
-              />
-            </label>
-          </div>
+          <UnitField
+            value={form.unit}
+            onChange={(unit) => setForm((s) => ({ ...s, unit }))}
+            preferredUnits={preferredUnits}
+            disabled={busy}
+            className={fieldClass}
+          >
+            {({ select, customInput }) => (
+              <>
+                <div className="grid grid-cols-[minmax(0,1fr)_4.5rem] gap-2">
+                  <label className="block space-y-1">
+                    <span className="text-xs text-stone-500">数量</span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step="any"
+                      className={fieldClass}
+                      value={form.amount}
+                      onChange={(e) =>
+                        setForm((s) => ({ ...s, amount: e.target.value }))
+                      }
+                      required
+                      disabled={busy}
+                    />
+                  </label>
+                  <label className="block min-w-0 space-y-1">
+                    <span className="text-xs text-stone-500">単位</span>
+                    {select}
+                  </label>
+                </div>
+                {customInput}
+              </>
+            )}
+          </UnitField>
           <label className="block space-y-1">
             <span className="text-xs text-stone-500">値段（円）</span>
             <input
