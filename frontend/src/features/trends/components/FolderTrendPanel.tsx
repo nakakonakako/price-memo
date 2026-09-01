@@ -198,6 +198,12 @@ export function FolderTrendPanel({
           <div
             className="w-full rounded-md border border-stone-200 bg-white/70 p-2"
             style={{ height: chartHeight }}
+            onMouseLeave={() => {
+              if (!isMobile) setSelectedIndex(null)
+            }}
+            onClick={() => {
+              if (isMobile) setSelectedIndex(null)
+            }}
           >
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
@@ -229,25 +235,40 @@ export function FolderTrendPanel({
                   stroke="#1c1917"
                   strokeWidth={2.5}
                   connectNulls
+                  isAnimationActive={false}
+                  style={{ pointerEvents: 'none' }}
                   dot={(props) => {
                     const { cx, cy, index } = props
                     if (cx == null || cy == null || index == null) return null
                     const active = selectedIndex === index
+                    const hitR = isMobile ? 18 : 10
+                    const visR = isMobile ? 6 : 3
                     return (
-                      <circle
-                        key={`dot-${index}`}
-                        cx={cx}
-                        cy={cy}
-                        r={active ? 5 : 3}
-                        fill={active ? '#0f766e' : '#1c1917'}
-                        stroke="#ffffff"
-                        strokeWidth={2}
-                        style={{ cursor: 'pointer' }}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedIndex(index)
-                        }}
-                      />
+                      <g key={`dot-${index}`}>
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={hitR}
+                          fill="transparent"
+                          style={{ cursor: 'pointer' }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (isMobile) setSelectedIndex(index)
+                          }}
+                          onMouseEnter={() => {
+                            if (!isMobile) setSelectedIndex(index)
+                          }}
+                        />
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={active ? visR + 2 : visR}
+                          fill={active ? '#0f766e' : '#1c1917'}
+                          stroke="#ffffff"
+                          strokeWidth={2}
+                          pointerEvents="none"
+                        />
+                      </g>
                     )
                   }}
                   activeDot={false}
@@ -260,6 +281,7 @@ export function FolderTrendPanel({
             point={selectedPoint}
             valueLabel={valueLabel}
             hint={points.length > 0}
+            hoverMode={!isMobile}
           />
 
           <StoreComparison
@@ -278,16 +300,20 @@ function PointDetail({
   point,
   valueLabel,
   hint,
+  hoverMode,
 }: {
   point: TrendPoint | null
   valueLabel: string
   hint: boolean
+  hoverMode: boolean
 }) {
   if (!point) {
     if (!hint) return null
     return (
       <p className="rounded-md border border-dashed border-stone-200 bg-stone-50/80 px-3 py-2 text-center text-xs text-stone-500">
-        グラフの点をタップすると記録の詳細が表示されます
+        {hoverMode
+          ? 'グラフの点にカーソルを合わせると記録の詳細が表示されます'
+          : 'グラフの点をタップすると記録の詳細が表示されます'}
       </p>
     )
   }

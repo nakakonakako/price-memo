@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 export type TabId = 'memo' | 'folders' | 'trends'
 
@@ -28,7 +28,14 @@ export function MainLayout({
 }: Props) {
   const visibleTabs = TABS.filter((tab) => !hiddenTabs.includes(tab.id))
   return (
-    <div className="min-h-screen">
+    <div
+      className="min-h-screen [--app-header-h:7.75rem]"
+      style={
+        {
+          '--app-header-h': '7.75rem',
+        } as CSSProperties
+      }
+    >
       <header className="border-b border-stone-300/80 bg-[#f6f4f0]/80 backdrop-blur">
         <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4">
           <div className="flex items-start justify-between gap-3">

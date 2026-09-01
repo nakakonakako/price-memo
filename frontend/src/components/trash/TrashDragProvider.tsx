@@ -94,6 +94,8 @@ export function TrashDragProvider({
     null,
   )
   const largeTrash = trashSize === 'memo'
+  const trashPlacementRef = useRef(trashPlacement)
+  trashPlacementRef.current = trashPlacement
 
   const setInsertTarget = useCallback((next: string | null | undefined) => {
     insertBeforeIdRef.current = next
@@ -105,6 +107,14 @@ export function TrashDragProvider({
       const el = trashRef.current
       if (!el) return false
       const rect = el.getBoundingClientRect()
+      if (trashPlacementRef.current === 'external') {
+        return (
+          x >= rect.left &&
+          x <= rect.right &&
+          y >= rect.top &&
+          y <= rect.bottom
+        )
+      }
       const pad = largeTrash ? 40 : 12
       return (
         x >= rect.left - pad &&
@@ -314,6 +324,7 @@ type MemoTrashZoneProps = {
   className?: string
 }
 
+/** Full-height strip from main content right edge to viewport right. */
 export function MemoTrashZone({ className = '' }: MemoTrashZoneProps) {
   const { trashRef, dragOverTrash } = useTrashDrag()
 
@@ -321,11 +332,16 @@ export function MemoTrashZone({ className = '' }: MemoTrashZoneProps) {
     <div
       ref={trashRef}
       aria-label="ゴミ箱"
-      className={`flex flex-col items-center justify-center border-l-2 border-dashed transition-colors duration-150 ${
+      className={`fixed bottom-0 z-40 hidden flex-col items-center justify-center border-l-2 border-dashed transition-colors duration-150 lg:flex ${
         dragOverTrash
           ? 'border-red-400 bg-red-50'
           : 'border-stone-300 bg-stone-50/40'
       } ${className}`}
+      style={{
+        top: 'var(--app-header-h, 7.75rem)',
+        left: 'max(1rem, calc((100vw + min(48rem, 100vw)) / 2 - 1rem))',
+        right: 0,
+      }}
     >
       <img
         src="/trashbox.png"

@@ -404,10 +404,8 @@ export function ShoppingMemoPage() {
   return (
     <TrashDragProvider onDragEnd={handleDragEnd} trashPlacement="external">
       <MemoListRegistrar ids={dragIds} />
-      <div className="flex items-stretch">
-        <div className="min-w-0 flex-1">{page}</div>
-        <MemoTrashZone className="sticky top-24 hidden min-h-[min(70vh,40rem)] w-[30%] max-w-[10rem] shrink-0 self-start lg:flex" />
-      </div>
+      {page}
+      <MemoTrashZone />
     </TrashDragProvider>
   )
 }
