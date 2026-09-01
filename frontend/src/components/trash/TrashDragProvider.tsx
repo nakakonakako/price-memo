@@ -339,7 +339,7 @@ export function MemoTrashZone({ className = '' }: MemoTrashZoneProps) {
       } ${className}`}
       style={{
         top: 'var(--app-header-h, 7.75rem)',
-        left: 'max(1rem, calc((100vw + min(48rem, 100vw)) / 2 - 1rem))',
+        left: 'max(1rem, calc((100vw + min(48rem, 100vw)) / 2 - 1rem + 2.5rem))',
         right: 0,
       }}
     >

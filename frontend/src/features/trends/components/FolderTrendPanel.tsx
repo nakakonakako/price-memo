@@ -4,6 +4,7 @@ import {
   Line,
   LineChart,
   ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
@@ -48,6 +49,7 @@ export function FolderTrendPanel({
   const [unit, setUnit] = useState<PriceUnit>('g')
   const [basis, setBasis] = useState<PriceBasis>('per_100')
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const initializedFolderRef = useRef<string | null>(null)
   const hadRecordsRef = useRef(false)
 
@@ -137,43 +139,78 @@ export function FolderTrendPanel({
   const chartHeight = compact ? 220 : 320
   const useStoreCards = compact || isMobile
 
+  const basisLabel =
+    effectiveBasis === 'per_100' ? '100単位あたり' : '単位あたり'
+
+  const filterControls = (
+    <>
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-stone-500">単位</span>
+        <select
+          className={fieldClass}
+          value={unit}
+          onChange={(e) => {
+            const next = e.target.value as PriceUnit
+            setUnit(next)
+            if (!supportsPerHundred(next)) setBasis('per_unit')
+          }}
+          disabled={unitsInFolder.length === 0}
+        >
+          {(unitsInFolder.length > 0 ? unitsInFolder : ['g']).map((u) => (
+            <option key={u} value={u}>
+              {unitLabel(u)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="block space-y-1">
+        <span className="text-xs font-medium text-stone-500">表示</span>
+        <select
+          className={fieldClass}
+          value={effectiveBasis}
+          onChange={(e) => setBasis(e.target.value as PriceBasis)}
+          disabled={!supportsPerHundred(unit)}
+        >
+          <option value="per_unit">単位あたり</option>
+          {supportsPerHundred(unit) && (
+            <option value="per_100">100単位あたり</option>
+          )}
+        </select>
+      </label>
+    </>
+  )
+
   return (
     <div className="space-y-3 rounded-lg border border-stone-200 bg-white/80 p-3 shadow-sm">
-      <div className={`grid gap-2 ${compact ? 'grid-cols-2' : 'sm:grid-cols-3'}`}>
-        <label className="block space-y-1">
-          <span className="text-xs font-medium text-stone-500">単位</span>
-          <select
-            className={fieldClass}
-            value={unit}
-            onChange={(e) => {
-              const next = e.target.value as PriceUnit
-              setUnit(next)
-              if (!supportsPerHundred(next)) setBasis('per_unit')
-            }}
-            disabled={unitsInFolder.length === 0}
+      {isMobile ? (
+        <div>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm text-stone-800"
+            aria-expanded={filtersOpen}
           >
-            {(unitsInFolder.length > 0 ? unitsInFolder : ['g']).map((u) => (
-              <option key={u} value={u}>
-                {unitLabel(u)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block space-y-1">
-          <span className="text-xs font-medium text-stone-500">表示</span>
-          <select
-            className={fieldClass}
-            value={effectiveBasis}
-            onChange={(e) => setBasis(e.target.value as PriceBasis)}
-            disabled={!supportsPerHundred(unit)}
-          >
-            <option value="per_unit">単位あたり</option>
-            {supportsPerHundred(unit) && (
-              <option value="per_100">100単位あたり</option>
-            )}
-          </select>
-        </label>
-      </div>
+            <span>
+              {unitLabel(unit)} · {basisLabel}
+            </span>
+            <span
+              className={`text-stone-400 transition-transform ${filtersOpen ? 'rotate-180' : ''}`}
+              aria-hidden
+            >
+              ▾
+            </span>
+          </button>
+          {filtersOpen && (
+            <div className="mt-2 grid grid-cols-2 gap-2">{filterControls}</div>
+          )}
+        </div>
+      ) : (
+        <div
+          className={`grid gap-2 ${compact ? 'grid-cols-2' : 'sm:grid-cols-3'}`}
+        >
+          {filterControls}
+        </div>
+      )}
 
       {error && (
         <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -209,7 +246,19 @@ export function FolderTrendPanel({
               <LineChart
                 data={chartRows}
                 margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                onMouseMove={(state) => {
+                  if (isMobile) return
+                  const idx = state?.activeTooltipIndex
+                  if (typeof idx === 'number') setSelectedIndex(idx)
+                }}
               >
+                {!isMobile && (
+                  <Tooltip
+                    content={() => null}
+                    cursor={{ stroke: '#d6d3d1', strokeWidth: 1 }}
+                    isAnimationActive={false}
+                  />
+                )}
                 <CartesianGrid
                   strokeDasharray="3 3"
                   vertical={false}
@@ -254,9 +303,6 @@ export function FolderTrendPanel({
                           onClick={(e) => {
                             e.stopPropagation()
                             if (isMobile) setSelectedIndex(index)
-                          }}
-                          onMouseEnter={() => {
-                            if (!isMobile) setSelectedIndex(index)
                           }}
                         />
                         <circle
@@ -312,7 +358,7 @@ function PointDetail({
     return (
       <p className="rounded-md border border-dashed border-stone-200 bg-stone-50/80 px-3 py-2 text-center text-xs text-stone-500">
         {hoverMode
-          ? 'グラフの点にカーソルを合わせると記録の詳細が表示されます'
+          ? 'グラフ上で横軸の位置に合わせると記録の詳細が表示されます'
           : 'グラフの点をタップすると記録の詳細が表示されます'}
       </p>
     )
@@ -351,48 +397,48 @@ function StoreComparison({
   if (useCards) {
     return (
       <div className="space-y-2">
-        <h4 className="text-xs font-medium text-stone-800">
+        <h4 className="text-sm font-medium text-stone-800">
           店舗比較（{valueLabel}）
         </h4>
         <ul className="space-y-2">
           {summaries.map((s) => (
             <li
               key={s.store}
-              className="rounded-md border border-stone-200 bg-white/70 px-2.5 py-2 text-xs"
+              className="rounded-md border border-stone-200 bg-white/70 px-3 py-2.5 text-sm"
             >
               <p className="truncate font-medium text-stone-900">{s.store}</p>
-              <dl className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-1 text-stone-600">
+              <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-stone-700">
                 <div>
-                  <dt className="text-[10px] text-stone-400">件数</dt>
-                  <dd>{s.count}</dd>
+                  <dt className="text-xs text-stone-500">件数</dt>
+                  <dd className="text-sm">{s.count}</dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] text-stone-400">平均</dt>
-                  <dd className="font-medium text-stone-800">
+                  <dt className="text-xs text-stone-500">平均</dt>
+                  <dd className="text-sm font-medium text-stone-900">
                     {formatYen(s.avg, 2)}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[10px] text-stone-400">最安</dt>
-                  <dd>{formatYen(s.min, 2)}</dd>
+                  <dt className="text-xs text-stone-500">最安</dt>
+                  <dd className="text-sm">{formatYen(s.min, 2)}</dd>
                 </div>
                 {!compact ? (
                   <>
                     <div>
-                      <dt className="text-[10px] text-stone-400">最高</dt>
-                      <dd>{formatYen(s.max, 2)}</dd>
+                      <dt className="text-xs text-stone-500">最高</dt>
+                      <dd className="text-sm">{formatYen(s.max, 2)}</dd>
                     </div>
                     <div className="col-span-2">
-                      <dt className="text-[10px] text-stone-400">直近</dt>
-                      <dd>
+                      <dt className="text-xs text-stone-500">直近</dt>
+                      <dd className="text-sm">
                         {s.latestDate} · {formatYen(s.latestValue, 2)}
                       </dd>
                     </div>
                   </>
                 ) : (
                   <div>
-                    <dt className="text-[10px] text-stone-400">直近</dt>
-                    <dd>
+                    <dt className="text-xs text-stone-500">直近</dt>
+                    <dd className="text-sm">
                       {s.latestDate} · {formatYen(s.latestValue, 2)}
                     </dd>
                   </div>
@@ -407,7 +453,7 @@ function StoreComparison({
 
   return (
     <div className="space-y-1">
-      <h4 className="text-xs font-medium text-stone-800">
+      <h4 className="text-sm font-medium text-stone-800">
         店舗比較（{valueLabel}）
       </h4>
       <div
@@ -415,40 +461,40 @@ function StoreComparison({
           compact ? 'max-h-48 overflow-y-auto' : ''
         }`}
       >
-        <table className="w-full table-fixed text-left text-sm">
-          <thead className="sticky top-0 border-b border-stone-200 bg-stone-50 text-stone-500">
+        <table className="w-full table-fixed text-left text-base">
+          <thead className="sticky top-0 border-b border-stone-200 bg-stone-50 text-sm text-stone-600">
             <tr>
-              <th className="w-[34%] px-2 py-1.5 font-medium">店舗</th>
-              <th className="w-[10%] px-2 py-1.5 font-medium">件</th>
-              <th className="w-[18%] px-2 py-1.5 font-medium">平均</th>
-              <th className="w-[18%] px-2 py-1.5 font-medium">最安</th>
+              <th className="w-[34%] px-2 py-2 font-medium">店舗</th>
+              <th className="w-[10%] px-2 py-2 font-medium">件</th>
+              <th className="w-[18%] px-2 py-2 font-medium">平均</th>
+              <th className="w-[18%] px-2 py-2 font-medium">最安</th>
               {!compact && (
                 <>
-                  <th className="w-[10%] px-2 py-1.5 font-medium">最高</th>
-                  <th className="w-[10%] px-2 py-1.5 font-medium">直近</th>
+                  <th className="w-[10%] px-2 py-2 font-medium">最高</th>
+                  <th className="w-[10%] px-2 py-2 font-medium">直近</th>
                 </>
               )}
             </tr>
           </thead>
-          <tbody className="divide-y divide-stone-100">
+          <tbody className="divide-y divide-stone-100 text-sm">
             {summaries.map((s) => (
               <tr key={s.store}>
-                <td className="truncate px-2 py-1.5 font-medium text-stone-900">
+                <td className="truncate px-2 py-2 font-medium text-stone-900">
                   {s.store}
                 </td>
-                <td className="px-2 py-1.5 text-stone-600">{s.count}</td>
-                <td className="px-2 py-1.5 text-stone-800">
+                <td className="px-2 py-2 text-stone-700">{s.count}</td>
+                <td className="px-2 py-2 font-medium text-stone-900">
                   {formatYen(s.avg, 2)}
                 </td>
-                <td className="px-2 py-1.5 text-stone-600">
+                <td className="px-2 py-2 text-stone-700">
                   {formatYen(s.min, 2)}
                 </td>
                 {!compact && (
                   <>
-                    <td className="px-2 py-1.5 text-stone-600">
+                    <td className="px-2 py-2 text-stone-700">
                       {formatYen(s.max, 2)}
                     </td>
-                    <td className="px-2 py-1.5 text-stone-600">
+                    <td className="px-2 py-2 text-stone-700">
                       <span className="block truncate">
                         {s.latestDate} · {formatYen(s.latestValue, 2)}
                       </span>
