@@ -1,9 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import type { PriceStore } from '../types'
 
-function normalizeStoreQuery(value: string): string {
-  return value.trim().toLocaleLowerCase('ja')
-}
+import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 
 export async function listStores(): Promise<PriceStore[]> {
   const { data, error } = await supabase
@@ -83,8 +81,7 @@ export async function ensureStore(name: string): Promise<string> {
   if (!trimmed) throw new Error('店舗名を入力してください')
 
   const stores = await listStores()
-  const nq = normalizeStoreQuery(trimmed)
-  const existing = stores.find((s) => normalizeStoreQuery(s.name) === nq)
+  const existing = stores.find((s) => equalsSearchQuery(s.name, trimmed))
   if (existing) return existing.name
 
   const created = await createStore(trimmed)
@@ -95,13 +92,13 @@ export function findStoreByName(
   stores: PriceStore[],
   input: string,
 ): PriceStore | undefined {
-  const nq = normalizeStoreQuery(input)
+  const nq = input.trim()
   if (!nq) return undefined
-  return stores.find((s) => normalizeStoreQuery(s.name) === nq)
+  return stores.find((s) => equalsSearchQuery(s.name, nq))
 }
 
 export function filterStores(stores: PriceStore[], query: string): PriceStore[] {
-  const q = normalizeStoreQuery(query)
+  const q = query.trim()
   if (!q) return stores
-  return stores.filter((s) => s.name.toLocaleLowerCase('ja').includes(q))
+  return stores.filter((s) => matchesSearchQuery(s.name, q))
 }

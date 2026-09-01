@@ -97,7 +97,7 @@ export function StoreField({
   return (
     <div ref={rootRef} className="relative space-y-1">
       <input
-        type="search"
+        type="text"
         value={query}
         onChange={(e) => {
           setQuery(e.target.value)
@@ -115,6 +115,10 @@ export function StoreField({
         placeholder={placeholder}
         disabled={disabled || registering}
         required={required}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
         className={fieldClass}
         aria-autocomplete="list"
         aria-expanded={open}

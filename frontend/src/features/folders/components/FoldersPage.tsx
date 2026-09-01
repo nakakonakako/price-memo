@@ -13,6 +13,7 @@ import type { DragEndResult, TrashDragPayload } from '@/components/trash/types'
 import { useOutsidePointerDown } from '@/hooks/useOutsidePointerDown'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { reorderIds } from '@/lib/listOrder'
+import { matchesSearchQuery } from '@/lib/kanaSearch'
 import {
   createRecord,
   deleteRecord,
@@ -192,14 +193,12 @@ export function FoldersPage() {
   )
 
   const visibleFolders = useMemo(() => {
-    const q = folderQuery.trim().toLocaleLowerCase('ja')
+    const q = folderQuery.trim()
     const filtered = q
       ? folders.filter((f) => {
           const { displayName, reading } = parseFolderName(f.name)
-          const hay = `${displayName} ${reading ?? ''} ${f.name}`.toLocaleLowerCase(
-            'ja',
-          )
-          return hay.includes(q)
+          const hay = `${displayName} ${reading ?? ''} ${f.name}`
+          return matchesSearchQuery(hay, q)
         })
       : folders
     const rows = [...filtered]
@@ -225,9 +224,9 @@ export function FoldersPage() {
   }, [draftFolderId, folderQuery, folderSort, folders])
 
   const visibleStores = useMemo(() => {
-    const q = storeQuery.trim().toLocaleLowerCase('ja')
+    const q = storeQuery.trim()
     const filtered = q
-      ? stores.filter((s) => s.name.toLocaleLowerCase('ja').includes(q))
+      ? stores.filter((s) => matchesSearchQuery(s.name, q))
       : stores
     const rows = [...filtered]
     if (storeSort === 'name') {
@@ -740,7 +739,7 @@ export function FoldersPage() {
         {catalogSearchOpen && (
           <input
             ref={catalogSearchRef}
-            type="search"
+            type="text"
             value={catalogView === 'folder' ? folderQuery : storeQuery}
             onChange={(e) =>
               catalogView === 'folder'
@@ -750,6 +749,10 @@ export function FoldersPage() {
             placeholder={
               catalogView === 'folder' ? 'フォルダ名で検索' : '店舗名で検索'
             }
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
           />
         )}

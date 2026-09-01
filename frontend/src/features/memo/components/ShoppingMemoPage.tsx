@@ -18,6 +18,7 @@ import {
 import { listAllRecords } from '@/features/records/api/recordsApi'
 import type { PriceRecord } from '@/features/records/types'
 import { reorderIds } from '@/lib/listOrder'
+import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import { toUserMessage } from '@/lib/userError'
 import {
   addMemoItem,
@@ -46,23 +47,15 @@ const nameCollator = new Intl.Collator('ja', {
   sensitivity: 'base',
 })
 
-function normalizeFolderQuery(value: string): string {
-  return value.trim().toLocaleLowerCase('ja')
-}
-
 function findFolderByInput(
   folders: PriceFolder[],
   input: string,
 ): PriceFolder | undefined {
   const q = input.trim()
   if (!q) return undefined
-  const nq = normalizeFolderQuery(q)
   return folders.find((f) => {
     const { displayName } = parseFolderName(f.name)
-    return (
-      normalizeFolderQuery(f.name) === nq ||
-      normalizeFolderQuery(displayName) === nq
-    )
+    return equalsSearchQuery(f.name, q) || equalsSearchQuery(displayName, q)
   })
 }
 
@@ -130,14 +123,12 @@ export function ShoppingMemoPage() {
   }, [allFolders, memoFolderIds])
 
   const pickableFolders = useMemo(() => {
-    const q = newName.trim().toLocaleLowerCase('ja')
+    const q = newName.trim()
     if (!q) return []
     return foldersForPick.filter((f) => {
       const { displayName, reading } = parseFolderName(f.name)
-      const hay = `${displayName} ${reading ?? ''} ${f.name}`.toLocaleLowerCase(
-        'ja',
-      )
-      return hay.includes(q)
+      const hay = `${displayName} ${reading ?? ''} ${f.name}`
+      return matchesSearchQuery(hay, q)
     })
   }, [foldersForPick, newName])
 
@@ -284,19 +275,14 @@ export function ShoppingMemoPage() {
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 placeholder="品目名（例: 鶏むね / 牛乳（ぎゅうにゅう））"
-                list="memo-folder-suggestions"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
                 className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
                 disabled={mutating}
                 autoFocus
               />
-              <datalist id="memo-folder-suggestions">
-                {foldersForPick.map((f) => (
-                  <option
-                    key={f.id}
-                    value={parseFolderName(f.name).displayName}
-                  />
-                ))}
-              </datalist>
               <button
                 type="submit"
                 disabled={mutating || !newName.trim()}

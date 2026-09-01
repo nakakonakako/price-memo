@@ -183,7 +183,7 @@ export function TrashDragItem({
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         className={`touch-none select-none ${className}`}
-        style={isDragging ? { visibility: 'hidden' } : undefined}
+        style={isDragging ? { display: 'none' } : undefined}
       >
         {children}
       </div>
