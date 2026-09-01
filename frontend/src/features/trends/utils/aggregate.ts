@@ -22,9 +22,6 @@ export type StoreSummary = {
   count: number
   avg: number
   min: number
-  max: number
-  latestDate: string
-  latestValue: number
 }
 
 export function dominantUnit(records: PriceRecord[]): PriceUnit | null {
@@ -128,19 +125,15 @@ export function summarizeByStore(points: TrendPoint[]): StoreSummary[] {
   const summaries: StoreSummary[] = []
   for (const [store, list] of byStore) {
     const values = list.map((p) => p.value)
-    const latest = [...list].sort((a, b) => b.date.localeCompare(a.date))[0]
     summaries.push({
       store,
       count: list.length,
       avg: values.reduce((a, b) => a + b, 0) / values.length,
       min: Math.min(...values),
-      max: Math.max(...values),
-      latestDate: latest.date,
-      latestValue: latest.value,
     })
   }
 
-  return summaries.sort((a, b) => a.avg - b.avg)
+  return summaries.sort((a, b) => a.store.localeCompare(b.store, 'ja'))
 }
 
 export const STORE_COLORS = [

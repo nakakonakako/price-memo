@@ -48,6 +48,7 @@ export function FolderTrendPanel({
   const [unit, setUnit] = useState<PriceUnit>('g')
   const [basis, setBasis] = useState<PriceBasis>('per_100')
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [selectedStore, setSelectedStore] = useState<string | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const initializedFolderRef = useRef<string | null>(null)
   const hadRecordsRef = useRef(false)
@@ -104,7 +105,12 @@ export function FolderTrendPanel({
 
   useEffect(() => {
     setSelectedIndex(null)
+    setSelectedStore(null)
   }, [folderId, unit, basis, records])
+
+  useEffect(() => {
+    setSelectedIndex(null)
+  }, [selectedStore])
 
   const unitsInFolder = useMemo(() => {
     return [...new Set(records.map((r) => r.unit.trim()).filter(Boolean))].sort(
@@ -116,17 +122,22 @@ export function FolderTrendPanel({
     ? basis
     : 'per_unit'
 
-  const points = useMemo(
+  const allPoints = useMemo(
     () => toTrendPoints(records, unit, effectiveBasis),
     [records, unit, effectiveBasis],
   )
+
+  const points = useMemo(() => {
+    if (!selectedStore) return allPoints
+    return allPoints.filter((p) => p.store === selectedStore)
+  }, [allPoints, selectedStore])
 
   const chartRows = useMemo(
     () => toChronologicalChartData(points),
     [points],
   )
 
-  const summaries = useMemo(() => summarizeByStore(points), [points])
+  const storeSummaries = useMemo(() => summarizeByStore(allPoints), [allPoints])
 
   const selectedPoint: TrendPoint | null =
     selectedIndex != null ? (points[selectedIndex] ?? null) : null
@@ -240,7 +251,7 @@ export function FolderTrendPanel({
 
       {recordsLoading ? (
         <p className="text-sm text-stone-500">読み込み中...</p>
-      ) : points.length === 0 ? (
+      ) : allPoints.length === 0 ? (
         <p className="rounded-md border border-dashed border-stone-300 bg-stone-50/80 px-3 py-6 text-center text-sm text-stone-500">
           この条件のレコードがありません。
         </p>
@@ -252,6 +263,36 @@ export function FolderTrendPanel({
             </p>
           )}
 
+          <StoreList
+            summaries={storeSummaries}
+            valueLabel={valueLabel}
+            selectedStore={selectedStore}
+            onSelectStore={setSelectedStore}
+            compact={compact}
+            useCards={useStoreCards}
+            isMobile={isMobile}
+          />
+
+          {selectedStore && (
+            <p className="text-sm text-stone-600">
+              <span className="font-medium text-stone-900">「{selectedStore}」</span>
+              の記録を表示中
+              <button
+                type="button"
+                onClick={() => setSelectedStore(null)}
+                className="ml-2 text-stone-500 underline hover:text-stone-800"
+              >
+                すべて表示
+              </button>
+            </p>
+          )}
+
+          {points.length === 0 ? (
+            <p className="rounded-md border border-dashed border-stone-300 bg-stone-50/80 px-3 py-6 text-center text-sm text-stone-500">
+              この店舗の記録がありません。
+            </p>
+          ) : (
+            <>
           <div
             ref={chartWrapRef}
             className="w-full rounded-md border border-stone-200 bg-white/70 p-2"
@@ -339,14 +380,8 @@ export function FolderTrendPanel({
             hint={points.length > 0}
             hoverMode={!isMobile}
           />
-
-          <StoreComparison
-            summaries={summaries}
-            valueLabel={valueLabel}
-            compact={compact}
-            useCards={useStoreCards}
-            isMobile={isMobile}
-          />
+            </>
+          )}
         </>
       )}
     </div>
@@ -394,110 +429,75 @@ function PointDetail({
   )
 }
 
-function StoreComparison({
+function StoreList({
   summaries,
   valueLabel,
+  selectedStore,
+  onSelectStore,
   compact,
   useCards,
   isMobile,
 }: {
   summaries: StoreSummary[]
   valueLabel: string
+  selectedStore: string | null
+  onSelectStore: (store: string | null) => void
   compact: boolean
   useCards: boolean
   isMobile: boolean
 }) {
+  const toggleStore = (store: string) => {
+    onSelectStore(selectedStore === store ? null : store)
+  }
+
+  const statGrid = (s: StoreSummary) => (
+    <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1.5 text-stone-700">
+      <div>
+        <dt className="text-sm text-stone-500">件数</dt>
+        <dd className="text-base">{s.count}</dd>
+      </div>
+      <div>
+        <dt className="text-sm text-stone-500">平均</dt>
+        <dd className="text-base font-medium text-stone-900">
+          {formatYen(s.avg, 2)}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-sm text-stone-500">最安</dt>
+        <dd className="text-base">{formatYen(s.min, 2)}</dd>
+      </div>
+    </dl>
+  )
+
   if (useCards) {
     return (
       <div className="space-y-2">
-        <h4 className="text-base font-medium text-stone-800">
-          店舗比較（{valueLabel}）
-        </h4>
+        <h4 className="text-base font-medium text-stone-800">店舗一覧</h4>
+        <p className="text-xs text-stone-500">
+          店舗をタップすると、その店の記録だけでグラフを表示します（{valueLabel}）
+        </p>
         <ul className={isMobile ? 'space-y-2' : 'grid grid-cols-2 gap-2'}>
-          {summaries.map((s) => (
-            <li
-              key={s.store}
-              className="rounded-md border border-stone-200 bg-white/70 px-3 py-2.5"
-            >
-              <p className="truncate text-base font-medium text-stone-900">
-                {s.store}
-              </p>
-              {isMobile ? (
-                <dl className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1.5 text-stone-700">
-                  <div>
-                    <dt className="text-sm text-stone-500">件数</dt>
-                    <dd className="text-base">{s.count}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-stone-500">平均</dt>
-                    <dd className="text-base font-medium text-stone-900">
-                      {formatYen(s.avg, 2)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-stone-500">最安</dt>
-                    <dd className="text-base">{formatYen(s.min, 2)}</dd>
-                  </div>
-                  {!compact ? (
-                    <div>
-                      <dt className="text-sm text-stone-500">最高</dt>
-                      <dd className="text-base">{formatYen(s.max, 2)}</dd>
-                    </div>
-                  ) : (
-                    <div aria-hidden />
-                  )}
-                  <div>
-                    <dt className="text-sm text-stone-500">直近</dt>
-                    <dd className="text-sm leading-snug">
-                      <span className="block">{s.latestDate}</span>
-                      <span className="block font-medium tabular-nums text-stone-900">
-                        {formatYen(s.latestValue, 2)}
-                      </span>
-                    </dd>
-                  </div>
-                  <div aria-hidden />
-                </dl>
-              ) : (
-                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-stone-700">
-                  <div>
-                    <dt className="text-sm text-stone-500">件数</dt>
-                    <dd className="text-base">{s.count}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-stone-500">平均</dt>
-                    <dd className="text-base font-medium text-stone-900">
-                      {formatYen(s.avg, 2)}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm text-stone-500">最安</dt>
-                    <dd className="text-base">{formatYen(s.min, 2)}</dd>
-                  </div>
-                  {!compact ? (
-                    <>
-                      <div>
-                        <dt className="text-sm text-stone-500">最高</dt>
-                        <dd className="text-base">{formatYen(s.max, 2)}</dd>
-                      </div>
-                      <div className="col-span-2">
-                        <dt className="text-sm text-stone-500">直近</dt>
-                        <dd className="text-base">
-                          {s.latestDate} · {formatYen(s.latestValue, 2)}
-                        </dd>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="col-span-2">
-                      <dt className="text-sm text-stone-500">直近</dt>
-                      <dd className="text-base">
-                        {s.latestDate} · {formatYen(s.latestValue, 2)}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              )}
-            </li>
-          ))}
+          {summaries.map((s) => {
+            const active = selectedStore === s.store
+            return (
+              <li key={s.store}>
+                <button
+                  type="button"
+                  onClick={() => toggleStore(s.store)}
+                  className={`w-full rounded-md border px-3 py-2.5 text-left transition-colors ${
+                    active
+                      ? 'border-stone-800 bg-stone-100 ring-1 ring-stone-800'
+                      : 'border-stone-200 bg-white/70 hover:bg-stone-50'
+                  }`}
+                >
+                  <p className="truncate text-base font-medium text-stone-900">
+                    {s.store}
+                  </p>
+                  {statGrid(s)}
+                </button>
+              </li>
+            )
+          })}
         </ul>
       </div>
     )
@@ -505,9 +505,10 @@ function StoreComparison({
 
   return (
     <div className="space-y-1">
-      <h4 className="text-base font-medium text-stone-800">
-        店舗比較（{valueLabel}）
-      </h4>
+      <h4 className="text-base font-medium text-stone-800">店舗一覧</h4>
+      <p className="text-xs text-stone-500">
+        店舗をクリックすると、その店の記録だけでグラフを表示します（{valueLabel}）
+      </p>
       <div
         className={`overflow-x-auto border border-stone-200 bg-white/70 ${
           compact ? 'max-h-48 overflow-y-auto' : ''
@@ -516,45 +517,38 @@ function StoreComparison({
         <table className="w-full table-fixed text-left text-lg">
           <thead className="sticky top-0 border-b border-stone-200 bg-stone-50 text-base text-stone-600">
             <tr>
-              <th className="w-[34%] px-2 py-2 font-medium">店舗</th>
-              <th className="w-[10%] px-2 py-2 font-medium">件</th>
-              <th className="w-[18%] px-2 py-2 font-medium">平均</th>
-              <th className="w-[18%] px-2 py-2 font-medium">最安</th>
-              {!compact && (
-                <>
-                  <th className="w-[10%] px-2 py-2 font-medium">最高</th>
-                  <th className="w-[10%] px-2 py-2 font-medium">直近</th>
-                </>
-              )}
+              <th className="w-[40%] px-2 py-2 font-medium">店舗</th>
+              <th className="w-[12%] px-2 py-2 font-medium">件</th>
+              <th className="w-[24%] px-2 py-2 font-medium">平均</th>
+              <th className="w-[24%] px-2 py-2 font-medium">最安</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100 text-base">
-            {summaries.map((s) => (
-              <tr key={s.store}>
-                <td className="truncate px-2 py-2 font-medium text-stone-900">
-                  {s.store}
-                </td>
-                <td className="px-2 py-2 text-stone-700">{s.count}</td>
-                <td className="px-2 py-2 font-medium text-stone-900">
-                  {formatYen(s.avg, 2)}
-                </td>
-                <td className="px-2 py-2 text-stone-700">
-                  {formatYen(s.min, 2)}
-                </td>
-                {!compact && (
-                  <>
-                    <td className="px-2 py-2 text-stone-700">
-                      {formatYen(s.max, 2)}
-                    </td>
-                    <td className="px-2 py-2 text-stone-700">
-                      <span className="block truncate">
-                        {s.latestDate} · {formatYen(s.latestValue, 2)}
-                      </span>
-                    </td>
-                  </>
-                )}
-              </tr>
-            ))}
+            {summaries.map((s) => {
+              const active = selectedStore === s.store
+              return (
+                <tr
+                  key={s.store}
+                  onClick={() => toggleStore(s.store)}
+                  className={`cursor-pointer transition-colors ${
+                    active
+                      ? 'bg-stone-100'
+                      : 'hover:bg-stone-50'
+                  }`}
+                >
+                  <td className="truncate px-2 py-2 font-medium text-stone-900">
+                    {s.store}
+                  </td>
+                  <td className="px-2 py-2 text-stone-700">{s.count}</td>
+                  <td className="px-2 py-2 font-medium text-stone-900">
+                    {formatYen(s.avg, 2)}
+                  </td>
+                  <td className="px-2 py-2 text-stone-700">
+                    {formatYen(s.min, 2)}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>

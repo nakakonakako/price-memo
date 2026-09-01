@@ -70,7 +70,7 @@ export function HowToPage() {
           </p>
           <ul className="list-inside list-disc space-y-2 text-base text-stone-700 lg:text-lg">
             <li>グラフ上で横軸の位置に合わせると、記録の詳細が下に表示されます</li>
-            <li>店舗比較で、店ごとの平均・最安などを一覧できます</li>
+            <li>店舗一覧から店を選ぶと、その店の記録だけでグラフを表示できます</li>
           </ul>
         </div>
       )}
@@ -79,7 +79,7 @@ export function HowToPage() {
         <div className="space-y-3">
           <h3 className="text-xl font-semibold text-stone-900">値段推移</h3>
           <p className="text-base leading-relaxed text-stone-700">
-            フォルダを選んで、単価の推移グラフと店舗比較を見られます。グラフの点をタップすると詳細が表示されます。
+            フォルダを選んで、単価の推移グラフと店舗一覧を見られます。店舗をタップするとその店の記録だけをグラフに表示できます。
           </p>
         </div>
       )}
