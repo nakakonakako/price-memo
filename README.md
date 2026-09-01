@@ -7,6 +7,7 @@
 - 分離方針: [docs/spec-split-receipt-and-unit-price.md](./docs/spec-split-receipt-and-unit-price.md)
 - 買い物メモ: [docs/spec-shopping-memo.md](./docs/spec-shopping-memo.md)
 - フォルダタブ: [docs/spec-folders-catalog.md](./docs/spec-folders-catalog.md)
+- 値段推移: [docs/spec-trends.md](./docs/spec-trends.md)
 - 概要: [docs/project-overview.md](./docs/project-overview.md)
 
 ## やること / やらないこと
@@ -18,7 +19,7 @@
 | 買い物メモ（ピン留めリスト＋統計＋店頭試算） | 全フォルダの自動ミラー |
 | 店舗名カタログ（`StoreField`） | 値札 OCR を本流にすること |
 | A の任意参照・下書き | A 必須／A 待ちの未完成レコード |
-| 値段推移・店舗比較（PC はフォルダ内パネル、スマホはタブ） | ざっくり総額比較の復活 |
+| 値段推移・店舗別グラフ（PC はフォルダ内パネル、スマホはタブ） | ざっくり総額比較の復活 |
 
 ## 開発
 

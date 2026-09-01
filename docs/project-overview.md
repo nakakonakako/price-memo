@@ -7,7 +7,7 @@
 |------|------|
 | リポジトリ名 | `price-memo` |
 | プロダクト名（UI・仮） | 単価メモ / Price Memo |
-| ドキュメント最終更新 | 2026-08-29 |
+| ドキュメント最終更新 | 2026-09-01 |
 | 文書の扱い | **生きた概要**。機能の追加・削除・方針変更のたびに本ファイルを更新する |
 
 ---
@@ -21,6 +21,8 @@
 3. **§6 技術スタック / §7 環境** … 依存や起動手順の変化
 4. **§10 変更履歴** … 日付と一行要約を追記
 
+機能画面に操作ヒント（「タップすると…」等）を足す場合は **使い方タブ**（[spec-guide.md](./spec-guide.md)）を更新し、機能コンポーネント側には書かない。
+
 詳細な設計判断は別 md（`docs/spec-*.md` など）に切り出し、ここからはリンクする。
 
 ---
@@ -29,7 +31,7 @@
 
 **ユーザーが意図して選んだ商品だけを、確定した重量・個数・容量で厳密に記録し、単価で比較する（統計アプリ）。**
 
-- 主用途は手動フォルダに入れた商品の単価推移・店舗比較
+- 主用途は手動フォルダに入れた商品の単価推移・店舗別の絞り込み閲覧
 - 店頭では **買い物メモ**（過去統計の一覧＋その場の単位換算試算）。値札 OCR は本流にしない
 - 買わなかった観察価格も、統計データとして残してよい
 - 必要時のみ A のレシート明細を参照（任意下書き／参照）。A なしでも完結する
@@ -119,6 +121,7 @@ Supabase（A の Dev または Prod）
 | `memo` | 買い物メモ | **現行** | 店頭用ピン留めリスト（`price_memo_items`）。統計＋試算＋保存 |
 | `folders` | フォルダ | **現行** | 品目名／店名カタログ、記録 CRUD、検索・並び。詳細は [spec-folders-catalog.md](./spec-folders-catalog.md) |
 | `trends` | 値段推移 | **現行（スマホのみ）** | 独立タブ。`lg` 以上では非表示（フォルダタブの分割パネルに統合） |
+| `howto` | 使い方 | **現行** | 機能説明・操作ヒント。詳細は [spec-guide.md](./spec-guide.md) |
 | `records` | （旧）記録 | **廃止** | フォルダの「＋」モーダルに統合 |
 | `link` | （旧）レシート紐付け | **廃止** | 独立タブ削除。任意下書きは記録追加モーダル内に残す |
 | `inquiry` | 店頭照会（OCR） | **延期** | 値札 OCR。本流にしない → [spec-shopping-memo.md](./spec-shopping-memo.md) |
@@ -130,7 +133,8 @@ Supabase（A の Dev または Prod）
 | 買い物メモ | `frontend/src/features/memo/` | **現行** | `price_memo_items` による店頭リスト。フォルダマスタは参照のみ |
 | フォルダ・店舗 | `frontend/src/features/folders/` + `stores/` | **現行** | 品目・店名カタログ、記録管理。`StoreField` で店名統一 |
 | 厳密レコード | `frontend/src/features/records/` | **現行** | `RecordForm`（追加・編集モーダル）。`ensureStore` 連携 |
-| 値段推移 | `frontend/src/features/trends/` | **現行** | `FolderTrendPanel`（Recharts）。PC はフォルダタブ内、スマホは独立タブ |
+| 値段推移 | `frontend/src/features/trends/` | **現行** | `FolderTrendPanel`（Recharts）。グラフ＋店舗一覧。PC はフォルダタブ内、スマホは独立タブ |
+| 使い方 | `frontend/src/features/guide/` | **現行** | `HowToPage`。操作説明は機能画面ではなくここに集約 |
 | A 参照 | `RecordForm` 内のレシート下書き検索 | **現行** | 独立タブ・`receipt-link` モジュールは削除済み |
 | 店頭 OCR | — | **延期** | 値札 OCR（非本流）。`inquiry` プレースホルダ削除済み |
 
@@ -231,7 +235,8 @@ price-memo/
 ├── frontend/          # React SPA
 │   └── src/
 │       ├── components/
-│       ├── features/      # memo, folders, records, trends, …
+│       ├── features/      # memo, folders, records, trends, guide, …
+│       ├── lib/             # kanaSearch, listOrder, …
 │       ├── contexts/
 │       └── lib/
 ├── backend/
@@ -254,6 +259,8 @@ price-memo/
 | [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md) | A/B 分離方針 |
 | [spec-shopping-memo.md](./spec-shopping-memo.md) | 買い物メモ（店頭リスト・統計・試算） |
 | [spec-folders-catalog.md](./spec-folders-catalog.md) | フォルダタブ（品目名・店名・記録 UI） |
+| [spec-trends.md](./spec-trends.md) | 値段推移（グラフ・店舗一覧） |
+| [spec-guide.md](./spec-guide.md) | 使い方タブ |
 | `../receipt-manager/docs/project-overview.md` | A の生きた概要（隣リポジトリ） |
 
 ---
@@ -262,6 +269,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-01 | 値段推移: 店舗比較→店舗一覧（件数・平均・最安）。店クリックでグラフ絞り込み。使い方タブ追加。かな横断検索（`kanaSearch`）。メモ追加UI統合。PC グラフ外でも記録詳細を保持 |
 | 2026-08-29 | PC で値段推移タブ非表示（フォルダ分割パネルに一本化）。推移展開アニメーション改善。記録複製・フォルダ間移動 |
 | 2026-08-29 | 買い物メモ: 店名入力で統計を店舗スコープに切替。フォルダタブ分割推移パネル。死コード削除 |
 | 2026-08-28 | 並べ替え DB 永続（`sort_order`）。記録・レシート紐付けタブ廃止。フォルダに記録追加モーダル。UI から A/B 表記を排除 |
