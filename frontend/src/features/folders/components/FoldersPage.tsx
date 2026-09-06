@@ -8,6 +8,7 @@ import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
 import {
   TrashDragProvider,
   useTrashDrag,
+  MemoTrashZone,
 } from '@/components/trash/TrashDragProvider'
 import type { DragEndResult, TrashDragPayload } from '@/components/trash/types'
 import { useOutsidePointerDown } from '@/hooks/useOutsidePointerDown'
@@ -725,52 +726,72 @@ export function FoldersPage() {
   const renderFolderRecordRow = (
     folderId: string,
     record: PriceRecord,
-    opts: { dragEnabled: boolean },
-  ) => (
-    <li key={record.id} className="list-none">
-      <DraggableCatalogItem
-        dragEnabled={opts.dragEnabled}
-        payload={{
-          kind: 'folder-record',
-          id: record.id,
-          folderId,
-        }}
-        onDelete={() => void requestDeleteRecord(record.id, folderId)}
-        className="rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
-      >
-        <div className="min-w-0 py-0.5">
-          <div className="flex min-w-0 items-center gap-0.5">
-            <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
-              {record.recorded_at} · {record.store_name}
-            </p>
-            <div className="flex shrink-0 items-center">
-              <CopyIconButton
-                label="複製"
-                onClick={() => handleCopyRecord(record)}
-              />
-              <EditIconButton
-                label="編集"
-                onClick={() => setEditingRecord(record)}
-              />
+    opts: { dragEnabled: boolean; compact?: boolean },
+  ) => {
+    const per = unitPrice(record.price, record.amount)
+    const priceText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}${
+      per != null ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）` : ''
+    }`
+    return (
+      <li key={record.id} className="list-none">
+        <DraggableCatalogItem
+          dragEnabled={opts.dragEnabled}
+          payload={{
+            kind: 'folder-record',
+            id: record.id,
+            folderId,
+          }}
+          onDelete={() => void requestDeleteRecord(record.id, folderId)}
+          className={`rounded-md border border-stone-200 bg-white px-2 sm:px-3 ${
+            opts.compact ? 'py-1.5' : 'py-2'
+          }`}
+        >
+          {opts.compact ? (
+            <div className="flex min-w-0 items-center gap-1">
+              <p className="min-w-0 flex-1 truncate text-sm text-stone-900">
+                <span className="font-medium">
+                  {record.recorded_at} · {record.store_name}
+                </span>
+                <span className="font-normal text-stone-600"> {priceText}</span>
+              </p>
+              <div className="flex shrink-0 items-center">
+                <CopyIconButton
+                  label="複製"
+                  onClick={() => handleCopyRecord(record)}
+                />
+                <EditIconButton
+                  label="編集"
+                  onClick={() => setEditingRecord(record)}
+                />
+              </div>
             </div>
-          </div>
-          <p className="text-xs text-stone-600">
-            {formatYen(record.price, 0)} / {record.amount}
-            {unitLabel(record.unit)}
-            {(() => {
-              const per = unitPrice(record.price, record.amount)
-              return per != null
-                ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
-                : ''
-            })()}
-          </p>
-          {record.note && (
-            <p className="mt-1 text-xs text-stone-500">{record.note}</p>
+          ) : (
+            <div className="min-w-0 py-0.5">
+              <div className="flex min-w-0 items-center gap-0.5">
+                <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
+                  {record.recorded_at} · {record.store_name}
+                </p>
+                <div className="flex shrink-0 items-center">
+                  <CopyIconButton
+                    label="複製"
+                    onClick={() => handleCopyRecord(record)}
+                  />
+                  <EditIconButton
+                    label="編集"
+                    onClick={() => setEditingRecord(record)}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-stone-600">{priceText}</p>
+              {record.note && (
+                <p className="mt-1 text-xs text-stone-500">{record.note}</p>
+              )}
+            </div>
           )}
-        </div>
-      </DraggableCatalogItem>
-    </li>
-  )
+        </DraggableCatalogItem>
+      </li>
+    )
+  }
 
   const renderFolderCard = (folder: PriceFolder) => {
     const recordCount = getRecordCount(folder.id)
@@ -920,6 +941,7 @@ export function FoldersPage() {
                     {previewRows.map((record) =>
                       renderFolderRecordRow(folder.id, record, {
                         dragEnabled: false,
+                        compact: true,
                       }),
                     )}
                   </ul>
@@ -1068,39 +1090,43 @@ export function FoldersPage() {
               ) : (
                 <div className="space-y-2">
                   <ul className="space-y-2">
-                    {previewRows.map((record) => (
-                      <li key={record.id} className="list-none">
-                        <div className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3">
-                          <div className="min-w-0 flex-1 py-0.5">
-                            <div className="flex min-w-0 items-center gap-0.5">
-                              <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
-                                {record.recorded_at} ·{' '}
-                                {
-                                  parseFolderName(
-                                    folders.find((f) => f.id === record.folder_id)
-                                      ?.name ?? '—',
-                                  ).displayName
-                                }
-                              </p>
-                              <div className="flex shrink-0 items-center">
-                                <CopyIconButton
-                                  label="複製"
-                                  onClick={() => handleCopyRecord(record)}
-                                />
-                                <EditIconButton
-                                  label="編集"
-                                  onClick={() => setEditingRecord(record)}
-                                />
-                              </div>
-                            </div>
-                            <p className="text-xs text-stone-600">
-                              {formatYen(record.price, 0)} / {record.amount}
-                              {unitLabel(record.unit)}
+                    {previewRows.map((record) => {
+                      const per = unitPrice(record.price, record.amount)
+                      const priceText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}${
+                        per != null
+                          ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
+                          : ''
+                      }`
+                      const itemName = parseFolderName(
+                        folders.find((f) => f.id === record.folder_id)?.name ??
+                          '—',
+                      ).displayName
+                      return (
+                        <li key={record.id} className="list-none">
+                          <div className="flex min-w-0 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1.5 sm:px-3">
+                            <p className="min-w-0 flex-1 truncate text-sm text-stone-900">
+                              <span className="font-medium">
+                                {record.recorded_at} · {itemName}
+                              </span>
+                              <span className="font-normal text-stone-600">
+                                {' '}
+                                {priceText}
+                              </span>
                             </p>
+                            <div className="flex shrink-0 items-center">
+                              <CopyIconButton
+                                label="複製"
+                                onClick={() => handleCopyRecord(record)}
+                              />
+                              <EditIconButton
+                                label="編集"
+                                onClick={() => setEditingRecord(record)}
+                              />
+                            </div>
                           </div>
-                        </div>
-                      </li>
-                    ))}
+                        </li>
+                      )
+                    })}
                   </ul>
                   <button
                     type="button"
@@ -1783,8 +1809,10 @@ export function FoldersPage() {
     <TrashDragProvider
       onDragEnd={handleDragEnd}
       reorderKinds={['folder-record']}
+      trashPlacement="external"
     >
       {foldersPageBody}
+      <MemoTrashZone />
     </TrashDragProvider>
   )
 }

@@ -46,6 +46,11 @@ export function useTrashDrag() {
   return ctx
 }
 
+/** Null outside TrashDragProvider (e.g. scroll-to-top on pages without trash). */
+export function useTrashDragOptional() {
+  return useContext(TrashDragContext)
+}
+
 function listKey(kind: TrashDragPayload['kind'], scope?: string) {
   return scope ? `${kind}:${scope}` : kind
 }
@@ -292,11 +297,18 @@ export function TrashDragProvider({
       <div
         ref={trashRef}
         aria-label="ゴミ箱"
-        className={`pointer-events-none fixed z-50 transition-transform duration-150 ${
+        aria-hidden={!dragging}
+        className={`pointer-events-none fixed z-50 transition-all duration-150 ${
           largeTrash
             ? 'bottom-0 right-0 p-2 sm:bottom-2 sm:right-2'
             : 'bottom-3 right-3 sm:bottom-5 sm:right-5'
-        } ${dragOverTrash ? 'scale-110' : 'scale-100'}`}
+        } ${
+          dragging
+            ? dragOverTrash
+              ? 'scale-110 opacity-100'
+              : 'scale-100 opacity-100'
+            : 'scale-95 opacity-0'
+        }`}
       >
         <div
           className={`rounded-full transition-colors ${
