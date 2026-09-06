@@ -27,6 +27,24 @@ export async function listRecords(folderId: string): Promise<PriceRecord[]> {
   return (data ?? []).map((row) => normalize(row as PriceRecord))
 }
 
+/** Records for a set of folders (e.g. shopping memo). Empty ids → []. */
+export async function listRecordsForFolders(
+  folderIds: string[],
+): Promise<PriceRecord[]> {
+  const ids = [...new Set(folderIds.filter(Boolean))]
+  if (ids.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('price_records')
+    .select('*')
+    .in('folder_id', ids)
+    .order('recorded_at', { ascending: false })
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return (data ?? []).map((row) => normalize(row as PriceRecord))
+}
+
 export async function listAllRecords(): Promise<PriceRecord[]> {
   const { data, error } = await supabase
     .from('price_records')

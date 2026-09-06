@@ -16,7 +16,7 @@ import {
   folderSortKey,
   parseFolderName,
 } from '@/features/folders/utils/folderName'
-import { listAllRecords } from '@/features/records/api/recordsApi'
+import { listRecords, listRecordsForFolders } from '@/features/records/api/recordsApi'
 import type { PriceRecord } from '@/features/records/types'
 import { reorderIds } from '@/lib/listOrder'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
@@ -86,11 +86,13 @@ export function ShoppingMemoPage() {
     if (!opts?.silent) setIsLoading(true)
     setError(null)
     try {
-      const [folderList, memoList, recordList] = await Promise.all([
+      const [folderList, memoList] = await Promise.all([
         listFolders(),
         listMemoItems(),
-        listAllRecords(),
       ])
+      const recordList = await listRecordsForFolders(
+        memoList.map((m) => m.folder_id),
+      )
       setAllFolders(folderList)
       setMemoItems(memoList)
       setRecords(recordList)
@@ -104,6 +106,14 @@ export function ShoppingMemoPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  const mergeFolderRecords = useCallback(async (folderId: string) => {
+    const rows = await listRecords(folderId)
+    setRecords((prev) => [
+      ...rows,
+      ...prev.filter((r) => r.folder_id !== folderId),
+    ])
+  }, [])
 
   const byFolder = useMemo(() => recordsByFolderId(records), [records])
   const memoFolderIds = useMemo(
@@ -146,14 +156,18 @@ export function ShoppingMemoPage() {
     })
   }, [])
 
-  const putOnMemo = useCallback(async (folder: PriceFolder) => {
-    const item = await addMemoItem(folder.id)
-    setMemoItems((prev) => {
-      if (prev.some((m) => m.folder_id === folder.id)) return prev
-      return [...prev, item]
-    })
-    return item
-  }, [])
+  const putOnMemo = useCallback(
+    async (folder: PriceFolder) => {
+      const item = await addMemoItem(folder.id)
+      setMemoItems((prev) => {
+        if (prev.some((m) => m.folder_id === folder.id)) return prev
+        return [...prev, item]
+      })
+      await mergeFolderRecords(folder.id)
+      return item
+    },
+    [mergeFolderRecords],
+  )
 
   const addFolderToMemo = async (folder: PriceFolder) => {
     setMutating(true)
@@ -204,6 +218,7 @@ export function ShoppingMemoPage() {
     try {
       await removeMemoItem(folderId)
       setMemoItems((prev) => prev.filter((m) => m.folder_id !== folderId))
+      setRecords((prev) => prev.filter((r) => r.folder_id !== folderId))
     } catch (err) {
       setError(toUserMessage(err, 'メモからの削除に失敗しました。'))
     } finally {
