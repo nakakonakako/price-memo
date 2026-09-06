@@ -55,6 +55,17 @@ export function todayISODate(): string {
   return `${y}-${m}-${day}`
 }
 
+/** Compact list date: `9/6` (same year) or `26/9/6` (other year). */
+export function formatShortRecordedAt(isoDate: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate.trim())
+  if (!m) return isoDate
+  const year = Number(m[1])
+  const month = Number(m[2])
+  const day = Number(m[3])
+  if (year === new Date().getFullYear()) return `${month}/${day}`
+  return `${String(year).slice(2)}/${month}/${day}`
+}
+
 /**
  * Options ordered as: used units first (folder history), then remaining presets.
  * `current` is always included.

@@ -7,20 +7,17 @@ import { Modal } from '@/components/Modal'
 import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
 import {
   TrashDragProvider,
-  useTrashDrag,
   MemoTrashZone,
 } from '@/components/trash/TrashDragProvider'
-import type { DragEndResult, TrashDragPayload } from '@/components/trash/types'
+import type { DragEndResult } from '@/components/trash/types'
 import { useOutsidePointerDown } from '@/hooks/useOutsidePointerDown'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { reorderIds } from '@/lib/listOrder'
 import { matchesSearchQuery } from '@/lib/kanaSearch'
 import {
   createRecord,
   deleteRecord,
   listAllRecords,
   listRecords,
-  reorderRecords,
   updateRecord,
 } from '@/features/records/api/recordsApi'
 import {
@@ -32,6 +29,7 @@ import {
 } from '@/features/records/components/RecordForm'
 import type { PriceRecord } from '@/features/records/types'
 import {
+  formatShortRecordedAt,
   formatYen,
   unitLabel,
   unitPrice,
@@ -61,13 +59,15 @@ const nameCollator = new Intl.Collator('ja', {
 })
 
 function recentRecords(rows: PriceRecord[], limit = PREVIEW_RECORD_LIMIT) {
-  return [...rows]
-    .sort((a, b) => {
-      const byDate = b.recorded_at.localeCompare(a.recorded_at)
-      if (byDate !== 0) return byDate
-      return b.created_at.localeCompare(a.created_at)
-    })
-    .slice(0, limit)
+  return sortRecordsByDateDesc(rows).slice(0, limit)
+}
+
+function sortRecordsByDateDesc(rows: PriceRecord[]) {
+  return [...rows].sort((a, b) => {
+    const byDate = b.recorded_at.localeCompare(a.recorded_at)
+    if (byDate !== 0) return byDate
+    return b.created_at.localeCompare(a.created_at)
+  })
 }
 
 const catalogCardMinH = 'min-h-[4rem]'
@@ -91,39 +91,6 @@ const expandedLayoutStyle = {
   paddingLeft: '2rem',
   paddingRight: '2rem',
 } as const
-
-function ListRegistrar({
-  kind,
-  ids,
-  scope,
-}: {
-  kind: TrashDragPayload['kind']
-  ids: string[]
-  scope?: string
-}) {
-  const { registerList } = useTrashDrag()
-  useEffect(() => {
-    registerList(kind, ids, scope)
-  }, [kind, ids, scope, registerList])
-  return null
-}
-
-function DropEndMarker({
-  kind,
-  lastId,
-  className = 'h-1 rounded-full bg-stone-800',
-}: {
-  kind: TrashDragPayload['kind']
-  lastId: string | null
-  className?: string
-}) {
-  const { insertBeforeId, activeId, activeKind, dragOverTrash, dragging } =
-    useTrashDrag()
-  if (!dragging || dragOverTrash || activeKind !== kind) return null
-  if (insertBeforeId !== null) return null
-  if (lastId != null && activeId === lastId) return null
-  return <div className={className} aria-hidden />
-}
 
 export function FoldersPage() {
   const {
@@ -308,7 +275,7 @@ export function FoldersPage() {
   }
 
   const getStoreRecords = (storeName: string) =>
-    allRecords.filter((r) => r.store_name === storeName)
+    sortRecordsByDateDesc(allRecords.filter((r) => r.store_name === storeName))
 
   const startEditStore = (store: PriceStore) => {
     setEditingStoreId(store.id)
@@ -486,7 +453,7 @@ export function FoldersPage() {
     updater: (rows: PriceRecord[]) => PriceRecord[],
   ) => {
     setRecordsByFolder((prev) => {
-      const nextRows = updater(prev[folderId] ?? [])
+      const nextRows = sortRecordsByDateDesc(updater(prev[folderId] ?? []))
       setRecordCounts((counts) => ({ ...counts, [folderId]: nextRows.length }))
       return { ...prev, [folderId]: nextRows }
     })
@@ -656,41 +623,8 @@ export function FoldersPage() {
   const handleDragEnd = useCallback(
     async (result: DragEndResult) => {
       if (result.action === 'cancel') return
-      const payload = result.payload
-
-      if (result.action === 'reorder') {
-        if (payload.kind !== 'folder-record') return
-        const rows = recordsByFolder[payload.folderId] ?? []
-        const ids = reorderIds(
-          rows.map((r) => r.id),
-          payload.id,
-          result.beforeId,
-        )
-        patchFolderRecords(payload.folderId, (current) => {
-          const map = new Map(current.map((r) => [r.id, r]))
-          return ids
-            .map((id, sort_order) => {
-              const r = map.get(id)
-              return r ? { ...r, sort_order } : null
-            })
-            .filter((r): r is PriceRecord => r != null)
-        })
-        try {
-          await reorderRecords(payload.folderId, ids)
-        } catch (err) {
-          setRecordsError(
-            toUserMessage(err, '並べ替えの保存に失敗しました。'),
-          )
-          const fresh = await listRecords(payload.folderId)
-          setRecordsByFolder((prev) => ({
-            ...prev,
-            [payload.folderId]: fresh,
-          }))
-        }
-        return
-      }
-
       if (result.action !== 'delete') return
+      const payload = result.payload
       if (payload.kind === 'folder') {
         requestDeleteFolder(payload.id)
       } else if (payload.kind === 'store') {
@@ -699,7 +633,7 @@ export function FoldersPage() {
         void requestDeleteRecord(payload.id, payload.folderId)
       }
     },
-    [patchFolderRecords, recordsByFolder, requestDeleteFolder, requestDeleteRecord, requestDeleteStore],
+    [requestDeleteFolder, requestDeleteRecord, requestDeleteStore],
   )
 
   const showTrendsSplit =
@@ -729,9 +663,14 @@ export function FoldersPage() {
     opts: { dragEnabled: boolean; compact?: boolean },
   ) => {
     const per = unitPrice(record.price, record.amount)
-    const priceText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}${
-      per != null ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）` : ''
-    }`
+    const amountText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}`
+    const priceText =
+      opts.compact || per == null
+        ? amountText
+        : `${amountText}（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
+    const dateLabel = opts.compact
+      ? formatShortRecordedAt(record.recorded_at)
+      : record.recorded_at
     return (
       <li key={record.id} className="list-none">
         <DraggableCatalogItem
@@ -750,7 +689,7 @@ export function FoldersPage() {
             <div className="flex min-w-0 items-center gap-1">
               <p className="min-w-0 flex-1 truncate text-sm text-stone-900">
                 <span className="font-medium">
-                  {record.recorded_at} · {record.store_name}
+                  {dateLabel} · {record.store_name}
                 </span>
                 <span className="font-normal text-stone-600"> {priceText}</span>
               </p>
@@ -769,7 +708,7 @@ export function FoldersPage() {
             <div className="min-w-0 py-0.5">
               <div className="flex min-w-0 items-center gap-0.5">
                 <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
-                  {record.recorded_at} · {record.store_name}
+                  {dateLabel} · {record.store_name}
                 </p>
                 <div className="flex shrink-0 items-center">
                   <CopyIconButton
@@ -1091,12 +1030,7 @@ export function FoldersPage() {
                 <div className="space-y-2">
                   <ul className="space-y-2">
                     {previewRows.map((record) => {
-                      const per = unitPrice(record.price, record.amount)
-                      const priceText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}${
-                        per != null
-                          ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
-                          : ''
-                      }`
+                      const priceText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}`
                       const itemName = parseFolderName(
                         folders.find((f) => f.id === record.folder_id)?.name ??
                           '—',
@@ -1106,7 +1040,8 @@ export function FoldersPage() {
                           <div className="flex min-w-0 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1.5 sm:px-3">
                             <p className="min-w-0 flex-1 truncate text-sm text-stone-900">
                               <span className="font-medium">
-                                {record.recorded_at} · {itemName}
+                                {formatShortRecordedAt(record.recorded_at)} ·{' '}
+                                {itemName}
                               </span>
                               <span className="font-normal text-stone-600">
                                 {' '}
@@ -1201,25 +1136,10 @@ export function FoldersPage() {
             </p>
           ) : (
             <ul className="space-y-2">
-              {!isMobile && (
-                <ListRegistrar
-                  kind="folder-record"
-                  ids={(recordsByFolder[detailFolder.id] ?? []).map((r) => r.id)}
-                  scope={detailFolder.id}
-                />
-              )}
               {(recordsByFolder[detailFolder.id] ?? []).map((record) =>
                 renderFolderRecordRow(detailFolder.id, record, {
                   dragEnabled: !isMobile,
                 }),
-              )}
-              {!isMobile && (
-                <DropEndMarker
-                  kind="folder-record"
-                  lastId={
-                    (recordsByFolder[detailFolder.id] ?? []).at(-1)?.id ?? null
-                  }
-                />
               )}
             </ul>
           )}
@@ -1808,7 +1728,7 @@ export function FoldersPage() {
   return (
     <TrashDragProvider
       onDragEnd={handleDragEnd}
-      reorderKinds={['folder-record']}
+      reorderKinds={[]}
       trashPlacement="external"
     >
       {foldersPageBody}

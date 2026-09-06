@@ -20,7 +20,6 @@ export async function listRecords(folderId: string): Promise<PriceRecord[]> {
     .from('price_records')
     .select('*')
     .eq('folder_id', folderId)
-    .order('sort_order', { ascending: true })
     .order('recorded_at', { ascending: false })
     .order('created_at', { ascending: false })
 
@@ -32,7 +31,6 @@ export async function listAllRecords(): Promise<PriceRecord[]> {
   const { data, error } = await supabase
     .from('price_records')
     .select('*')
-    .order('sort_order', { ascending: true })
     .order('recorded_at', { ascending: false })
     .order('created_at', { ascending: false })
 
