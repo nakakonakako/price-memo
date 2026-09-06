@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { bumpRecordsRevision } from '@/lib/catalogSync'
 import { ensureStore } from '@/features/stores/api/storesCache'
 import type { PriceRecord, PriceRecordInput, ReceiptItemRef } from '../types'
 
@@ -98,6 +99,7 @@ export async function createRecord(
     .single()
 
   if (error) throw error
+  bumpRecordsRevision()
   return normalize(data as PriceRecord)
 }
 
@@ -131,12 +133,14 @@ export async function updateRecord(
     .single()
 
   if (error) throw error
+  bumpRecordsRevision()
   return normalize(data as PriceRecord)
 }
 
 export async function deleteRecord(id: string): Promise<void> {
   const { error } = await supabase.from('price_records').delete().eq('id', id)
   if (error) throw error
+  bumpRecordsRevision()
 }
 
 /** Persist record display order within a folder. */

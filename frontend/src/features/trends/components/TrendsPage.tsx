@@ -1,14 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { listFolders } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
+import { getCatalogRevisions } from '@/lib/catalogSync'
 import { toUserMessage } from '@/lib/userError'
 import { FolderTrendPanel } from './FolderTrendPanel'
 
-export function TrendsPage() {
+export function TrendsPage({ active = true }: { active?: boolean }) {
   const [folders, setFolders] = useState<PriceFolder[]>([])
   const [foldersLoading, setFoldersLoading] = useState(true)
   const [folderId, setFolderId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
+    null,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -31,6 +35,26 @@ export function TrendsPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!active) return
+    const cur = getCatalogRevisions()
+    if (catalogRevSeen.current == null) {
+      catalogRevSeen.current = cur
+      return
+    }
+    const prev = catalogRevSeen.current
+    catalogRevSeen.current = cur
+    if (cur.folders === prev.folders) return
+    void listFolders()
+      .then((list) => {
+        setFolders(list)
+        setFolderId((id) =>
+          id && list.some((f) => f.id === id) ? id : (list[0]?.id ?? null),
+        )
+      })
+      .catch(() => {})
+  }, [active])
 
   const fieldClass =
     'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500'

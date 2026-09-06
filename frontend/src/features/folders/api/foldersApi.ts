@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { bumpFoldersRevision } from '@/lib/catalogSync'
 import type { PriceFolder } from '../types'
 
 export async function listFolders(): Promise<PriceFolder[]> {
@@ -40,6 +41,7 @@ export async function createFolder(name: string): Promise<PriceFolder> {
     .single()
 
   if (error) throw error
+  bumpFoldersRevision()
   return data as PriceFolder
 }
 
@@ -58,12 +60,14 @@ export async function renameFolder(
     .single()
 
   if (error) throw error
+  bumpFoldersRevision()
   return data as PriceFolder
 }
 
 export async function deleteFolder(id: string): Promise<void> {
   const { error } = await supabase.from('price_folders').delete().eq('id', id)
   if (error) throw error
+  bumpFoldersRevision()
 }
 
 /** Persist folder display order (ids in desired order). */
@@ -80,4 +84,5 @@ export async function reorderFolders(ids: string[]): Promise<void> {
   )
   const failed = results.find((r) => r.error)
   if (failed?.error) throw failed.error
+  bumpFoldersRevision()
 }

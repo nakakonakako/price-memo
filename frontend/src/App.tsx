@@ -80,17 +80,17 @@ export default function App() {
       hiddenTabs={isLargeScreen ? ['trends'] : []}
     >
       <TabPanel active={tab === 'memo'}>
-        <ShoppingMemoPage />
+        <ShoppingMemoPage active={tab === 'memo'} />
       </TabPanel>
       {visited.folders && (
         <TabPanel active={tab === 'folders'}>
-          <FoldersPage />
+          <FoldersPage active={tab === 'folders'} />
         </TabPanel>
       )}
       {visited.trends && (
         <TabPanel active={tab === 'trends'}>
           <Suspense fallback={<TabFallback />}>
-            <TrendsPage />
+            <TrendsPage active={tab === 'trends'} />
           </Suspense>
         </TabPanel>
       )}

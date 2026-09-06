@@ -15,15 +15,15 @@ export function useFolders() {
   const [error, setError] = useState<string | null>(null)
   const [isMutating, setIsMutating] = useState(false)
 
-  const refresh = useCallback(async () => {
-    setIsLoading(true)
+  const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setIsLoading(true)
     setError(null)
     try {
       setFolders(await listFolders())
     } catch (err) {
       setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
     } finally {
-      setIsLoading(false)
+      if (!opts?.silent) setIsLoading(false)
     }
   }, [])
 

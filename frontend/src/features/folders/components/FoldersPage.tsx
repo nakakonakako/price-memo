@@ -35,6 +35,7 @@ import {
   unitPrice,
 } from '@/features/records/utils/unitPrice'
 import { toUserMessage } from '@/lib/userError'
+import { getCatalogRevisions } from '@/lib/catalogSync'
 import {
   createStore,
   deleteStore,
@@ -100,7 +101,7 @@ const expandedLayoutStyle = {
   paddingRight: '2rem',
 } as const
 
-export function FoldersPage() {
+export function FoldersPage({ active = true }: { active?: boolean }) {
   const {
     folders,
     isLoading,
@@ -109,6 +110,7 @@ export function FoldersPage() {
     create,
     rename,
     remove,
+    refresh: refreshFolders,
   } = useFolders()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
@@ -269,6 +271,28 @@ export function FoldersPage() {
   useEffect(() => {
     void Promise.all([refreshStores(), refreshAllRecords()])
   }, [refreshStores, refreshAllRecords])
+
+  const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
+    null,
+  )
+
+  useEffect(() => {
+    if (!active) return
+    const cur = getCatalogRevisions()
+    if (catalogRevSeen.current == null) {
+      catalogRevSeen.current = cur
+      return
+    }
+    const prev = catalogRevSeen.current
+    catalogRevSeen.current = cur
+    if (cur.folders !== prev.folders) {
+      void refreshFolders({ silent: true })
+    }
+    if (cur.records !== prev.records) {
+      setRecordsByFolder({})
+      void refreshAllRecords()
+    }
+  }, [active, refreshAllRecords, refreshFolders])
 
   const storeRecordCounts = useMemo(() => {
     const byName: Record<string, number> = {}

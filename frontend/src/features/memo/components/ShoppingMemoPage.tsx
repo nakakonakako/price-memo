@@ -21,6 +21,7 @@ import type { PriceRecord } from '@/features/records/types'
 import { reorderIds } from '@/lib/listOrder'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import { toUserMessage } from '@/lib/userError'
+import { getCatalogRevisions } from '@/lib/catalogSync'
 import {
   addMemoItem,
   listMemoItems,
@@ -69,7 +70,7 @@ function MemoListEndMarker({ lastId }: { lastId: string | null }) {
   return <div className="h-1 rounded-full bg-stone-800" aria-hidden />
 }
 
-export function ShoppingMemoPage() {
+export function ShoppingMemoPage({ active = true }: { active?: boolean }) {
   const isMobile = useMediaQuery('(max-width: 1023px)')
   const [allFolders, setAllFolders] = useState<PriceFolder[]>([])
   const [memoItems, setMemoItems] = useState<PriceMemoItem[]>([])
@@ -106,6 +107,36 @@ export function ShoppingMemoPage() {
   useEffect(() => {
     void load()
   }, [load])
+
+  const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
+    null,
+  )
+
+  useEffect(() => {
+    if (!active) return
+    const cur = getCatalogRevisions()
+    if (catalogRevSeen.current == null) {
+      catalogRevSeen.current = cur
+      return
+    }
+    const prev = catalogRevSeen.current
+    catalogRevSeen.current = cur
+
+    if (cur.folders !== prev.folders) {
+      void listFolders()
+        .then(setAllFolders)
+        .catch(() => {})
+    }
+    if (cur.records !== prev.records) {
+      void listMemoItems()
+        .then((memoList) => {
+          setMemoItems(memoList)
+          return listRecordsForFolders(memoList.map((m) => m.folder_id))
+        })
+        .then(setRecords)
+        .catch(() => {})
+    }
+  }, [active])
 
   const mergeFolderRecords = useCallback(async (folderId: string) => {
     const rows = await listRecords(folderId)
