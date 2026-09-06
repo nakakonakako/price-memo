@@ -55,12 +55,12 @@ export function HowToPage() {
         </p>
         <ul className="list-inside list-disc space-y-2 text-base text-stone-700 lg:text-lg">
           <li>
-            <strong>品目名</strong> … 鶏むね・牛乳などのフォルダ。中に記録（日付・店・値段・内容量）を追加
+            <strong>品目名</strong> … 鶏むね・牛乳などのフォルダ。タップで詳細（記録一覧）を開き、記録を追加・編集
           </li>
           <li>
-            <strong>店名</strong> … よく行く店舗の一覧。店ごとに記録を確認できます
+            <strong>店名</strong> … よく行く店舗の一覧。タップでその店の記録詳細を開けます
           </li>
-          <li>虫眼鏡ボタンでフォルダ・店舗を検索</li>
+          <li>虫眼鏡でフォルダ名・店舗名をまとめて検索（候補は両方のセクションに出ます）</li>
           {isMobile ? (
             <>
               <li>品目・店名カード、フォルダ内の記録は左スワイプで削除（記録ありのフォルダ削除は確認あり）</li>

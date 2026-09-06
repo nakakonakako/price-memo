@@ -138,7 +138,7 @@ export function FoldersPage() {
   const [storeAddFolderId, setStoreAddFolderId] = useState('')
   const [addingBusy, setAddingBusy] = useState(false)
   const [editingBusy, setEditingBusy] = useState(false)
-  const [folderQuery, setFolderQuery] = useState('')
+  const [catalogQuery, setCatalogQuery] = useState('')
   const [catalogSearchOpen, setCatalogSearchOpen] = useState(false)
   const catalogSearchRef = useRef<HTMLInputElement>(null)
   const [folderSort, setFolderSort] = useState<CatalogSort>('added')
@@ -146,7 +146,6 @@ export function FoldersPage() {
   const [stores, setStores] = useState<PriceStore[]>([])
   const [storesLoading, setStoresLoading] = useState(true)
   const [storesError, setStoresError] = useState<string | null>(null)
-  const [storeQuery, setStoreQuery] = useState('')
   const [storeSort, setStoreSort] = useState<CatalogSort>('added')
   const [editingStoreId, setEditingStoreId] = useState<string | null>(null)
   const [editingStoreName, setEditingStoreName] = useState('')
@@ -192,8 +191,11 @@ export function FoldersPage() {
     [folders],
   )
 
+  const catalogQueryTrimmed = catalogQuery.trim()
+  const isCatalogSearching = catalogQueryTrimmed.length > 0
+
   const visibleFolders = useMemo(() => {
-    const q = folderQuery.trim()
+    const q = catalogQueryTrimmed
     const filtered = q
       ? folders.filter((f) => {
           const { displayName, reading } = parseFolderName(f.name)
@@ -221,10 +223,10 @@ export function FoldersPage() {
       })
     }
     return rows
-  }, [draftFolderId, folderQuery, folderSort, folders])
+  }, [draftFolderId, catalogQueryTrimmed, folderSort, folders])
 
   const visibleStores = useMemo(() => {
-    const q = storeQuery.trim()
+    const q = catalogQueryTrimmed
     const filtered = q
       ? stores.filter((s) => matchesSearchQuery(s.name, q))
       : stores
@@ -239,7 +241,7 @@ export function FoldersPage() {
       })
     }
     return rows
-  }, [storeQuery, storeSort, stores])
+  }, [catalogQueryTrimmed, storeSort, stores])
 
   const refreshStores = useCallback(async () => {
     setStoresLoading(true)
@@ -369,13 +371,18 @@ export function FoldersPage() {
   useOutsidePointerDown(editingStoreId != null, cancelEditStore)
 
   const toggleStoreDetail = (storeId: string) => {
-    if (openStoreId === storeId) {
-      setOpenStoreId(null)
-      return
-    }
+    setOpenFolderId(null)
     setOpenStoreId(storeId)
     setEditingRecord(null)
+    setCatalogView('store')
+    setTrendsFolderId(null)
+    setTrendsLayoutOpen(false)
   }
+
+  const closeCatalogDetail = useCallback(() => {
+    setOpenFolderId(null)
+    setOpenStoreId(null)
+  }, [])
 
   const startEdit = (folder: PriceFolder) => {
     setEditingId(folder.id)
@@ -417,14 +424,11 @@ export function FoldersPage() {
 
   useOutsidePointerDown(editingId != null, cancelEdit)
 
-  const toggleFolderDetail = async (folderId: string) => {
-    if (openFolderId === folderId) {
-      setOpenFolderId(null)
-      return
-    }
-
+  const openFolderDetail = async (folderId: string) => {
+    setOpenStoreId(null)
     setOpenFolderId(folderId)
     setRecordsError(null)
+    setCatalogView('folder')
 
     if (recordsByFolder[folderId]) return
 
@@ -657,573 +661,596 @@ export function FoldersPage() {
     trendsRecords === undefined &&
     openFolderLoadingId === trendsFolderId
 
+  const detailFolder =
+    openFolderId != null
+      ? (folders.find((f) => f.id === openFolderId) ?? null)
+      : null
+  const detailStore =
+    openStoreId != null
+      ? (stores.find((s) => s.id === openStoreId) ?? null)
+      : null
+  const inCatalogDetail = detailFolder != null || detailStore != null
+
+  const renderFolderCard = (folder: PriceFolder) => {
+    const recordCount = getRecordCount(folder.id)
+    return (
+      <li key={folder.id} className="flex flex-col">
+        <DraggableCatalogItem
+          dragEnabled={!isMobile}
+          payload={{ kind: 'folder', id: folder.id }}
+          onClick={() => {
+            if (editingId === folder.id) return
+            void openFolderDetail(folder.id)
+          }}
+          onDelete={() => requestDeleteFolder(folder.id)}
+          className={`relative flex ${catalogCardMinH} flex-col overflow-hidden rounded-lg border border-amber-200/90 bg-gradient-to-b from-amber-50 via-amber-50/90 to-amber-100/40 shadow-sm transition-shadow hover:shadow-md`}
+        >
+          <div
+            className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-amber-300/70 bg-amber-200/90"
+            aria-hidden
+          />
+          <div className={`flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`}>
+            {editingId === folder.id ? (
+              <form
+                data-edit-surface
+                data-no-trash-drag
+                onSubmit={(e) => void handleRename(e)}
+                className="flex w-full min-w-0 items-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500"
+                  autoFocus
+                  disabled={isMutating}
+                />
+                <button
+                  type="submit"
+                  disabled={isMutating || !editingName.trim()}
+                  className="shrink-0 rounded-md bg-stone-900 px-2.5 py-1.5 text-sm text-white disabled:opacity-50"
+                >
+                  保存
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="shrink-0 rounded-md px-2.5 py-1.5 text-sm text-stone-600 hover:bg-white/60"
+                >
+                  取消
+                </button>
+              </form>
+            ) : (
+              <div className="flex min-w-0 w-full items-center">
+                <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
+                  {parseFolderName(folder.name).displayName}
+                </span>
+                <EditIconButton
+                  quiet
+                  label="名前変更"
+                  onClick={() => startEdit(folder)}
+                  disabled={isMutating}
+                />
+                <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
+                  <button
+                    type="button"
+                    aria-label="値段推移"
+                    title="値段推移"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      toggleTrendsPanel(folder.id)
+                    }}
+                    className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-white/70 lg:inline-flex ${
+                      trendsFolderId === folder.id && trendsLayoutOpen
+                        ? 'bg-white/90 text-stone-900'
+                        : 'text-stone-600'
+                    }`}
+                  >
+                    <ChartIcon className="h-4 w-4" />
+                  </button>
+                  <span className="tabular-nums text-sm text-stone-500">
+                    {recordCount}
+                  </span>
+                  <span className="shrink-0 text-stone-400" aria-hidden>
+                    ▸
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="記録を追加"
+                    title="記録を追加"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAddRecordInitial(null)
+                      setAddingFolderId(folder.id)
+                    }}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700 hover:bg-white/70"
+                  >
+                    ＋
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DraggableCatalogItem>
+      </li>
+    )
+  }
+
+  const renderStoreCard = (store: PriceStore) => {
+    const recordCount = getStoreRecordCount(store.id)
+    return (
+      <li key={store.id} className="flex flex-col">
+        <DraggableCatalogItem
+          dragEnabled={!isMobile}
+          payload={{ kind: 'store', id: store.id }}
+          onClick={() => {
+            if (editingStoreId === store.id) return
+            toggleStoreDetail(store.id)
+          }}
+          onDelete={() => requestDeleteStore(store.id)}
+          className={`relative flex ${catalogCardMinH} flex-col overflow-hidden rounded-lg border border-emerald-200/90 bg-gradient-to-b from-emerald-50 via-emerald-50/90 to-emerald-100/40 shadow-sm transition-shadow hover:shadow-md`}
+        >
+          <div
+            className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-emerald-300/70 bg-emerald-200/90"
+            aria-hidden
+          />
+          <div className={`flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`}>
+            {editingStoreId === store.id ? (
+              <form
+                data-edit-surface
+                data-no-trash-drag
+                onSubmit={(e) => void handleRenameStore(e)}
+                className="flex w-full min-w-0 items-center gap-1"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <input
+                  type="text"
+                  value={editingStoreName}
+                  onChange={(e) => setEditingStoreName(e.target.value)}
+                  className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500"
+                  autoFocus
+                  disabled={storeMutating}
+                />
+                <button
+                  type="submit"
+                  disabled={storeMutating || !editingStoreName.trim()}
+                  className="shrink-0 rounded-md bg-stone-900 px-2.5 py-1.5 text-sm text-white disabled:opacity-50"
+                >
+                  保存
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelEditStore}
+                  className="shrink-0 rounded-md px-2.5 py-1.5 text-sm text-stone-600 hover:bg-white/60"
+                >
+                  取消
+                </button>
+              </form>
+            ) : (
+              <div className="flex min-w-0 w-full items-center">
+                <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
+                  {store.name}
+                </span>
+                <EditIconButton
+                  quiet
+                  label="名前変更"
+                  onClick={() => startEditStore(store)}
+                  disabled={storeMutating}
+                />
+                <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
+                  <span className="tabular-nums text-sm text-stone-500">
+                    {recordCount}
+                  </span>
+                  <span className="shrink-0 text-stone-400" aria-hidden>
+                    ▸
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="記録を追加"
+                    title="記録を追加"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setAddingForStore(store)
+                      setStoreAddFolderId(folders[0]?.id ?? '')
+                    }}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700 hover:bg-white/70"
+                  >
+                    ＋
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DraggableCatalogItem>
+      </li>
+    )
+  }
+
   const catalogSection = (
     <section className="min-w-0 space-y-4 pb-28">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex rounded-md border border-stone-300 bg-white p-0.5">
+      {inCatalogDetail && detailFolder ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
-              onClick={() => {
-                setCatalogView('folder')
-                setOpenStoreId(null)
-              }}
-              className={`rounded px-3 py-1.5 text-sm ${
-                catalogView === 'folder'
-                  ? 'bg-stone-900 text-white'
-                  : 'text-stone-700 hover:bg-stone-100'
-              }`}
+              onClick={closeCatalogDetail}
+              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
             >
-              品目名
+              ← 一覧へ
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCatalogView('store')
-                setOpenFolderId(null)
-                setTrendsFolderId(null)
-                setTrendsLayoutOpen(false)
-              }}
-              className={`rounded px-3 py-1.5 text-sm ${
-                catalogView === 'store'
-                  ? 'bg-stone-900 text-white'
-                  : 'text-stone-700 hover:bg-stone-100'
-              }`}
-            >
-              店名
-            </button>
+            <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-stone-900">
+              {parseFolderName(detailFolder.name).displayName}
+            </h2>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                aria-label="値段推移"
+                title="値段推移"
+                onClick={() => toggleTrendsPanel(detailFolder.id)}
+                className={`hidden h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white hover:bg-stone-50 lg:inline-flex ${
+                  trendsFolderId === detailFolder.id && trendsLayoutOpen
+                    ? 'bg-stone-100 text-stone-900'
+                    : 'text-stone-600'
+                }`}
+              >
+                <ChartIcon className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="記録を追加"
+                onClick={() => {
+                  setAddRecordInitial(null)
+                  setAddingFolderId(detailFolder.id)
+                }}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white text-lg font-medium text-stone-700 hover:bg-stone-50"
+              >
+                ＋
+              </button>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <button
-              type="button"
-              onClick={() =>
-                setCatalogSearchOpen((open) => {
-                  const next = !open
-                  if (!next) {
-                    setFolderQuery('')
-                    setStoreQuery('')
+          {recordsError && (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {recordsError}
+            </p>
+          )}
+          {openFolderLoadingId === detailFolder.id ? (
+            <p className="text-sm text-stone-500">中身を読み込み中...</p>
+          ) : (recordsByFolder[detailFolder.id] ?? []).length === 0 ? (
+            <p className="rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500">
+              このフォルダにレコードはまだありません
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {!isMobile && (
+                <ListRegistrar
+                  kind="folder-record"
+                  ids={(recordsByFolder[detailFolder.id] ?? []).map((r) => r.id)}
+                  scope={detailFolder.id}
+                />
+              )}
+              {(recordsByFolder[detailFolder.id] ?? []).map((record) => (
+                <li key={record.id} className="list-none">
+                  <DraggableCatalogItem
+                    dragEnabled={!isMobile}
+                    payload={{
+                      kind: 'folder-record',
+                      id: record.id,
+                      folderId: detailFolder.id,
+                    }}
+                    onDelete={() =>
+                      void requestDeleteRecord(record.id, detailFolder.id)
+                    }
+                    className="rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
+                  >
+                    <div className="min-w-0 py-0.5">
+                      <div className="flex min-w-0 items-center gap-0.5">
+                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
+                          {record.recorded_at} · {record.store_name}
+                        </p>
+                        <div className="flex shrink-0 items-center">
+                          <CopyIconButton
+                            label="複製"
+                            onClick={() => handleCopyRecord(record)}
+                          />
+                          <EditIconButton
+                            label="編集"
+                            onClick={() => setEditingRecord(record)}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-stone-600">
+                        {formatYen(record.price, 0)} / {record.amount}
+                        {unitLabel(record.unit)}
+                        {(() => {
+                          const per = unitPrice(record.price, record.amount)
+                          return per != null
+                            ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
+                            : ''
+                        })()}
+                      </p>
+                      {record.note && (
+                        <p className="mt-1 text-xs text-stone-500">{record.note}</p>
+                      )}
+                    </div>
+                  </DraggableCatalogItem>
+                </li>
+              ))}
+              {!isMobile && (
+                <DropEndMarker
+                  kind="folder-record"
+                  lastId={
+                    (recordsByFolder[detailFolder.id] ?? []).at(-1)?.id ?? null
                   }
-                  return next
-                })
-              }
-              className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white hover:bg-stone-50 ${
-                catalogSearchOpen ? 'bg-stone-100 text-stone-900' : 'text-stone-600'
-              }`}
-              aria-label="検索"
-              aria-expanded={catalogSearchOpen}
+                />
+              )}
+            </ul>
+          )}
+        </>
+      ) : inCatalogDetail && detailStore ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={closeCatalogDetail}
+              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
             >
-              <SearchIcon />
+              ← 一覧へ
             </button>
-            <label className="flex shrink-0 items-center gap-2 text-sm text-stone-600">
-              <span className="sr-only">並び</span>
-              <select
-              value={catalogView === 'folder' ? folderSort : storeSort}
-              onChange={(e) => {
-                const next = e.target.value as CatalogSort
-                if (catalogView === 'folder') setFolderSort(next)
-                else setStoreSort(next)
+            <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-stone-900">
+              {detailStore.name}
+            </h2>
+            <button
+              type="button"
+              aria-label="記録を追加"
+              onClick={() => {
+                setAddingForStore(detailStore)
+                setStoreAddFolderId(folders[0]?.id ?? '')
               }}
-              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-              title={
-                catalogView === 'folder'
-                  ? '名前順は末尾の () / （）内の読みを優先します。'
-                  : undefined
-              }
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-stone-300 bg-white text-lg font-medium text-stone-700 hover:bg-stone-50"
             >
-              <option value="added">追加順（新しい順）</option>
-              <option value="name">名前順</option>
-            </select>
-          </label>
+              ＋
+            </button>
           </div>
-        </div>
-
-        {catalogSearchOpen && (
-          <input
-            ref={catalogSearchRef}
-            type="text"
-            value={catalogView === 'folder' ? folderQuery : storeQuery}
-            onChange={(e) =>
-              catalogView === 'folder'
-                ? setFolderQuery(e.target.value)
-                : setStoreQuery(e.target.value)
-            }
-            placeholder={
-              catalogView === 'folder' ? 'フォルダ名で検索' : '店舗名で検索'
-            }
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-          />
-        )}
-
-        {error && catalogView === 'folder' && (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {error}
-          </p>
-        )}
-        {storesError && catalogView === 'store' && (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {storesError}
-          </p>
-        )}
-        {recordsError && catalogView === 'folder' && (
-          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-            {recordsError}
-          </p>
-        )}
-
-        {isLoading && catalogView === 'folder' ? (
-          <p className="text-sm text-stone-500">読み込み中...</p>
-        ) : storesLoading && catalogView === 'store' ? (
-          <p className="text-sm text-stone-500">読み込み中...</p>
-        ) : catalogView === 'folder' ? (
-          <ul className="grid gap-4 sm:grid-cols-2">
-            {!folderQuery.trim() && (
-            <li className="flex flex-col">
+          {getStoreRecords(detailStore.name).length === 0 ? (
+            <p className="rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500">
+              この店舗の記録はまだありません。
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {getStoreRecords(detailStore.name).map((record) => (
+                <li key={record.id} className="list-none">
+                  <div className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3">
+                    <div className="min-w-0 flex-1 py-0.5">
+                      <div className="flex min-w-0 items-center gap-0.5">
+                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
+                          {record.recorded_at} ·{' '}
+                          {
+                            parseFolderName(
+                              folders.find((f) => f.id === record.folder_id)
+                                ?.name ?? '—',
+                            ).displayName
+                          }
+                        </p>
+                        <div className="flex shrink-0 items-center">
+                          <CopyIconButton
+                            label="複製"
+                            onClick={() => handleCopyRecord(record)}
+                          />
+                          <EditIconButton
+                            label="編集"
+                            onClick={() => setEditingRecord(record)}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-stone-600">
+                        {formatYen(record.price, 0)} / {record.amount}
+                        {unitLabel(record.unit)}
+                      </p>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex rounded-md border border-stone-300 bg-white p-0.5">
               <button
                 type="button"
-                onClick={() => void handleAddFolder()}
-                disabled={isMutating}
-                aria-label="フォルダを追加"
-                className={`relative flex ${catalogCardMinH} w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50`}
+                onClick={() => setCatalogView('folder')}
+                className={`rounded px-3 py-1.5 text-sm ${
+                  catalogView === 'folder' && !isCatalogSearching
+                    ? 'bg-stone-900 text-white'
+                    : 'text-stone-700 hover:bg-stone-100'
+                }`}
               >
-                <div
-                  className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
-                  aria-hidden
-                />
-                <span
-                  className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-500 text-xl font-light leading-none text-sky-700"
-                  aria-hidden
-                >
-                  ＋
-                </span>
+                品目名
               </button>
-            </li>
-            )}
-
-            {visibleFolders.length === 0 ? (
-              <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500 sm:col-span-1">
-                {folderQuery.trim()
-                  ? '一致するフォルダがありません。'
-                  : 'まだフォルダがありません'}
-              </li>
-            ) : (
-              visibleFolders.map((folder) => {
-                const isOpen = openFolderId === folder.id
-                const recordCount = getRecordCount(folder.id)
-                return (
-                  <li key={folder.id} className="flex flex-col">
-                    <DraggableCatalogItem
-                      dragEnabled={!isMobile}
-                      payload={{ kind: 'folder', id: folder.id }}
-                      onClick={() => {
-                        if (editingId === folder.id) return
-                        void toggleFolderDetail(folder.id)
-                      }}
-                      onDelete={() => requestDeleteFolder(folder.id)}
-                      className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
-                        isOpen
-                          ? 'border-amber-400/80 shadow-md'
-                          : `border-amber-200/90 hover:shadow-md ${catalogCardMinH}`
-                      } bg-gradient-to-b from-amber-50 via-amber-50/90 to-amber-100/40`}
-                    >
-                      <div
-                        className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-amber-300/70 bg-amber-200/90"
-                        aria-hidden
-                      />
-
-                      <div
-                        className={
-                          isOpen
-                            ? 'flex flex-col gap-2 px-4 pb-2 pt-4'
-                            : `flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`
-                        }
-                      >
-                        {editingId === folder.id ? (
-                          <form
-                            data-edit-surface
-                            data-no-trash-drag
-                            onSubmit={(e) => void handleRename(e)}
-                            className="flex w-full min-w-0 items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              type="text"
-                              value={editingName}
-                              onChange={(e) => setEditingName(e.target.value)}
-                              className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500"
-                              autoFocus
-                              disabled={isMutating}
-                            />
-                            <button
-                              type="submit"
-                              disabled={isMutating || !editingName.trim()}
-                              className="shrink-0 rounded-md bg-stone-900 px-2.5 py-1.5 text-sm text-white disabled:opacity-50"
-                            >
-                              保存
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelEdit}
-                              className="shrink-0 rounded-md px-2.5 py-1.5 text-sm text-stone-600 hover:bg-white/60"
-                            >
-                              取消
-                            </button>
-                          </form>
-                        ) : (
-                          <div className="flex min-w-0 w-full items-center">
-                            <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
-                              {parseFolderName(folder.name).displayName}
-                            </span>
-                            <EditIconButton
-                              quiet
-                              label="名前変更"
-                              onClick={() => startEdit(folder)}
-                              disabled={isMutating}
-                            />
-                            <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
-                              <button
-                                type="button"
-                                aria-label="値段推移"
-                                title="値段推移"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleTrendsPanel(folder.id)
-                                }}
-                                className={`hidden h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-white/70 lg:inline-flex ${
-                                  trendsFolderId === folder.id && trendsLayoutOpen
-                                    ? 'bg-white/90 text-stone-900'
-                                    : 'text-stone-600'
-                                }`}
-                              >
-                                <ChartIcon className="h-4 w-4" />
-                              </button>
-                              <span className="tabular-nums text-sm text-stone-500">
-                                {recordCount}
-                              </span>
-                              <span
-                                className="shrink-0 text-stone-400 transition-transform"
-                                style={{
-                                  transform: isOpen
-                                    ? 'rotate(90deg)'
-                                    : undefined,
-                                }}
-                                aria-hidden
-                              >
-                                ▸
-                              </span>
-                              <button
-                                type="button"
-                                aria-label="記録を追加"
-                                title="記録を追加"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setAddRecordInitial(null)
-                                  setAddingFolderId(folder.id)
-                                }}
-                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700 hover:bg-white/70"
-                              >
-                                ＋
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {isOpen && (
-                        <div className="border-t border-amber-200/70 bg-white/80 px-3 py-3">
-                          {openFolderLoadingId === folder.id ? (
-                            <p className="text-sm text-stone-500">
-                              中身を読み込み中...
-                            </p>
-                          ) : (recordsByFolder[folder.id] ?? []).length ===
-                            0 ? (
-                            <p className="text-sm text-stone-500">
-                              このフォルダにレコードはまだありません
-                            </p>
-                          ) : (
-                            <ul className="max-h-64 space-y-2 overflow-y-auto">
-                              {!isMobile && (
-                                <ListRegistrar
-                                  kind="folder-record"
-                                  ids={(recordsByFolder[folder.id] ?? []).map(
-                                    (r) => r.id,
-                                  )}
-                                  scope={folder.id}
-                                />
-                              )}
-                              {(recordsByFolder[folder.id] ?? []).map(
-                                (record) => (
-                                  <li key={record.id} className="list-none">
-                                    <DraggableCatalogItem
-                                      dragEnabled={!isMobile}
-                                      payload={{
-                                        kind: 'folder-record',
-                                        id: record.id,
-                                        folderId: folder.id,
-                                      }}
-                                      onDelete={() =>
-                                        void requestDeleteRecord(
-                                          record.id,
-                                          folder.id,
-                                        )
-                                      }
-                                      className="rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
-                                    >
-                                      <div className="min-w-0 py-0.5">
-                                        <div className="flex min-w-0 items-center gap-0.5">
-                                          <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
-                                            {record.recorded_at} ·{' '}
-                                            {record.store_name}
-                                          </p>
-                                          <div className="flex shrink-0 items-center">
-                                            <CopyIconButton
-                                              label="複製"
-                                              onClick={() =>
-                                                handleCopyRecord(record)
-                                              }
-                                            />
-                                            <EditIconButton
-                                              label="編集"
-                                              onClick={() =>
-                                                setEditingRecord(record)
-                                              }
-                                            />
-                                          </div>
-                                        </div>
-                                        <p className="text-xs text-stone-600">
-                                          {formatYen(record.price, 0)} /{' '}
-                                          {record.amount}
-                                          {unitLabel(record.unit)}
-                                          {(() => {
-                                            const per = unitPrice(
-                                              record.price,
-                                              record.amount,
-                                            )
-                                            return per != null
-                                              ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
-                                              : ''
-                                          })()}
-                                        </p>
-                                        {record.note && (
-                                          <p className="mt-1 text-xs text-stone-500">
-                                            {record.note}
-                                          </p>
-                                        )}
-                                      </div>
-                                    </DraggableCatalogItem>
-                                  </li>
-                                ),
-                              )}
-                              {!isMobile && (
-                                <DropEndMarker
-                                  kind="folder-record"
-                                  lastId={
-                                    (recordsByFolder[folder.id] ?? []).at(-1)
-                                      ?.id ?? null
-                                  }
-                                />
-                              )}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </DraggableCatalogItem>
-                  </li>
-                )
-              })
-            )}
-          </ul>
-        ) : (
-          <ul className="grid gap-4 sm:grid-cols-2">
-            <li className="flex flex-col">
               <button
                 type="button"
-                onClick={() => void handleAddStore()}
-                disabled={storeMutating}
-                aria-label="店舗を追加"
-                className={`relative flex ${catalogCardMinH} w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50`}
+                onClick={() => {
+                  setCatalogView('store')
+                  setTrendsFolderId(null)
+                  setTrendsLayoutOpen(false)
+                }}
+                className={`rounded px-3 py-1.5 text-sm ${
+                  catalogView === 'store' && !isCatalogSearching
+                    ? 'bg-stone-900 text-white'
+                    : 'text-stone-700 hover:bg-stone-100'
+                }`}
               >
-                <div
-                  className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
-                  aria-hidden
-                />
-                <span
-                  className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-500 text-xl font-light leading-none text-sky-700"
-                  aria-hidden
-                >
-                  ＋
-                </span>
+                店名
               </button>
-            </li>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setCatalogSearchOpen((open) => {
+                    const next = !open
+                    if (!next) setCatalogQuery('')
+                    return next
+                  })
+                }
+                className={`inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white hover:bg-stone-50 ${
+                  catalogSearchOpen ? 'bg-stone-100 text-stone-900' : 'text-stone-600'
+                }`}
+                aria-label="検索"
+                aria-expanded={catalogSearchOpen}
+              >
+                <SearchIcon />
+              </button>
+              <label className="flex shrink-0 items-center gap-2 text-sm text-stone-600">
+                <span className="sr-only">並び</span>
+                <select
+                  value={catalogView === 'folder' ? folderSort : storeSort}
+                  onChange={(e) => {
+                    const next = e.target.value as CatalogSort
+                    if (catalogView === 'folder') setFolderSort(next)
+                    else setStoreSort(next)
+                  }}
+                  className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+                  title={
+                    catalogView === 'folder'
+                      ? '名前順は末尾の () / （）内の読みを優先します。'
+                      : undefined
+                  }
+                >
+                  <option value="added">追加順（新しい順）</option>
+                  <option value="name">名前順</option>
+                </select>
+              </label>
+            </div>
+          </div>
 
-            {visibleStores.length === 0 ? (
-              <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500 sm:col-span-1">
-                {storeQuery.trim()
-                  ? '一致する店舗がありません。'
-                  : 'まだ店舗がありません。左のカードから追加してください。'}
+          {catalogSearchOpen && (
+            <input
+              ref={catalogSearchRef}
+              type="text"
+              value={catalogQuery}
+              onChange={(e) => setCatalogQuery(e.target.value)}
+              placeholder="フォルダ名・店舗名で検索"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+            />
+          )}
+
+          {error && (catalogView === 'folder' || isCatalogSearching) && (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
+          {storesError && (catalogView === 'store' || isCatalogSearching) && (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {storesError}
+            </p>
+          )}
+          {recordsError && catalogView === 'folder' && !isCatalogSearching && (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {recordsError}
+            </p>
+          )}
+
+          {isLoading && (catalogView === 'folder' || isCatalogSearching) ? (
+            <p className="text-sm text-stone-500">読み込み中...</p>
+          ) : storesLoading && catalogView === 'store' && !isCatalogSearching ? (
+            <p className="text-sm text-stone-500">読み込み中...</p>
+          ) : isCatalogSearching ? (
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-stone-600">品目名</h3>
+                <ul className="grid gap-4 sm:grid-cols-2">
+                  {visibleFolders.length === 0 ? (
+                    <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-6 text-center text-sm text-stone-500">
+                      一致するフォルダがありません。
+                    </li>
+                  ) : (
+                    visibleFolders.map((folder) => renderFolderCard(folder))
+                  )}
+                </ul>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-stone-600">店名</h3>
+                <ul className="grid gap-4 sm:grid-cols-2">
+                  {visibleStores.length === 0 ? (
+                    <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-6 text-center text-sm text-stone-500">
+                      一致する店舗がありません。
+                    </li>
+                  ) : (
+                    visibleStores.map((store) => renderStoreCard(store))
+                  )}
+                </ul>
+              </div>
+            </div>
+          ) : catalogView === 'folder' ? (
+            <ul className="grid gap-4 sm:grid-cols-2">
+              <li className="flex flex-col">
+                <button
+                  type="button"
+                  onClick={() => void handleAddFolder()}
+                  disabled={isMutating}
+                  aria-label="フォルダを追加"
+                  className={`relative flex ${catalogCardMinH} w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50`}
+                >
+                  <div
+                    className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
+                    aria-hidden
+                  />
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-500 text-xl font-light leading-none text-sky-700"
+                    aria-hidden
+                  >
+                    ＋
+                  </span>
+                </button>
               </li>
-            ) : (
-              visibleStores.map((store) => {
-                const isOpen = openStoreId === store.id
-                const recordCount = getStoreRecordCount(store.id)
-                const storeRecords = getStoreRecords(store.name)
-                return (
-                  <li key={store.id} className="flex flex-col">
-                    <DraggableCatalogItem
-                      dragEnabled={!isMobile}
-                      payload={{ kind: 'store', id: store.id }}
-                      onClick={() => {
-                        if (editingStoreId === store.id) return
-                        toggleStoreDetail(store.id)
-                      }}
-                      onDelete={() => requestDeleteStore(store.id)}
-                      className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
-                        isOpen
-                          ? 'border-emerald-400/80 shadow-md'
-                          : `border-emerald-200/90 hover:shadow-md ${catalogCardMinH}`
-                      } bg-gradient-to-b from-emerald-50 via-emerald-50/90 to-emerald-100/40`}
-                    >
-                      <div
-                        className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-emerald-300/70 bg-emerald-200/90"
-                        aria-hidden
-                      />
-
-                      <div
-                        className={
-                          isOpen
-                            ? 'flex flex-col gap-2 px-4 pb-2 pt-4'
-                            : `flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`
-                        }
-                      >
-                        {editingStoreId === store.id ? (
-                          <form
-                            data-edit-surface
-                            data-no-trash-drag
-                            onSubmit={(e) => void handleRenameStore(e)}
-                            className="flex w-full min-w-0 items-center gap-1"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <input
-                              type="text"
-                              value={editingStoreName}
-                              onChange={(e) =>
-                                setEditingStoreName(e.target.value)
-                              }
-                              className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500"
-                              autoFocus
-                              disabled={storeMutating}
-                            />
-                            <button
-                              type="submit"
-                              disabled={
-                                storeMutating || !editingStoreName.trim()
-                              }
-                              className="shrink-0 rounded-md bg-stone-900 px-2.5 py-1.5 text-sm text-white disabled:opacity-50"
-                            >
-                              保存
-                            </button>
-                            <button
-                              type="button"
-                              onClick={cancelEditStore}
-                              className="shrink-0 rounded-md px-2.5 py-1.5 text-sm text-stone-600 hover:bg-white/60"
-                            >
-                              取消
-                            </button>
-                          </form>
-                        ) : (
-                          <div className="flex min-w-0 w-full items-center">
-                            <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
-                              {store.name}
-                            </span>
-                            <EditIconButton
-                              quiet
-                              label="名前変更"
-                              onClick={() => startEditStore(store)}
-                              disabled={storeMutating}
-                            />
-                            <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
-                              <span className="tabular-nums text-sm text-stone-500">
-                                {recordCount}
-                              </span>
-                              <span
-                                className="shrink-0 text-stone-400 transition-transform"
-                                style={{
-                                  transform: isOpen ? 'rotate(90deg)' : undefined,
-                                }}
-                                aria-hidden
-                              >
-                                ▸
-                              </span>
-                              <button
-                                type="button"
-                                aria-label="記録を追加"
-                                title="記録を追加"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setAddingForStore(store)
-                                  setStoreAddFolderId(folders[0]?.id ?? '')
-                                }}
-                                className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700 hover:bg-white/70"
-                              >
-                                ＋
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {isOpen && (
-                        <div className="border-t border-emerald-200/70 bg-white/80 px-3 py-3">
-                          {storeRecords.length === 0 ? (
-                            <p className="text-sm text-stone-500">
-                              この店舗の記録はまだありません。
-                            </p>
-                          ) : (
-                            <ul className="max-h-64 space-y-2 overflow-y-auto">
-                              {storeRecords.map((record) => (
-                                <li key={record.id} className="list-none">
-                                  <div className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3">
-                                    <div className="min-w-0 flex-1 py-0.5">
-                                      <p className="text-sm font-medium text-stone-900">
-                                        {record.recorded_at} ·{' '}
-                                        {parseFolderName(
-                                          folders.find(
-                                            (f) => f.id === record.folder_id,
-                                          )?.name ?? '—',
-                                        ).displayName}
-                                      </p>
-                                      <p className="text-xs text-stone-600">
-                                        {formatYen(record.price, 0)} /{' '}
-                                        {record.amount}
-                                        {unitLabel(record.unit)}
-                                      </p>
-                                    </div>
-                                    <div className="flex shrink-0 items-center">
-                                      <CopyIconButton
-                                        label="複製"
-                                        onClick={() => handleCopyRecord(record)}
-                                      />
-                                      <EditIconButton
-                                        label="編集"
-                                        onClick={() => setEditingRecord(record)}
-                                      />
-                                    </div>
-                                  </div>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                    </DraggableCatalogItem>
-                  </li>
-                )
-              })
-            )}
-          </ul>
-        )}
+              {visibleFolders.length === 0 ? (
+                <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500 sm:col-span-1">
+                  まだフォルダがありません
+                </li>
+              ) : (
+                visibleFolders.map((folder) => renderFolderCard(folder))
+              )}
+            </ul>
+          ) : (
+            <ul className="grid gap-4 sm:grid-cols-2">
+              <li className="flex flex-col">
+                <button
+                  type="button"
+                  onClick={() => void handleAddStore()}
+                  disabled={storeMutating}
+                  aria-label="店舗を追加"
+                  className={`relative flex ${catalogCardMinH} w-full flex-col items-center justify-center overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm transition-shadow hover:shadow-md disabled:opacity-50`}
+                >
+                  <div
+                    className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80"
+                    aria-hidden
+                  />
+                  <span
+                    className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-500 text-xl font-light leading-none text-sky-700"
+                    aria-hidden
+                  >
+                    ＋
+                  </span>
+                </button>
+              </li>
+              {visibleStores.length === 0 ? (
+                <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500 sm:col-span-1">
+                  まだ店舗がありません。左のカードから追加してください。
+                </li>
+              ) : (
+                visibleStores.map((store) => renderStoreCard(store))
+              )}
+            </ul>
+          )}
+        </>
+      )}
     </section>
   )
 
@@ -1366,9 +1393,8 @@ export function FoldersPage() {
                           created,
                         ])
                         setAllRecords((prev) => [created, ...prev])
-                        if (openFolderId !== storeAddFolderId) {
-                          setOpenFolderId(storeAddFolderId)
-                        }
+                        setOpenStoreId(addingForStore.id)
+                        setOpenFolderId(null)
                         setAddingForStore(null)
                       } finally {
                         setAddingBusy(false)
