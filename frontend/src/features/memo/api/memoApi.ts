@@ -65,15 +65,15 @@ export async function addMemoItem(folderId: string): Promise<PriceMemoItem> {
     if (normalized) return normalized
   }
 
-  const { data: maxRow } = await supabase
+  const { data: minRow } = await supabase
     .from('price_memo_items')
     .select('sort_order')
     .eq('user_id', user.id)
-    .order('sort_order', { ascending: false })
+    .order('sort_order', { ascending: true })
     .limit(1)
     .maybeSingle()
 
-  const sort_order = (maxRow?.sort_order ?? -1) + 1
+  const sort_order = (minRow?.sort_order ?? 0) - 1
 
   const { data, error } = await supabase
     .from('price_memo_items')

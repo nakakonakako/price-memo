@@ -192,7 +192,7 @@ export function ShoppingMemoPage({ active = true }: { active?: boolean }) {
       const item = await addMemoItem(folder.id)
       setMemoItems((prev) => {
         if (prev.some((m) => m.folder_id === folder.id)) return prev
-        return [...prev, item]
+        return [item, ...prev]
       })
       await mergeFolderRecords(folder.id)
       return item
