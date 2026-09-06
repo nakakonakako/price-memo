@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
 import type { PriceStore } from '../types'
-
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 
 export async function listStores(): Promise<PriceStore[]> {
@@ -76,17 +75,6 @@ export async function deleteStore(id: string): Promise<void> {
   const { error } = await supabase.from('price_stores').delete().eq('id', id)
   if (error) throw error
 }
-export async function ensureStore(name: string): Promise<string> {
-  const trimmed = name.trim()
-  if (!trimmed) throw new Error('店舗名を入力してください')
-
-  const stores = await listStores()
-  const existing = stores.find((s) => equalsSearchQuery(s.name, trimmed))
-  if (existing) return existing.name
-
-  const created = await createStore(trimmed)
-  return created.name
-}
 
 export function findStoreByName(
   stores: PriceStore[],
@@ -102,3 +90,12 @@ export function filterStores(stores: PriceStore[], query: string): PriceStore[] 
   if (!q) return stores
   return stores.filter((s) => matchesSearchQuery(s.name, q))
 }
+
+export {
+  getStoresCached,
+  invalidateStoresCache,
+  setStoresCache,
+  upsertStoresCache,
+  removeFromStoresCache,
+  ensureStore,
+} from './storesCache'

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { EditIconButton } from '@/components/EditIconButton'
 import { CopyIconButton } from '@/components/CopyIconButton'
 import { ChartIcon } from '@/components/icons/ChartIcon'
@@ -38,15 +38,23 @@ import { toUserMessage } from '@/lib/userError'
 import {
   createStore,
   deleteStore,
-  listStores,
+  getStoresCached,
+  removeFromStoresCache,
   renameStore,
+  setStoresCache,
+  upsertStoresCache,
 } from '@/features/stores/api/storesApi'
 import type { PriceStore } from '@/features/stores/types'
 import { useFolders } from '../hooks/useFolders'
 import type { PriceFolder } from '../types'
 import { folderSortKey, parseFolderName } from '../utils/folderName'
 import { ScrollToTopButton } from '@/components/ScrollToTopButton'
-import { FolderTrendPanel } from '@/features/trends/components/FolderTrendPanel'
+
+const FolderTrendPanel = lazy(() =>
+  import('@/features/trends/components/FolderTrendPanel').then((m) => ({
+    default: m.FolderTrendPanel,
+  })),
+)
 
 type CatalogView = 'folder' | 'store'
 type CatalogSort = 'added' | 'name'
@@ -115,6 +123,7 @@ export function FoldersPage() {
   const [recordsError, setRecordsError] = useState<string | null>(null)
   const [editingRecord, setEditingRecord] = useState<PriceRecord | null>(null)
   const [recordCounts, setRecordCounts] = useState<Record<string, number>>({})
+  // derived counts preferred; setRecordCounts kept for patchFolderRecords sync
   const [addingFolderId, setAddingFolderId] = useState<string | null>(null)
   const [addingForStore, setAddingForStore] = useState<PriceStore | null>(null)
   const [storeAddFolderId, setStoreAddFolderId] = useState('')
@@ -139,9 +148,8 @@ export function FoldersPage() {
   >(null)
   const [deleteConfirmStoreBusy, setDeleteConfirmStoreBusy] = useState(false)
   const [allRecords, setAllRecords] = useState<PriceRecord[]>([])
-  const [storeRecordCounts, setStoreRecordCounts] = useState<
-    Record<string, number>
-  >({})
+  const [allRecordsLoaded, setAllRecordsLoaded] = useState(false)
+  const [allRecordsLoading, setAllRecordsLoading] = useState(true)
   /** New folder stays beside the add tile until rename is saved (name sort). */
   const [draftFolderId, setDraftFolderId] = useState<string | null>(null)
   const [deleteConfirmFolderId, setDeleteConfirmFolderId] = useState<
@@ -230,7 +238,9 @@ export function FoldersPage() {
     setStoresLoading(true)
     setStoresError(null)
     try {
-      setStores(await listStores())
+      const list = await getStoresCached()
+      setStoresCache(list)
+      setStores(list)
     } catch (err) {
       setStoresError(toUserMessage(err, '店舗の読み込みに失敗しました。'))
     } finally {
@@ -238,36 +248,51 @@ export function FoldersPage() {
     }
   }, [])
 
-  useEffect(() => {
-    void refreshStores()
-  }, [refreshStores])
+  const refreshAllRecords = useCallback(async () => {
+    setAllRecordsLoading(true)
+    try {
+      const records = await listAllRecords()
+      setAllRecords(records)
+      setAllRecordsLoaded(true)
+      const folderCounts: Record<string, number> = {}
+      for (const r of records) {
+        folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
+      }
+      setRecordCounts(folderCounts)
+    } catch {
+      /* optional */
+    } finally {
+      setAllRecordsLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    if (isLoading) return
-    void listAllRecords()
-      .then((records) => {
-        setAllRecords(records)
-        const folderCounts: Record<string, number> = {}
-        const storeCounts: Record<string, number> = {}
-        for (const r of records) {
-          folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
-        }
-        for (const store of stores) {
-          storeCounts[store.id] = records.filter(
-            (r) => r.store_name === store.name,
-          ).length
-        }
-        setRecordCounts(folderCounts)
-        setStoreRecordCounts(storeCounts)
-      })
-      .catch(() => {
-        /* optional */
-      })
-  }, [isLoading, folders, stores])
+    void Promise.all([refreshStores(), refreshAllRecords()])
+  }, [refreshStores, refreshAllRecords])
+
+  const storeRecordCounts = useMemo(() => {
+    const byName: Record<string, number> = {}
+    for (const r of allRecords) {
+      byName[r.store_name] = (byName[r.store_name] ?? 0) + 1
+    }
+    const counts: Record<string, number> = {}
+    for (const store of stores) {
+      counts[store.id] = byName[store.name] ?? 0
+    }
+    return counts
+  }, [allRecords, stores])
+
+  const derivedFolderCounts = useMemo(() => {
+    const folderCounts: Record<string, number> = {}
+    for (const r of allRecords) {
+      folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
+    }
+    return folderCounts
+  }, [allRecords])
 
   const getRecordCount = (folderId: string) => {
     if (recordsByFolder[folderId]) return recordsByFolder[folderId].length
-    return recordCounts[folderId] ?? 0
+    return derivedFolderCounts[folderId] ?? recordCounts[folderId] ?? 0
   }
 
   const getStoreRecordCount = (storeId: string) => {
@@ -276,6 +301,17 @@ export function FoldersPage() {
 
   const getStoreRecords = (storeName: string) =>
     sortRecordsByDateDesc(allRecords.filter((r) => r.store_name === storeName))
+
+  const hydrateFolderFromAll = useCallback(
+    (folderId: string) => {
+      const rows = sortRecordsByDateDesc(
+        allRecords.filter((r) => r.folder_id === folderId),
+      )
+      setRecordsByFolder((prev) => ({ ...prev, [folderId]: rows }))
+      setRecordCounts((prev) => ({ ...prev, [folderId]: rows.length }))
+    },
+    [allRecords],
+  )
 
   const startEditStore = (store: PriceStore) => {
     setEditingStoreId(store.id)
@@ -290,15 +326,36 @@ export function FoldersPage() {
   const handleRenameStore = async (e: FormEvent) => {
     e.preventDefault()
     if (!editingStoreId) return
+    const previous = stores.find((s) => s.id === editingStoreId)
+    const previousName = previous?.name
     setStoreMutating(true)
     setStoresError(null)
     try {
       const updated = await renameStore(editingStoreId, editingStoreName)
+      upsertStoresCache(updated)
       setStores((prev) =>
         prev.map((s) => (s.id === updated.id ? updated : s)),
       )
-      const fresh = await listAllRecords()
-      setAllRecords(fresh)
+      if (previousName && previousName !== updated.name) {
+        setAllRecords((prev) =>
+          prev.map((r) =>
+            r.store_name === previousName
+              ? { ...r, store_name: updated.name }
+              : r,
+          ),
+        )
+        setRecordsByFolder((prev) => {
+          const next: Record<string, PriceRecord[]> = {}
+          for (const [folderId, rows] of Object.entries(prev)) {
+            next[folderId] = rows.map((r) =>
+              r.store_name === previousName
+                ? { ...r, store_name: updated.name }
+                : r,
+            )
+          }
+          return next
+        })
+      }
       cancelEditStore()
     } catch (err) {
       setStoresError(toUserMessage(err, '店舗名の変更に失敗しました。'))
@@ -318,6 +375,7 @@ export function FoldersPage() {
     setStoresError(null)
     try {
       const created = await createStore(name)
+      upsertStoresCache(created)
       setStores((prev) => [...prev, created])
       startEditStore(created)
     } catch (err) {
@@ -347,6 +405,7 @@ export function FoldersPage() {
       if (editingStoreId === storeId) cancelEditStore()
       if (openStoreId === storeId) setOpenStoreId(null)
       if (previewStoreId === storeId) setPreviewStoreId(null)
+      removeFromStoresCache(storeId)
       setStores((prev) => prev.filter((s) => s.id !== storeId))
     },
     [cancelEditStore, editingStoreId, openStoreId, previewStoreId],
@@ -432,6 +491,11 @@ export function FoldersPage() {
 
     if (recordsByFolder[folderId]) return
 
+    if (allRecordsLoaded) {
+      hydrateFolderFromAll(folderId)
+      return
+    }
+
     try {
       setOpenFolderLoadingId(folderId)
       const records = await listRecords(folderId)
@@ -468,6 +532,17 @@ export function FoldersPage() {
     async (folderId: string) => {
       if (recordsByFolder[folderId]) return
       setRecordsError(null)
+
+      if (allRecordsLoaded) {
+        hydrateFolderFromAll(folderId)
+        return
+      }
+
+      if (allRecordsLoading) {
+        setOpenFolderLoadingId(folderId)
+        return
+      }
+
       try {
         setOpenFolderLoadingId(folderId)
         const records = await listRecords(folderId)
@@ -481,8 +556,39 @@ export function FoldersPage() {
         setOpenFolderLoadingId(null)
       }
     },
-    [recordsByFolder],
+    [
+      allRecordsLoaded,
+      allRecordsLoading,
+      hydrateFolderFromAll,
+      recordsByFolder,
+    ],
   )
+
+  // When allRecords finishes loading, fill any pending folder hydrate.
+  useEffect(() => {
+    if (!allRecordsLoaded) return
+    if (openFolderLoadingId && !recordsByFolder[openFolderLoadingId]) {
+      hydrateFolderFromAll(openFolderLoadingId)
+      setOpenFolderLoadingId(null)
+    }
+    if (previewFolderId && !recordsByFolder[previewFolderId]) {
+      hydrateFolderFromAll(previewFolderId)
+    }
+    if (trendsFolderId && !recordsByFolder[trendsFolderId]) {
+      hydrateFolderFromAll(trendsFolderId)
+    }
+    if (openFolderId && !recordsByFolder[openFolderId]) {
+      hydrateFolderFromAll(openFolderId)
+    }
+  }, [
+    allRecordsLoaded,
+    hydrateFolderFromAll,
+    openFolderId,
+    openFolderLoadingId,
+    previewFolderId,
+    recordsByFolder,
+    trendsFolderId,
+  ])
 
   const toggleFolderPreview = async (folderId: string) => {
     if (previewFolderId === folderId) {
@@ -645,7 +751,8 @@ export function FoldersPage() {
   const trendsRecordsLoading =
     trendsFolderId != null &&
     trendsRecords === undefined &&
-    openFolderLoadingId === trendsFolderId
+    (openFolderLoadingId === trendsFolderId ||
+      (!allRecordsLoaded && allRecordsLoading))
 
   const detailFolder =
     openFolderId != null
@@ -1438,12 +1545,18 @@ export function FoldersPage() {
             aria-hidden={!layoutExpanded}
           >
             {showTrendsSplit && (
-              <FolderTrendPanel
-                folderId={trendsFolderId}
-                records={trendsRecords ?? []}
-                recordsLoading={trendsRecordsLoading}
-                compact
-              />
+              <Suspense
+                fallback={
+                  <p className="text-sm text-stone-500">グラフを読み込み中...</p>
+                }
+              >
+                <FolderTrendPanel
+                  folderId={trendsFolderId}
+                  records={trendsRecords ?? []}
+                  recordsLoading={trendsRecordsLoading}
+                  compact
+                />
+              </Suspense>
             )}
           </aside>
         </div>

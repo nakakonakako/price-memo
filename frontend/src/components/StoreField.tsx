@@ -3,7 +3,8 @@ import {
   createStore,
   filterStores,
   findStoreByName,
-  listStores,
+  getStoresCached,
+  upsertStoresCache,
 } from '@/features/stores/api/storesApi'
 import type { PriceStore } from '@/features/stores/types'
 import { toUserMessage } from '@/lib/userError'
@@ -35,7 +36,7 @@ export function StoreField({
 
   const refresh = useCallback(async () => {
     try {
-      setStores(await listStores())
+      setStores(await getStoresCached())
     } catch {
       /* optional */
     } finally {
@@ -83,6 +84,7 @@ export function StoreField({
     setFieldError(null)
     try {
       const created = await createStore(trimmedQuery)
+      upsertStoresCache(created)
       setStores((prev) =>
         [...prev, created].sort((a, b) => a.name.localeCompare(b.name, 'ja')),
       )

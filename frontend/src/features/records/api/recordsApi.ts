@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase'
-import { ensureStore } from '@/features/stores/api/storesApi'
+import { ensureStore } from '@/features/stores/api/storesCache'
 import type { PriceRecord, PriceRecordInput, ReceiptItemRef } from '../types'
 
 function asNumber(value: unknown): number {
