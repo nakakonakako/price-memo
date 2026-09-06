@@ -29,7 +29,7 @@ export function ScrollToTopButton({ threshold = 320 }: Props) {
       aria-label="ページ上部へ"
       title="ページ上部へ"
       onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-      className="fixed bottom-6 right-4 z-30 flex h-16 w-16 items-center justify-center rounded-full border border-stone-300 bg-white/95 text-3xl leading-none text-stone-700 shadow-md backdrop-blur hover:bg-stone-50 sm:bottom-8 sm:right-6 sm:h-20 sm:w-20 sm:text-4xl"
+      className="fixed bottom-6 right-4 z-30 flex h-16 w-16 items-center justify-center rounded-md border border-stone-300 bg-white/95 text-3xl leading-none text-stone-700 shadow-md backdrop-blur hover:bg-stone-50 sm:bottom-8 sm:right-6 sm:h-20 sm:w-20 sm:text-4xl"
     >
       ↑
     </button>
