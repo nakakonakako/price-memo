@@ -46,15 +46,28 @@ import type { PriceStore } from '@/features/stores/types'
 import { useFolders } from '../hooks/useFolders'
 import type { PriceFolder } from '../types'
 import { folderSortKey, parseFolderName } from '../utils/folderName'
+import { ScrollToTopButton } from '@/components/ScrollToTopButton'
 import { FolderTrendPanel } from '@/features/trends/components/FolderTrendPanel'
 
 type CatalogView = 'folder' | 'store'
 type CatalogSort = 'added' | 'name'
 
+const PREVIEW_RECORD_LIMIT = 3
+
 const nameCollator = new Intl.Collator('ja', {
   numeric: true,
   sensitivity: 'base',
 })
+
+function recentRecords(rows: PriceRecord[], limit = PREVIEW_RECORD_LIMIT) {
+  return [...rows]
+    .sort((a, b) => {
+      const byDate = b.recorded_at.localeCompare(a.recorded_at)
+      if (byDate !== 0) return byDate
+      return b.created_at.localeCompare(a.created_at)
+    })
+    .slice(0, limit)
+}
 
 const catalogCardMinH = 'min-h-[4rem]'
 
@@ -124,6 +137,7 @@ export function FoldersPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
+  const [previewFolderId, setPreviewFolderId] = useState<string | null>(null)
   const [openFolderLoadingId, setOpenFolderLoadingId] = useState<string | null>(
     null,
   )
@@ -150,6 +164,7 @@ export function FoldersPage() {
   const [editingStoreId, setEditingStoreId] = useState<string | null>(null)
   const [editingStoreName, setEditingStoreName] = useState('')
   const [openStoreId, setOpenStoreId] = useState<string | null>(null)
+  const [previewStoreId, setPreviewStoreId] = useState<string | null>(null)
   const [storeMutating, setStoreMutating] = useState(false)
   const [deleteConfirmStoreId, setDeleteConfirmStoreId] = useState<
     string | null
@@ -363,20 +378,34 @@ export function FoldersPage() {
     (storeId: string) => {
       if (editingStoreId === storeId) cancelEditStore()
       if (openStoreId === storeId) setOpenStoreId(null)
+      if (previewStoreId === storeId) setPreviewStoreId(null)
       setStores((prev) => prev.filter((s) => s.id !== storeId))
     },
-    [cancelEditStore, editingStoreId, openStoreId],
+    [cancelEditStore, editingStoreId, openStoreId, previewStoreId],
   )
 
   useOutsidePointerDown(editingStoreId != null, cancelEditStore)
 
-  const toggleStoreDetail = (storeId: string) => {
+  const openStoreDetail = (storeId: string) => {
     setOpenFolderId(null)
+    setPreviewFolderId(null)
+    setPreviewStoreId(null)
     setOpenStoreId(storeId)
     setEditingRecord(null)
     setCatalogView('store')
     setTrendsFolderId(null)
     setTrendsLayoutOpen(false)
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }
+
+  const toggleStorePreview = (storeId: string) => {
+    if (previewStoreId === storeId) {
+      setPreviewStoreId(null)
+      return
+    }
+    setPreviewFolderId(null)
+    setPreviewStoreId(storeId)
+    setEditingRecord(null)
   }
 
   const closeCatalogDetail = useCallback(() => {
@@ -425,10 +454,13 @@ export function FoldersPage() {
   useOutsidePointerDown(editingId != null, cancelEdit)
 
   const openFolderDetail = async (folderId: string) => {
+    setPreviewFolderId(null)
+    setPreviewStoreId(null)
     setOpenStoreId(null)
     setOpenFolderId(folderId)
     setRecordsError(null)
     setCatalogView('folder')
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
 
     if (recordsByFolder[folderId]) return
 
@@ -484,6 +516,17 @@ export function FoldersPage() {
     [recordsByFolder],
   )
 
+  const toggleFolderPreview = async (folderId: string) => {
+    if (previewFolderId === folderId) {
+      setPreviewFolderId(null)
+      return
+    }
+    setPreviewStoreId(null)
+    setPreviewFolderId(folderId)
+    setRecordsError(null)
+    await ensureFolderRecords(folderId)
+  }
+
   const closeTrendsPanel = useCallback(() => {
     setTrendsLayoutOpen(false)
     window.setTimeout(() => setTrendsFolderId(null), TRENDS_ANIM_MS)
@@ -521,6 +564,7 @@ export function FoldersPage() {
     (folderId: string) => {
       if (editingId === folderId) cancelEdit()
       if (openFolderId === folderId) setOpenFolderId(null)
+      if (previewFolderId === folderId) setPreviewFolderId(null)
       if (editingRecord?.folder_id === folderId) setEditingRecord(null)
       if (trendsFolderId === folderId) {
         setTrendsLayoutOpen(false)
@@ -538,7 +582,14 @@ export function FoldersPage() {
         return next
       })
     },
-    [cancelEdit, editingId, editingRecord, openFolderId, trendsFolderId],
+    [
+      cancelEdit,
+      editingId,
+      editingRecord,
+      openFolderId,
+      previewFolderId,
+      trendsFolderId,
+    ],
   )
 
   const confirmDeleteFolder = async () => {
@@ -671,8 +722,61 @@ export function FoldersPage() {
       : null
   const inCatalogDetail = detailFolder != null || detailStore != null
 
+  const renderFolderRecordRow = (
+    folderId: string,
+    record: PriceRecord,
+    opts: { dragEnabled: boolean },
+  ) => (
+    <li key={record.id} className="list-none">
+      <DraggableCatalogItem
+        dragEnabled={opts.dragEnabled}
+        payload={{
+          kind: 'folder-record',
+          id: record.id,
+          folderId,
+        }}
+        onDelete={() => void requestDeleteRecord(record.id, folderId)}
+        className="rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
+      >
+        <div className="min-w-0 py-0.5">
+          <div className="flex min-w-0 items-center gap-0.5">
+            <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
+              {record.recorded_at} · {record.store_name}
+            </p>
+            <div className="flex shrink-0 items-center">
+              <CopyIconButton
+                label="複製"
+                onClick={() => handleCopyRecord(record)}
+              />
+              <EditIconButton
+                label="編集"
+                onClick={() => setEditingRecord(record)}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-stone-600">
+            {formatYen(record.price, 0)} / {record.amount}
+            {unitLabel(record.unit)}
+            {(() => {
+              const per = unitPrice(record.price, record.amount)
+              return per != null
+                ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
+                : ''
+            })()}
+          </p>
+          {record.note && (
+            <p className="mt-1 text-xs text-stone-500">{record.note}</p>
+          )}
+        </div>
+      </DraggableCatalogItem>
+    </li>
+  )
+
   const renderFolderCard = (folder: PriceFolder) => {
     const recordCount = getRecordCount(folder.id)
+    const isPreview = previewFolderId === folder.id
+    const folderRecords = recordsByFolder[folder.id] ?? []
+    const previewRows = recentRecords(folderRecords)
     return (
       <li key={folder.id} className="flex flex-col">
         <DraggableCatalogItem
@@ -680,16 +784,26 @@ export function FoldersPage() {
           payload={{ kind: 'folder', id: folder.id }}
           onClick={() => {
             if (editingId === folder.id) return
-            void openFolderDetail(folder.id)
+            void toggleFolderPreview(folder.id)
           }}
           onDelete={() => requestDeleteFolder(folder.id)}
-          className={`relative flex ${catalogCardMinH} flex-col overflow-hidden rounded-lg border border-amber-200/90 bg-gradient-to-b from-amber-50 via-amber-50/90 to-amber-100/40 shadow-sm transition-shadow hover:shadow-md`}
+          className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
+            isPreview
+              ? 'border-amber-400/80 shadow-md'
+              : `border-amber-200/90 hover:shadow-md ${catalogCardMinH}`
+          } bg-gradient-to-b from-amber-50 via-amber-50/90 to-amber-100/40`}
         >
           <div
             className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-amber-300/70 bg-amber-200/90"
             aria-hidden
           />
-          <div className={`flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`}>
+          <div
+            className={
+              isPreview
+                ? 'flex flex-col gap-2 px-4 pb-2 pt-4'
+                : `flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`
+            }
+          >
             {editingId === folder.id ? (
               <form
                 data-edit-surface
@@ -749,10 +863,25 @@ export function FoldersPage() {
                   >
                     <ChartIcon className="h-4 w-4" />
                   </button>
-                  <span className="tabular-nums text-sm text-stone-500">
+                  <button
+                    type="button"
+                    aria-label={`すべての記録（${recordCount}）`}
+                    title="すべての記録を見る"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void openFolderDetail(folder.id)
+                    }}
+                    className="rounded-md px-1.5 py-1 tabular-nums text-sm text-stone-500 hover:bg-white/70 hover:text-stone-800"
+                  >
                     {recordCount}
-                  </span>
-                  <span className="shrink-0 text-stone-400" aria-hidden>
+                  </button>
+                  <span
+                    className="shrink-0 text-stone-400 transition-transform"
+                    style={{
+                      transform: isPreview ? 'rotate(90deg)' : undefined,
+                    }}
+                    aria-hidden
+                  >
                     ▸
                   </span>
                   <button
@@ -772,6 +901,41 @@ export function FoldersPage() {
               </div>
             )}
           </div>
+
+          {isPreview && (
+            <div
+              className="border-t border-amber-200/70 bg-white/80 px-3 py-3"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              {openFolderLoadingId === folder.id ? (
+                <p className="text-sm text-stone-500">中身を読み込み中...</p>
+              ) : folderRecords.length === 0 ? (
+                <p className="text-sm text-stone-500">
+                  このフォルダにレコードはまだありません
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <ul className="space-y-2">
+                    {previewRows.map((record) =>
+                      renderFolderRecordRow(folder.id, record, {
+                        dragEnabled: false,
+                      }),
+                    )}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => void openFolderDetail(folder.id)}
+                    className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
+                  >
+                    {recordCount > PREVIEW_RECORD_LIMIT
+                      ? `すべての記録を見る（${recordCount}）`
+                      : '記録一覧を開く'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </DraggableCatalogItem>
       </li>
     )
@@ -779,6 +943,9 @@ export function FoldersPage() {
 
   const renderStoreCard = (store: PriceStore) => {
     const recordCount = getStoreRecordCount(store.id)
+    const isPreview = previewStoreId === store.id
+    const storeRecords = getStoreRecords(store.name)
+    const previewRows = recentRecords(storeRecords)
     return (
       <li key={store.id} className="flex flex-col">
         <DraggableCatalogItem
@@ -786,16 +953,26 @@ export function FoldersPage() {
           payload={{ kind: 'store', id: store.id }}
           onClick={() => {
             if (editingStoreId === store.id) return
-            toggleStoreDetail(store.id)
+            toggleStorePreview(store.id)
           }}
           onDelete={() => requestDeleteStore(store.id)}
-          className={`relative flex ${catalogCardMinH} flex-col overflow-hidden rounded-lg border border-emerald-200/90 bg-gradient-to-b from-emerald-50 via-emerald-50/90 to-emerald-100/40 shadow-sm transition-shadow hover:shadow-md`}
+          className={`relative flex flex-col overflow-hidden rounded-lg border shadow-sm transition-shadow ${
+            isPreview
+              ? 'border-emerald-400/80 shadow-md'
+              : `border-emerald-200/90 hover:shadow-md ${catalogCardMinH}`
+          } bg-gradient-to-b from-emerald-50 via-emerald-50/90 to-emerald-100/40`}
         >
           <div
             className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-emerald-300/70 bg-emerald-200/90"
             aria-hidden
           />
-          <div className={`flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`}>
+          <div
+            className={
+              isPreview
+                ? 'flex flex-col gap-2 px-4 pb-2 pt-4'
+                : `flex ${catalogCardMinH} items-center px-4 pb-2 pt-4`
+            }
+          >
             {editingStoreId === store.id ? (
               <form
                 data-edit-surface
@@ -839,10 +1016,25 @@ export function FoldersPage() {
                   disabled={storeMutating}
                 />
                 <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
-                  <span className="tabular-nums text-sm text-stone-500">
+                  <button
+                    type="button"
+                    aria-label={`すべての記録（${recordCount}）`}
+                    title="すべての記録を見る"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      openStoreDetail(store.id)
+                    }}
+                    className="rounded-md px-1.5 py-1 tabular-nums text-sm text-stone-500 hover:bg-white/70 hover:text-stone-800"
+                  >
                     {recordCount}
-                  </span>
-                  <span className="shrink-0 text-stone-400" aria-hidden>
+                  </button>
+                  <span
+                    className="shrink-0 text-stone-400 transition-transform"
+                    style={{
+                      transform: isPreview ? 'rotate(90deg)' : undefined,
+                    }}
+                    aria-hidden
+                  >
                     ▸
                   </span>
                   <button
@@ -862,6 +1054,67 @@ export function FoldersPage() {
               </div>
             )}
           </div>
+
+          {isPreview && (
+            <div
+              className="border-t border-emerald-200/70 bg-white/80 px-3 py-3"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              {storeRecords.length === 0 ? (
+                <p className="text-sm text-stone-500">
+                  この店舗の記録はまだありません。
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  <ul className="space-y-2">
+                    {previewRows.map((record) => (
+                      <li key={record.id} className="list-none">
+                        <div className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3">
+                          <div className="min-w-0 flex-1 py-0.5">
+                            <div className="flex min-w-0 items-center gap-0.5">
+                              <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
+                                {record.recorded_at} ·{' '}
+                                {
+                                  parseFolderName(
+                                    folders.find((f) => f.id === record.folder_id)
+                                      ?.name ?? '—',
+                                  ).displayName
+                                }
+                              </p>
+                              <div className="flex shrink-0 items-center">
+                                <CopyIconButton
+                                  label="複製"
+                                  onClick={() => handleCopyRecord(record)}
+                                />
+                                <EditIconButton
+                                  label="編集"
+                                  onClick={() => setEditingRecord(record)}
+                                />
+                              </div>
+                            </div>
+                            <p className="text-xs text-stone-600">
+                              {formatYen(record.price, 0)} / {record.amount}
+                              {unitLabel(record.unit)}
+                            </p>
+                          </div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <button
+                    type="button"
+                    onClick={() => openStoreDetail(store.id)}
+                    className="w-full rounded-md border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
+                  >
+                    {recordCount > PREVIEW_RECORD_LIMIT
+                      ? `すべての記録を見る（${recordCount}）`
+                      : '記録一覧を開く'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </DraggableCatalogItem>
       </li>
     )
@@ -929,53 +1182,11 @@ export function FoldersPage() {
                   scope={detailFolder.id}
                 />
               )}
-              {(recordsByFolder[detailFolder.id] ?? []).map((record) => (
-                <li key={record.id} className="list-none">
-                  <DraggableCatalogItem
-                    dragEnabled={!isMobile}
-                    payload={{
-                      kind: 'folder-record',
-                      id: record.id,
-                      folderId: detailFolder.id,
-                    }}
-                    onDelete={() =>
-                      void requestDeleteRecord(record.id, detailFolder.id)
-                    }
-                    className="rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3"
-                  >
-                    <div className="min-w-0 py-0.5">
-                      <div className="flex min-w-0 items-center gap-0.5">
-                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
-                          {record.recorded_at} · {record.store_name}
-                        </p>
-                        <div className="flex shrink-0 items-center">
-                          <CopyIconButton
-                            label="複製"
-                            onClick={() => handleCopyRecord(record)}
-                          />
-                          <EditIconButton
-                            label="編集"
-                            onClick={() => setEditingRecord(record)}
-                          />
-                        </div>
-                      </div>
-                      <p className="text-xs text-stone-600">
-                        {formatYen(record.price, 0)} / {record.amount}
-                        {unitLabel(record.unit)}
-                        {(() => {
-                          const per = unitPrice(record.price, record.amount)
-                          return per != null
-                            ? `（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
-                            : ''
-                        })()}
-                      </p>
-                      {record.note && (
-                        <p className="mt-1 text-xs text-stone-500">{record.note}</p>
-                      )}
-                    </div>
-                  </DraggableCatalogItem>
-                </li>
-              ))}
+              {(recordsByFolder[detailFolder.id] ?? []).map((record) =>
+                renderFolderRecordRow(detailFolder.id, record, {
+                  dragEnabled: !isMobile,
+                }),
+              )}
               {!isMobile && (
                 <DropEndMarker
                   kind="folder-record"
@@ -1060,7 +1271,10 @@ export function FoldersPage() {
             <div className="flex rounded-md border border-stone-300 bg-white p-0.5">
               <button
                 type="button"
-                onClick={() => setCatalogView('folder')}
+                onClick={() => {
+                setCatalogView('folder')
+                setPreviewStoreId(null)
+              }}
                 className={`rounded px-3 py-1.5 text-sm ${
                   catalogView === 'folder' && !isCatalogSearching
                     ? 'bg-stone-900 text-white'
@@ -1073,6 +1287,7 @@ export function FoldersPage() {
                 type="button"
                 onClick={() => {
                   setCatalogView('store')
+                  setPreviewFolderId(null)
                   setTrendsFolderId(null)
                   setTrendsLayoutOpen(false)
                 }}
@@ -1256,6 +1471,7 @@ export function FoldersPage() {
 
   const foldersPageBody = (
     <>
+      <ScrollToTopButton />
       <div
         className="ease-[cubic-bezier(0.4,0,0.2,1)] transition-[margin,width,padding,max-width] duration-500"
         style={layoutExpanded ? expandedLayoutStyle : collapsedLayoutStyle}
@@ -1320,8 +1536,10 @@ export function FoldersPage() {
                   created,
                 ])
                 setAllRecords((prev) => [created, ...prev])
-                if (openFolderId !== addingFolder.id) {
-                  setOpenFolderId(addingFolder.id)
+                if (openFolderId === addingFolder.id) {
+                  /* stay on detail */
+                } else {
+                  setPreviewFolderId(addingFolder.id)
                 }
                 setAddingFolderId(null)
                 setAddRecordInitial(null)
@@ -1393,8 +1611,9 @@ export function FoldersPage() {
                           created,
                         ])
                         setAllRecords((prev) => [created, ...prev])
-                        setOpenStoreId(addingForStore.id)
-                        setOpenFolderId(null)
+                        if (openStoreId !== addingForStore.id) {
+                          setPreviewStoreId(addingForStore.id)
+                        }
                         setAddingForStore(null)
                       } finally {
                         setAddingBusy(false)

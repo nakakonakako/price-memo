@@ -55,10 +55,10 @@ export function HowToPage() {
         </p>
         <ul className="list-inside list-disc space-y-2 text-base text-stone-700 lg:text-lg">
           <li>
-            <strong>品目名</strong> … 鶏むね・牛乳などのフォルダ。タップで詳細（記録一覧）を開き、記録を追加・編集
+            <strong>品目名</strong> … 鶏むね・牛乳などのフォルダ。タップで直近の記録をプレビュー。件数や「すべての記録を見る」から詳細一覧へ
           </li>
           <li>
-            <strong>店名</strong> … よく行く店舗の一覧。タップでその店の記録詳細を開けます
+            <strong>店名</strong> … よく行く店舗の一覧。同様にプレビューと詳細一覧があります
           </li>
           <li>虫眼鏡でフォルダ名・店舗名をまとめて検索（候補は両方のセクションに出ます）</li>
           {isMobile ? (

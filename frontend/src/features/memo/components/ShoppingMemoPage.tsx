@@ -6,6 +6,7 @@ import {
   useState,
   type FormEvent,
 } from 'react'
+import { ScrollToTopButton } from '@/components/ScrollToTopButton'
 import { TrashDragProvider, MemoTrashZone } from '@/components/trash/TrashDragProvider'
 import type { DragEndResult } from '@/components/trash/types'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -252,6 +253,7 @@ export function ShoppingMemoPage() {
 
   const page = (
       <section className="space-y-4 pb-44 lg:pb-4">
+        <ScrollToTopButton />
         <button
           type="button"
           onClick={() => setAddOpen((v) => !v)}
