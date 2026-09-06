@@ -40,9 +40,9 @@
 - 詳細への入口:
   - プレビュー下部の **「すべての記録を見る」**（または「記録一覧を開く」）
   - 件数バッジをタップ
-- 詳細は一覧と差し替わる全画面ビュー。「← 一覧へ」で戻る。開いたときは **ページ先頭へスクロール**
+- 詳細は同一タブ内の画面切替（URL ルートではない）。「← 一覧へ」で戻る。開いたときは **ページ先頭へスクロール**
 - 品目詳細・店名詳細: 全記録は **購入日の新しい順（降順）**。並べ替え UI なし
-- 詳細でも複製・編集・削除は可能
+- 詳細でも複製・編集・削除は可能。記録データはマウント時の `listAllRecords` から派生（不足時のみ `listRecords`）
 
 カタログ側カードは件数・▸・＋。展開はプレビューのみ（無制限の縦伸びはしない）。
 
@@ -50,6 +50,13 @@
 
 買い物メモ・フォルダ一覧・記録詳細で、ある程度スクロールすると右下に **↑**（四角いボタン）を表示（`ScrollToTopButton`）。  
 PC でゴミ箱ドラッグ中は重ならないよう非表示。
+
+### 2.1d パフォーマンス・タブ同期
+
+- タブはアンマウントせず keep-alive（`App.tsx`）。初回訪問時だけマウント
+- フォルダ／記録の変更は `lib/catalogSync.ts` の revision。他タブを再表示したとき差分があれば静かに再取得
+- 店舗一覧は `storesCache`（`StoreField` / `ensureStore` で共有）
+- 値段推移パネル（recharts）は lazy 分割。開いたときだけ読み込み
 
 ### 2.2 品目名カード
 
@@ -136,6 +143,8 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 | 単位入力 | `frontend/src/features/records/components/UnitField.tsx` |
 | 読み付き名前 | `frontend/src/features/folders/utils/folderName.ts` |
 | かな検索 | `frontend/src/lib/kanaSearch.ts` |
+| タブ間同期 | `frontend/src/lib/catalogSync.ts` |
+| 店舗キャッシュ | `frontend/src/features/stores/api/storesCache.ts` |
 | 短い日付 | `formatShortRecordedAt`（`features/records/utils/unitPrice.ts`） |
 | ページ上部へ | `frontend/src/components/ScrollToTopButton.tsx` |
 | ドラッグ | `frontend/src/components/trash/`、`DraggableCatalogItem` |
@@ -145,6 +154,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-06 | パフォーマンス: keep-alive・catalogSync・storesCache・allRecords 派生・推移 lazy。詳細は同一タブ内状態である旨を明記 |
 | 2026-09-06 | プレビュー1行化（短い日付・単価非表示）。PCゴミ箱はドラッグ中のみ（メモと同型）。ScrollToTop は四角。記録並べ替え廃止・購入日降順 |
 | 2026-09-06 | 記録一覧の並べ替え廃止。表示は購入日降順固定 |
 | 2026-09-06 | 直近3件プレビュー展開＋件数/ボタンで詳細。詳細オープン時は先頭へスクロール。ScrollToTop |

@@ -118,7 +118,7 @@ Supabase（A の Dev または Prod）
 
 | 画面 | ラベル（仮） | ステータス | 概要 |
 |------|--------------|------------|------|
-| `memo` | 買い物メモ | **現行** | 店頭用ピン留めリスト（`price_memo_items`）。統計＋試算＋保存 |
+| `memo` | 買い物メモ | **現行** | 店頭用ピン留めリスト。掲載フォルダの記録のみロード。新規追加は先頭。詳細は [spec-shopping-memo.md](./spec-shopping-memo.md) |
 | `folders` | フォルダ | **現行** | 品目名／店名カタログ、直近プレビュー＋詳細一覧、横断検索。詳細は [spec-folders-catalog.md](./spec-folders-catalog.md) |
 | `trends` | 値段推移 | **現行（スマホのみ）** | 独立タブ。`lg` 以上では非表示（フォルダタブの分割パネルに統合） |
 | `howto` | 使い方 | **現行** | 機能説明・操作ヒント。詳細は [spec-guide.md](./spec-guide.md) |
@@ -130,10 +130,10 @@ Supabase（A の Dev または Prod）
 
 | 領域 | パス（予定） | ステータス | できること |
 |------|--------------|------------|------------|
-| 買い物メモ | `frontend/src/features/memo/` | **現行** | `price_memo_items` による店頭リスト。フォルダマスタは参照のみ |
-| フォルダ・店舗 | `frontend/src/features/folders/` + `stores/` | **現行** | 品目・店名カタログ、記録管理。`StoreField` で店名統一 |
-| 厳密レコード | `frontend/src/features/records/` | **現行** | `RecordForm`（追加・編集モーダル）。`ensureStore` 連携 |
-| 値段推移 | `frontend/src/features/trends/` | **現行** | `FolderTrendPanel`（Recharts）。グラフ＋店舗一覧。PC はフォルダタブ内、スマホは独立タブ |
+| 買い物メモ | `frontend/src/features/memo/` | **現行** | `price_memo_items`。`listRecordsForFolders`。タブ keep-alive + catalogSync |
+| フォルダ・店舗 | `frontend/src/features/folders/` + `stores/` | **現行** | カタログ・プレビュー・詳細。`storesCache` / `catalogSync` |
+| 厳密レコード | `frontend/src/features/records/` | **現行** | `RecordForm`。`ensureStore`（キャッシュ経由） |
+| 値段推移 | `frontend/src/features/trends/` | **現行** | `FolderTrendPanel`（lazy + Recharts）。PC はフォルダ内、スマホは独立タブ |
 | 使い方 | `frontend/src/features/guide/` | **現行** | `HowToPage`。操作説明は機能画面ではなくここに集約 |
 | A 参照 | `RecordForm` 内のレシート下書き検索 | **現行** | 独立タブ・`receipt-link` モジュールは削除済み |
 | 店頭 OCR | — | **延期** | 値札 OCR（非本流）。`inquiry` プレースホルダ削除済み |
@@ -269,6 +269,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-06 | パフォーマンス: タブ keep-alive、メモは掲載フォルダの記録のみ、catalogSync、storesCache、recharts lazy。メモ新規は一覧先頭 |
 | 2026-09-06 | フォルダ: 直近3件プレビュー＋詳細、横断検索、記録は購入日降順（並べ替えなし）。ScrollToTop。PCゴミ箱はドラッグ中のみ |
 | 2026-09-06 | フォルダ: 詳細ビュー（仮）・検索横断統合 |
 | 2026-09-01 | 値段推移: 店舗一覧化・グラフ絞り込み。使い方タブ。かな検索。メモUI整理。単位その他インライン。スワイプ引き切り削除。機能画面から操作ヒント撤去 |
