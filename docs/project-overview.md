@@ -7,7 +7,7 @@
 |------|------|
 | リポジトリ名 | `price-memo` |
 | プロダクト名（UI・仮） | 単価メモ / Price Memo |
-| ドキュメント最終更新 | 2026-09-06 |
+| ドキュメント最終更新 | 2026-09-08 |
 | 文書の扱い | **生きた概要**。機能の追加・削除・方針変更のたびに本ファイルを更新する |
 
 ---
@@ -196,6 +196,14 @@ A 参照（読み取り・紐付け用）:
 | google-genai | OCR を将来足す場合のみ（店頭本流ではない） |
 | uv / Ruff | パッケージ・lint |
 
+### デプロイ
+
+| 技術 | 目安 |
+|------|------|
+| Docker Compose | `docker-compose.production.yml`（FE + BE） |
+| GitHub Actions | `main` push → GHCR → VPS（host `:8081`） |
+| nginx | SPA + `/api` → backend |
+
 ---
 
 ## 7. 環境・起動
@@ -212,19 +220,40 @@ cd .. && npm run dev
 - Vite が `/api` を `http://localhost:8001` へプロキシ（A の 8000 と併走可能）
 - DB: A と同じ Supabase プロジェクトへ link し、B 用 migration を `npm run db:push`
 
-### 7.2 環境変数（予定）
+### 7.2 環境変数
 
-**フロント**（A の Dev/Prod と同じ値でよい）
+**フロント**（A の Dev/Prod と同じ値でよい。本番は Docker build-arg）
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_API_URL`（本番は `/api`）
 
-**バック**
+**バック**（VPS 上 `.env`。デプロイ時に Actions が書き込み）
 
-- `SUPABASE_URL` / `SUPABASE_KEY`（または VITE_ 互換）
-- `GEMINI_API_KEY`（OCR を将来足す場合のみ）
+- `SUPABASE_URL` / `SUPABASE_KEY`
+- `GEMINI_API_KEY`（OCR を将来足す場合）
 
 `.env` は gitignore 対象。OAuth のリダイレクト URL は A / B それぞれのオリジンを Supabase ダッシュボードに追加する。
+
+### 7.3 本番（Docker Compose + GitHub Actions）
+
+A（`receipt-manager`）と同型。
+
+| 項目 | 内容 |
+|------|------|
+| トリガー | `main` への push |
+| Build | GHCR へ `price-memo-frontend` / `price-memo-backend` |
+| Deploy | SCP → `~/price-memo`、compose pull & up |
+| Host ポート | **8081**（A が `:80` を使う想定。前段 reverse proxy でドメインを振る） |
+| Migration | **本パイプラインではしない**。A リポで `db push`（Prod 初回は適用済み） |
+
+必要な GitHub Secrets（A と共用できるものは同じ値でよい）:
+
+- `PROD_SUPABASE_URL` / `PROD_SUPABASE_PUBLISHABLE_KEY`
+- `PROD_GEMINI_API_KEY`（現状バックは未使用でも可）
+- `VPS_HOST` / `VPS_USER` / `SSH_PRIVATE_KEY`
+
+初回のみ VPS で `~/price-memo` を用意し、GHCR から pull できること（パッケージ公開 or `docker login`）を確認する。
 
 ---
 
@@ -232,18 +261,17 @@ cd .. && npm run dev
 
 ```
 price-memo/
-├── frontend/          # React SPA
+├── frontend/          # React SPA（Dockerfile あり）
 │   └── src/
 │       ├── components/
 │       ├── features/      # memo, folders, records, trends, guide, …
 │       ├── lib/             # kanaSearch, listOrder, …
-│       ├── contexts/
-│       └── lib/
-├── backend/
+│       └── contexts/
+├── backend/               # FastAPI scaffold（Dockerfile あり）
 │   └── app/
-│       ├── main.py
-│       ├── schemas/
-│       └── services/
+├── nginx-config/          # 本番 SPA + /api プロキシ
+├── docker-compose.production.yml
+├── .github/workflows/deploy.yml
 ├── supabase/migrations/   # B 固有（A リポへもコピーして push）
 ├── docs/
 └── package.json           # concurrently で FE+BE
@@ -269,6 +297,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-08 | 本番 CD: Docker Compose + GitHub Actions（A 同型）。Host :8081。migration はパイプライン外（A 側 / 適用済み） |
 | 2026-09-06 | パフォーマンス: タブ keep-alive、メモは掲載フォルダの記録のみ、catalogSync、storesCache、recharts lazy。メモ新規は一覧先頭 |
 | 2026-09-06 | フォルダ: 直近3件プレビュー＋詳細、横断検索、記録は購入日降順（並べ替えなし）。ScrollToTop。PCゴミ箱はドラッグ中のみ |
 | 2026-09-06 | フォルダ: 詳細ビュー（仮）・検索横断統合 |

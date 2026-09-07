@@ -30,6 +30,6 @@ A 側で新しい migration が増えたら、履歴ミラーを本リポにも�
 
 - 2026-08-28: Dev へ `sort_order` / `price_memo_items` / `price_stores` 適用済み
 - 2026-08-26: Dev（`irgahixsuvtopiwmtkku`）へ `price_folders` / `price_records` 適用済み
-- Prod へは別途同じ migration を push すること
+- 2026-09-08: **Prod へ B 用 migration 適用済み**（以降の schema 変更も A リポで `db push`）
 
-OAuth のリダイレクトに B のオリジンを足すこと（Supabase Dashboard → Auth）。
+OAuth のリダイレクトに **B の本番オリジン**を足すこと（Supabase Dashboard → Auth）。

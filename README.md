@@ -33,4 +33,8 @@ npm run dev
 - FRONT: Vite (`frontend/`)
 - BACK: uvicorn (`backend/` → `:8001`、A の 8000 と併走可）、`/api` は Vite がプロキシ
 
-詳細は [docs/project-overview.md](./docs/project-overview.md)。
+詳細は [docs/project-overview.md](./docs/project-overview.md) §7。
+
+## 本番 CD
+
+A と同型: `main` push → GHCR build → VPS（`docker-compose.production.yml`、host `:8081`）。手順と Secrets は [docs/project-overview.md](./docs/project-overview.md) §7.3。
