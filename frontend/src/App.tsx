@@ -3,9 +3,13 @@ import { Auth } from '@/components/Auth'
 import { MainLayout, type TabId } from '@/components/MainLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { FoldersPage } from '@/features/folders/components/FoldersPage'
 import { ShoppingMemoPage } from '@/features/memo/components/ShoppingMemoPage'
 
+const FoldersPage = lazy(() =>
+  import('@/features/folders/components/FoldersPage').then((m) => ({
+    default: m.FoldersPage,
+  })),
+)
 const TrendsPage = lazy(() =>
   import('@/features/trends/components/TrendsPage').then((m) => ({
     default: m.TrendsPage,
@@ -81,7 +85,9 @@ export default function App() {
       </TabPanel>
       {(visited.folders || activeTab === 'folders') && (
         <TabPanel active={activeTab === 'folders'}>
-          <FoldersPage active={activeTab === 'folders'} />
+          <Suspense fallback={<TabFallback />}>
+            <FoldersPage active={activeTab === 'folders'} />
+          </Suspense>
         </TabPanel>
       )}
       {(visited.trends || activeTab === 'trends') && (
