@@ -4,7 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-app = FastAPI(title="price-memo", description="Strict unit-price comparison (feature B)")
+app = FastAPI(
+    title="price-memo", description="Strict unit-price comparison (feature B)"
+)
 
 app.add_middleware(
     CORSMiddleware,
