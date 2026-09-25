@@ -1,35 +1,14 @@
-# supabase CLI
+# Supabase
 
-方針（確定）:
-- A（receipt-manager）と **同一** の Dev / Prod プロジェクトへ link する
-- Auth は共有。詳細は `docs/project-overview.md` §3
-- 無関係な新規アプリ用 DB は Supabase を増やさず、VPS の PocketBase 等で扱う
+`receipt-manager` と `price-memo` は同じ Supabase DB プロジェクトを利用します。
 
-## migrations の扱い
+## Database migrations
 
-同一リモートの migration 履歴を揃えるため、次を置いている。
+- 共通 DB migration の唯一の正本は `receipt-manager/supabase/migrations/` です。
+- `price-memo` 固有テーブルの schema 変更も `receipt-manager` 側へ migration を追加します。
+- DB への push は `receipt-manager` 側からのみ実行します。
+- `price-memo` 側では migration を保持・ミラー・push しません。
 
-| ファイル | 所有者 |
-|----------|--------|
-| `20260824183225_remote_schema.sql` | A（履歴ミラー。編集しない） |
-| `20260825100000_remove_memo_and_is_comparable.sql` | A（履歴ミラー。編集しない） |
-| `20260827100000_price_records_free_units.sql` | **B が正。A にもコピー** |
-| `20260828100000_sort_order.sql` | **B が正。フォルダ／記録の表示順** |
-| `20260828200000_price_memo_items.sql` | **B が正。買い物メモ一覧（フォルダ参照）** |
-| `20260828210000_price_stores.sql` | **B が正。店舗名カタログ** |
+適用済み migration の履歴は共通 DB で管理します。migration ファイルと DB の運用手順は `receipt-manager` リポジトリを参照してください。
 
-現状、`db push` は A リポ側の link / DB パスワードが安定している。B 用テーブルを足すときは:
-
-1. SQL を本リポで書く
-2. 同じファイルを `receipt-manager/supabase/migrations/` にもコピー
-3. A リポで `npm run db:push`
-
-A 側で新しい migration が増えたら、履歴ミラーを本リポにもコピーする。
-
-## 適用済み
-
-- 2026-08-28: Dev へ `sort_order` / `price_memo_items` / `price_stores` 適用済み
-- 2026-08-26: Dev（`irgahixsuvtopiwmtkku`）へ `price_folders` / `price_records` 適用済み
-- 2026-09-08: **Prod へ B 用 migration 適用済み**（以降の schema 変更も A リポで `db push`）
-
-OAuth のリダイレクトに **B の本番オリジン**を足すこと（Supabase Dashboard → Auth）。
+OAuth リダイレクトには `price-memo` の本番オリジンを追加してください（Supabase Dashboard → Auth）。

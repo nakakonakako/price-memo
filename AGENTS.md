@@ -63,11 +63,9 @@ For backend changes:
 
 ## Database safety
 
-Do not run:
-
-    npm run db:push
-
-unless the user explicitly requests a database push.
+Shared Supabase DB migrations are managed only in `receipt-manager/supabase/migrations/`.
+When a schema change is needed, add the migration in `receipt-manager`; do not keep
+migrations or run `db push` from this repository.
 
 ## Implementation rules
 

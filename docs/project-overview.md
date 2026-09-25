@@ -62,7 +62,7 @@
 | 決定 | 内容 |
 |------|------|
 | A と B | **同一 Supabase プロジェクト**（既存の Dev / Prod 各1）。B 用テーブルを足す |
-| マイグレーション | B 固有は本リポジトリ `supabase/migrations/`。Supabase CLI で A と同じ Dev/Prod へ `db push` |
+| マイグレーション | 共通 DB の正本は `receipt-manager/supabase/migrations/`。B 固有の schema 変更も A リポジトリへ追加し、push する |
 | Auth | **共有**（同じ `auth.users` / 同じ Google OAuth）。アプリ入り口（URL・SPA）は分けるが、アカウントは分けない |
 | 将来の無関係アプリ | Supabase 枠は増やさない。VPS 上の **PocketBase** などで別運営 |
 
@@ -94,14 +94,14 @@ FastAPI (uvicorn :8001 ※A は :8000)
   ▼
 Supabase（A の Dev または Prod）
   ├── A テーブル（receipts 等）… B は参照のみ
-  └── B テーブル（folders 等）… 本リポの migration で追加
+  └── B テーブル（folders 等）… receipt-manager リポジトリの migration で追加
 ```
 
 | 層 | パス | 役割 |
 |----|------|------|
 | フロントエンド | `frontend/` | SPA。機能は `src/features/` 以下 |
 | バックエンド | `backend/app/` | FastAPI |
-| DB・Auth | `supabase/` | B 固有マイグレーション（リンク先は A と同一） |
+| DB・Auth | `supabase/` | Supabase 設定。migration は保持しない（正本は receipt-manager） |
 | ドキュメント | `docs/` | 本ファイルおよび仕様メモ |
 
 ---
@@ -155,7 +155,7 @@ Supabase（A の Dev または Prod）
 
 ## 5. データモデル
 
-B 固有テーブル。RLS・`user_id` 分離。マイグレーション: `supabase/migrations/`（下表）
+B 固有テーブル。RLS・`user_id` 分離。マイグレーションは receipt-manager リポジトリで管理する（下表）
 
 | テーブル | 概要 | 主なカラム | 備考 |
 |----------|------|------------|------|
@@ -218,7 +218,7 @@ cd .. && npm run dev
 ```
 
 - Vite が `/api` を `http://localhost:8001` へプロキシ（A の 8000 と併走可能）
-- DB: A と同じ Supabase プロジェクトへ link し、B 用 migration を `npm run db:push`
+- DB: A と同じ Supabase プロジェクトを利用。schema migration は receipt-manager 側で管理・push する
 
 ### 7.2 環境変数
 
@@ -272,7 +272,7 @@ price-memo/
 ├── nginx-config/          # 本番 SPA + /api プロキシ
 ├── docker-compose.production.yml
 ├── .github/workflows/deploy.yml
-├── supabase/migrations/   # B 固有（A リポへもコピーして push）
+├── supabase/              # Supabase CLI 設定（migration は receipt-manager が管理）
 ├── docs/
 └── package.json           # concurrently で FE+BE
 ```
@@ -297,6 +297,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-26 | 共通 DB migration の正本を receipt-manager に一本化。price-memo 側は migration を保持せず、push もしない |
 | 2026-09-08 | 本番 CD: Docker Compose + GitHub Actions（A 同型）。Host :8081。migration はパイプライン外（A 側 / 適用済み） |
 | 2026-09-06 | パフォーマンス: タブ keep-alive、メモは掲載フォルダの記録のみ、catalogSync、storesCache、recharts lazy。メモ新規は一覧先頭 |
 | 2026-09-06 | フォルダ: 直近3件プレビュー＋詳細、横断検索、記録は購入日降順（並べ替えなし）。ScrollToTop。PCゴミ箱はドラッグ中のみ |
