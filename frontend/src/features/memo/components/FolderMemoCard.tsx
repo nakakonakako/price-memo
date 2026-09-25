@@ -90,12 +90,16 @@ export function FolderMemoCard({
     return cols
   }, [allStats])
 
+  const isOpen = open || forceOpen
+
   useEffect(() => {
     if (!forceOpen) return
-    setOpen(true)
-    setError(null)
-    setSavedMsg(null)
-    onForceOpenHandled?.()
+    const frame = requestAnimationFrame(() => {
+      setError(null)
+      setSavedMsg(null)
+      onForceOpenHandled?.()
+    })
+    return () => cancelAnimationFrame(frame)
   }, [forceOpen, onForceOpenHandled])
 
   const priceN = Number(price)
@@ -193,7 +197,7 @@ export function FolderMemoCard({
         onClick={handleOpen}
         onDelete={() => onRemoveFromMemo?.()}
         className={`overflow-hidden rounded-lg border shadow-sm transition-colors ${colorClass} ${
-          open ? 'ring-1 ring-stone-400' : 'hover:brightness-[0.99]'
+          isOpen ? 'ring-1 ring-stone-400' : 'hover:brightness-[0.99]'
         }`}
       >
         <div className="px-3 py-2.5">
@@ -201,7 +205,7 @@ export function FolderMemoCard({
             <div className="space-y-2">
               <div className="flex items-center justify-start gap-1.5">
                 <span
-                  className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-90' : ''}`}
+                  className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
                   aria-hidden
                 >
                   ▸
@@ -278,7 +282,7 @@ export function FolderMemoCard({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span
-                  className={`shrink-0 text-stone-400 transition-transform ${open ? 'rotate-90' : ''}`}
+                  className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
                   aria-hidden
                 >
                   ▸
@@ -355,7 +359,7 @@ export function FolderMemoCard({
 
         </div>
 
-        {open && (
+        {isOpen && (
           <form
             onSubmit={(e) => void handleSave(e)}
             className="space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3"

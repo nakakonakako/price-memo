@@ -1,13 +1,13 @@
 import {
-  createContext,
   useCallback,
-  useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react'
 import type { DragEndResult, TrashDragPayload } from './types'
+import { TrashDragContext, useTrashDrag } from './TrashDragContext'
 
 type ItemRect = {
   id: string
@@ -17,38 +17,6 @@ type ItemRect = {
   right: number
   midX: number
   midY: number
-}
-
-type TrashDragContextValue = {
-  dragging: boolean
-  dragOverTrash: boolean
-  insertBeforeId: string | null | undefined
-  activeId: string | null
-  activeKind: TrashDragPayload['kind'] | null
-  trashRef: React.RefObject<HTMLDivElement | null>
-  beginDrag: (payload: TrashDragPayload) => void
-  moveDrag: (x: number, y: number) => void
-  endDrag: (x: number, y: number) => void
-  cancelDrag: () => void
-  registerItem: (id: string, el: HTMLElement | null) => void
-  registerList: (
-    kind: TrashDragPayload['kind'],
-    ids: string[],
-    scope?: string,
-  ) => void
-}
-
-const TrashDragContext = createContext<TrashDragContextValue | null>(null)
-
-export function useTrashDrag() {
-  const ctx = useContext(TrashDragContext)
-  if (!ctx) throw new Error('useTrashDrag must be used within TrashDragProvider')
-  return ctx
-}
-
-/** Null outside TrashDragProvider (e.g. scroll-to-top on pages without trash). */
-export function useTrashDragOptional() {
-  return useContext(TrashDragContext)
 }
 
 function listKey(kind: TrashDragPayload['kind'], scope?: string) {
@@ -100,7 +68,9 @@ export function TrashDragProvider({
   )
   const largeTrash = trashSize === 'memo'
   const trashPlacementRef = useRef(trashPlacement)
-  trashPlacementRef.current = trashPlacement
+  useEffect(() => {
+    trashPlacementRef.current = trashPlacement
+  }, [trashPlacement])
 
   const setInsertTarget = useCallback((next: string | null | undefined) => {
     insertBeforeIdRef.current = next

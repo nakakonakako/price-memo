@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { Auth } from '@/components/Auth'
 import { MainLayout, type TabId } from '@/components/MainLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -49,15 +49,12 @@ export default function App() {
   })
   const isLargeScreen = useMediaQuery('(min-width: 1024px)')
 
-  useEffect(() => {
-    if (isLargeScreen && tab === 'trends') {
-      setTab('folders')
-    }
-  }, [isLargeScreen, tab])
-
-  useEffect(() => {
-    setVisited((prev) => (prev[tab] ? prev : { ...prev, [tab]: true }))
-  }, [tab])
+  const activeTab = isLargeScreen && tab === 'trends' ? 'folders' : tab
+  const changeTab = (nextTab: TabId) => {
+    const next = isLargeScreen && nextTab === 'trends' ? 'folders' : nextTab
+    setTab(next)
+    setVisited((prev) => (prev[next] ? prev : { ...prev, [next]: true }))
+  }
 
   if (isLoading) {
     return (
@@ -73,29 +70,29 @@ export default function App() {
 
   return (
     <MainLayout
-      activeTab={tab}
-      onTabChange={setTab}
+      activeTab={activeTab}
+      onTabChange={changeTab}
       userLabel={session.user.email ?? 'ユーザー'}
       onLogout={logout}
       hiddenTabs={isLargeScreen ? ['trends'] : []}
     >
-      <TabPanel active={tab === 'memo'}>
-        <ShoppingMemoPage active={tab === 'memo'} />
+      <TabPanel active={activeTab === 'memo'}>
+        <ShoppingMemoPage active={activeTab === 'memo'} />
       </TabPanel>
-      {visited.folders && (
-        <TabPanel active={tab === 'folders'}>
-          <FoldersPage active={tab === 'folders'} />
+      {(visited.folders || activeTab === 'folders') && (
+        <TabPanel active={activeTab === 'folders'}>
+          <FoldersPage active={activeTab === 'folders'} />
         </TabPanel>
       )}
-      {visited.trends && (
-        <TabPanel active={tab === 'trends'}>
+      {(visited.trends || activeTab === 'trends') && (
+        <TabPanel active={activeTab === 'trends'}>
           <Suspense fallback={<TabFallback />}>
-            <TrendsPage active={tab === 'trends'} />
+            <TrendsPage active={activeTab === 'trends'} />
           </Suspense>
         </TabPanel>
       )}
-      {visited.howto && (
-        <TabPanel active={tab === 'howto'}>
+      {(visited.howto || activeTab === 'howto') && (
+        <TabPanel active={activeTab === 'howto'}>
           <Suspense fallback={<TabFallback />}>
             <HowToPage />
           </Suspense>

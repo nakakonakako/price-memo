@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PriceUnit } from '../types'
 import {
   CUSTOM_UNIT_VALUE,
@@ -41,22 +41,20 @@ export function UnitField({
   )
   const isPresetOption = presetValues.has(value)
 
-  const [customDraft, setCustomDraft] = useState(() =>
-    isPresetOption ? '' : value,
-  )
+  const [customDraftState, setCustomDraftState] = useState({
+    value,
+    draft: isPresetOption ? '' : value,
+  })
+  const customDraft =
+    customDraftState.value === value
+      ? customDraftState.draft
+      : isPresetOption
+        ? ''
+        : value
   const [customActive, setCustomActive] = useState(!isPresetOption)
   const previousUnitRef = useRef<PriceUnit>(value)
-  const customInputFocusedRef = useRef(false)
 
-  useEffect(() => {
-    if (customInputFocusedRef.current) return
-    if (isPresetOption && !customActive) {
-      setCustomDraft('')
-    } else if (!isPresetOption && value) {
-      setCustomDraft(value)
-      setCustomActive(true)
-    }
-  }, [value, isPresetOption, customActive])
+  const customActiveForValue = customActive || !isPresetOption
 
   const fieldClass =
     className ||
@@ -66,7 +64,7 @@ export function UnitField({
     customInputClassName ||
     'w-full rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500'
 
-  const selectValue = customActive
+  const selectValue = customActiveForValue
     ? CUSTOM_UNIT_VALUE
     : isPresetOption
       ? value
@@ -80,18 +78,18 @@ export function UnitField({
     }
     setCustomActive(false)
     onChange(previousUnitRef.current)
-    setCustomDraft('')
+    setCustomDraftState({ value, draft: '' })
   }
 
   const handleSelectChange = (next: string) => {
     if (next === CUSTOM_UNIT_VALUE) {
       previousUnitRef.current = isPresetOption ? value : value
       setCustomActive(true)
-      setCustomDraft(isPresetOption ? '' : value)
+      setCustomDraftState({ value, draft: isPresetOption ? '' : value })
       return
     }
     setCustomActive(false)
-    setCustomDraft('')
+    setCustomDraftState({ value, draft: '' })
     onChange(next)
   }
 
@@ -112,27 +110,23 @@ export function UnitField({
   )
 
   const customInput =
-    customActive ? (
+    customActiveForValue ? (
       <input
         type="text"
         className={customClass}
         value={customDraft}
         disabled={disabled}
         placeholder="kg / 枚 / L"
-        onFocus={() => {
-          customInputFocusedRef.current = true
-        }}
-        onBlur={() => {
-          customInputFocusedRef.current = false
-          commitCustom()
-        }}
+        onBlur={commitCustom}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault()
             e.currentTarget.blur()
           }
         }}
-        onChange={(e) => setCustomDraft(e.target.value)}
+        onChange={(e) =>
+          setCustomDraftState({ value, draft: e.target.value })
+        }
       />
     ) : null
 

@@ -22,11 +22,13 @@ import {
 } from '@/features/records/api/recordsApi'
 import {
   RecordForm,
+} from '@/features/records/components/RecordForm'
+import {
   emptyRecordForm,
   recordToCopyFormState,
   recordToFormState,
   type RecordFormState,
-} from '@/features/records/components/RecordForm'
+} from '@/features/records/components/recordFormUtils'
 import type { PriceRecord } from '@/features/records/types'
 import {
   formatShortRecordedAt,
@@ -269,7 +271,10 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
   }, [])
 
   useEffect(() => {
-    void Promise.all([refreshStores(), refreshAllRecords()])
+    const frame = requestAnimationFrame(() => {
+      void Promise.all([refreshStores(), refreshAllRecords()])
+    })
+    return () => cancelAnimationFrame(frame)
   }, [refreshStores, refreshAllRecords])
 
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
@@ -536,16 +541,16 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
     }
   }
 
-  const patchFolderRecords = (
-    folderId: string,
-    updater: (rows: PriceRecord[]) => PriceRecord[],
-  ) => {
-    setRecordsByFolder((prev) => {
-      const nextRows = sortRecordsByDateDesc(updater(prev[folderId] ?? []))
-      setRecordCounts((counts) => ({ ...counts, [folderId]: nextRows.length }))
-      return { ...prev, [folderId]: nextRows }
-    })
-  }
+  const patchFolderRecords = useCallback(
+    (folderId: string, updater: (rows: PriceRecord[]) => PriceRecord[]) => {
+      setRecordsByFolder((prev) => {
+        const nextRows = sortRecordsByDateDesc(updater(prev[folderId] ?? []))
+        setRecordCounts((counts) => ({ ...counts, [folderId]: nextRows.length }))
+        return { ...prev, [folderId]: nextRows }
+      })
+    },
+    [],
+  )
 
   const handleCopyRecord = (record: PriceRecord) => {
     setAddRecordInitial(recordToCopyFormState(record))
@@ -591,19 +596,22 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
   // When allRecords finishes loading, fill any pending folder hydrate.
   useEffect(() => {
     if (!allRecordsLoaded) return
-    if (openFolderLoadingId && !recordsByFolder[openFolderLoadingId]) {
-      hydrateFolderFromAll(openFolderLoadingId)
-      setOpenFolderLoadingId(null)
-    }
-    if (previewFolderId && !recordsByFolder[previewFolderId]) {
-      hydrateFolderFromAll(previewFolderId)
-    }
-    if (trendsFolderId && !recordsByFolder[trendsFolderId]) {
-      hydrateFolderFromAll(trendsFolderId)
-    }
-    if (openFolderId && !recordsByFolder[openFolderId]) {
-      hydrateFolderFromAll(openFolderId)
-    }
+    const frame = requestAnimationFrame(() => {
+      if (openFolderLoadingId && !recordsByFolder[openFolderLoadingId]) {
+        hydrateFolderFromAll(openFolderLoadingId)
+        setOpenFolderLoadingId(null)
+      }
+      if (previewFolderId && !recordsByFolder[previewFolderId]) {
+        hydrateFolderFromAll(previewFolderId)
+      }
+      if (trendsFolderId && !recordsByFolder[trendsFolderId]) {
+        hydrateFolderFromAll(trendsFolderId)
+      }
+      if (openFolderId && !recordsByFolder[openFolderId]) {
+        hydrateFolderFromAll(openFolderId)
+      }
+    })
+    return () => cancelAnimationFrame(frame)
   }, [
     allRecordsLoaded,
     hydrateFolderFromAll,
@@ -651,8 +659,8 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
 
   useEffect(() => {
     if (!trendsFolderId || catalogView !== 'folder' || !isLargeScreen) {
-      setTrendsLayoutOpen(false)
-      return
+      const frame = requestAnimationFrame(() => setTrendsLayoutOpen(false))
+      return () => cancelAnimationFrame(frame)
     }
     const frame = requestAnimationFrame(() => setTrendsLayoutOpen(true))
     return () => cancelAnimationFrame(frame)

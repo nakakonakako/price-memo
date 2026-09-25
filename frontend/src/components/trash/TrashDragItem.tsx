@@ -7,7 +7,7 @@ import {
 } from 'react'
 import { createPortal } from 'react-dom'
 import type { TrashDragPayload } from './types'
-import { useTrashDrag } from './TrashDragProvider'
+import { useTrashDrag } from './TrashDragContext'
 
 const DRAG_THRESHOLD = 8
 

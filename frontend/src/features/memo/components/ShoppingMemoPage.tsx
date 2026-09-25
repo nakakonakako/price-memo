@@ -31,7 +31,7 @@ import {
 } from '../api/memoApi'
 import { recordsByFolderId } from '../utils/stats'
 import { FolderMemoCard } from './FolderMemoCard'
-import { useTrashDrag } from '@/components/trash/TrashDragProvider'
+import { useTrashDrag } from '@/components/trash/TrashDragContext'
 
 const MEMO_PALETTES = [
   'border-rose-200 bg-rose-50/90',
@@ -105,8 +105,33 @@ export function ShoppingMemoPage({ active = true }: { active?: boolean }) {
   }, [])
 
   useEffect(() => {
-    void load()
-  }, [load])
+    let cancelled = false
+    const loadInitial = async () => {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const [folderList, memoList] = await Promise.all([
+          listFolders(),
+          listMemoItems(),
+        ])
+        const recordList = await listRecordsForFolders(
+          memoList.map((item) => item.folder_id),
+        )
+        if (cancelled) return
+        setAllFolders(folderList)
+        setMemoItems(memoList)
+        setRecords(recordList)
+      } catch (err) {
+        if (!cancelled) setError(toUserMessage(err, '読み込みに失敗しました。'))
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+    void loadInitial()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
     null,

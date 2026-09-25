@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   createStore,
   filterStores,
@@ -34,23 +34,22 @@ export function StoreField({
   const [fieldError, setFieldError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
-  const refresh = useCallback(async () => {
-    try {
-      setStores(await getStoresCached())
-    } catch {
-      /* optional */
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    let cancelled = false
+    getStoresCached()
+      .then((nextStores) => {
+        if (!cancelled) setStores(nextStores)
+      })
+      .catch(() => {
+        /* optional */
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
     }
   }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  useEffect(() => {
-    if (!open) setQuery(value)
-  }, [value, open])
 
   useEffect(() => {
     if (!open) return
@@ -61,9 +60,13 @@ export function StoreField({
     return () => document.removeEventListener('mousedown', onDoc)
   }, [open])
 
-  const filtered = useMemo(() => filterStores(stores, query), [stores, query])
-  const exact = findStoreByName(stores, query)
-  const trimmedQuery = query.trim()
+  const displayedQuery = open ? query : value
+  const filtered = useMemo(
+    () => filterStores(stores, displayedQuery),
+    [stores, displayedQuery],
+  )
+  const exact = findStoreByName(stores, displayedQuery)
+  const trimmedQuery = displayedQuery.trim()
   const showRegister =
     trimmedQuery.length > 0 && !exact && !loading && !registering
 
@@ -100,7 +103,7 @@ export function StoreField({
     <div ref={rootRef} className="relative space-y-1">
       <input
         type="text"
-        value={query}
+        value={displayedQuery}
         onChange={(e) => {
           setQuery(e.target.value)
           setOpen(true)

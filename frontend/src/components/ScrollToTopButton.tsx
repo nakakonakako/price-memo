@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useTrashDragOptional } from '@/components/trash/TrashDragProvider'
+import { useTrashDragOptional } from '@/components/trash/TrashDragContext'
 
 type Props = {
   /** Show after scrolling past this many pixels. */

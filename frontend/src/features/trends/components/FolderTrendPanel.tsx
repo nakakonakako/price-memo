@@ -96,20 +96,28 @@ export function FolderTrendPanel({
     if (!hadRecordsRef.current) {
       const dom = dominantUnit(records)
       if (dom) {
-        setUnit(dom)
-        setBasis(supportsPerHundred(dom) ? 'per_100' : 'per_unit')
+        const frame = requestAnimationFrame(() => {
+          setUnit(dom)
+          setBasis(supportsPerHundred(dom) ? 'per_100' : 'per_unit')
+        })
+        hadRecordsRef.current = true
+        return () => cancelAnimationFrame(frame)
       }
       hadRecordsRef.current = true
     }
   }, [folderId, records])
 
   useEffect(() => {
-    setSelectedIndex(null)
-    setSelectedStore(null)
+    const frame = requestAnimationFrame(() => {
+      setSelectedIndex(null)
+      setSelectedStore(null)
+    })
+    return () => cancelAnimationFrame(frame)
   }, [folderId, unit, basis, records])
 
   useEffect(() => {
-    setSelectedIndex(null)
+    const frame = requestAnimationFrame(() => setSelectedIndex(null))
+    return () => cancelAnimationFrame(frame)
   }, [selectedStore])
 
   const unitsInFolder = useMemo(() => {

@@ -28,8 +28,20 @@ export function useFolders() {
   }, [])
 
   useEffect(() => {
-    void refresh()
-  }, [refresh])
+    let cancelled = false
+    listFolders()
+      .then((next) => {
+        if (!cancelled) setFolders(next)
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const create = async (
     name: string,
