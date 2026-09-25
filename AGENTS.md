@@ -51,15 +51,12 @@ Backend:
 
 ## Verification
 
-For frontend changes:
+After implementation, run the standard quality check from the repository root as a rule:
 
-    npm run lint --prefix frontend
-    npm run build --prefix frontend
+    npm run check
 
-For backend changes:
-
-    uv run --directory backend ruff check .
-    uv run --directory backend ruff format --check .
+If a quality check fails, fix the cause in the code rather than disabling the check or rule.
+Run individual checks additionally when needed to investigate a failure.
 
 ## Database safety
 
