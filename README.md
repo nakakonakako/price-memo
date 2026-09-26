@@ -37,4 +37,4 @@ npm run dev
 
 ## 本番 CD
 
-A と同型: `main` push → GHCR build → VPS（`docker-compose.production.yml`、host `:8081`）。手順と Secrets は [docs/project-overview.md](./docs/project-overview.md) §7.3。
+A と同型: `main` push → GHCR build → VPS（`docker-compose.production.yml`、frontend は外部 `edge` network の reverse proxy 経由）。手順と Secrets は [docs/project-overview.md](./docs/project-overview.md) §7.3。

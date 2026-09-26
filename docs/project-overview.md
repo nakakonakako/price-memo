@@ -201,7 +201,7 @@ A 参照（読み取り・紐付け用）:
 | 技術 | 目安 |
 |------|------|
 | Docker Compose | `docker-compose.production.yml`（FE + BE） |
-| GitHub Actions | `main` push → GHCR → VPS（host `:8081`） |
+| GitHub Actions | `main` push → GHCR → VPS（frontend は外部 `edge` network 経由） |
 | nginx | SPA + `/api` → backend |
 
 ---
@@ -244,7 +244,8 @@ A（`receipt-manager`）と同型。
 | トリガー | `main` への push |
 | Build | GHCR へ `price-memo-frontend` / `price-memo-backend` |
 | Deploy | SCP → `~/price-memo`、compose pull & up |
-| Host ポート | **8081**（A が `:80` を使う想定。前段 reverse proxy でドメインを振る） |
+| Network | frontend はアプリ専用 `default` と外部 `edge`、backend は `default` のみ。前段 `edge-proxy` が Docker DNS の `price-frontend:80` に接続 |
+| Host ポート | frontend / backend ともに公開しない。前段 reverse proxy は外部 `edge` network 経由で接続 |
 | Migration | **本パイプラインではしない**。A リポで `db push`（Prod 初回は適用済み） |
 
 必要な GitHub Secrets（A と共用できるものは同じ値でよい）:
@@ -297,8 +298,9 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-26 | 本番 Compose を receipt-manager と同じ `default` + 外部 `edge` 構成に統一。Deploy で frontend / backend の running を検証 |
 | 2026-09-26 | 共通 DB migration の正本を receipt-manager に一本化。price-memo 側は migration を保持せず、push もしない |
-| 2026-09-08 | 本番 CD: Docker Compose + GitHub Actions（A 同型）。Host :8081。migration はパイプライン外（A 側 / 適用済み） |
+| 2026-09-08 | 本番 CD 初版: Docker Compose + GitHub Actions。旧構成では host :8081 を公開。migration はパイプライン外（A 側 / 適用済み） |
 | 2026-09-06 | パフォーマンス: タブ keep-alive、メモは掲載フォルダの記録のみ、catalogSync、storesCache、recharts lazy。メモ新規は一覧先頭 |
 | 2026-09-06 | フォルダ: 直近3件プレビュー＋詳細、横断検索、記録は購入日降順（並べ替えなし）。ScrollToTop。PCゴミ箱はドラッグ中のみ |
 | 2026-09-06 | フォルダ: 詳細ビュー（仮）・検索横断統合 |
