@@ -256,6 +256,17 @@ A（`receipt-manager`）と同型。
 
 初回のみ VPS で `~/price-memo` を用意し、GHCR から pull できること（パッケージ公開 or `docker login`）を確認する。
 
+
+### 7.4 開発作業の委譲
+
+Codex CLI の通常 supervisor は GPT-6 Luna medium。高リスク・複雑な設計判断は
+read-only の GPT-6 Sol `sol_supervisor` subagent へ早期エスカレーションし、
+最終判断と実装委譲は Luna が行う。通常実装は Cursor CLI worker に
+`scripts/delegate-cursor.sh` で委譲する。詳細は
+[cursor-delegation.md](./cursor-delegation.md) を参照。price-memo の shared
+Supabase migration は作成・保持・適用せず、正本は
+`receipt-manager/supabase/migrations/` のみとする。
+
 ---
 
 ## 8. ディレクトリガイド
@@ -290,6 +301,7 @@ price-memo/
 | [spec-folders-catalog.md](./spec-folders-catalog.md) | フォルダタブ（品目名・店名・記録 UI） |
 | [spec-trends.md](./spec-trends.md) | 値段推移（グラフ・店舗一覧） |
 | [spec-guide.md](./spec-guide.md) | 使い方タブ |
+| [cursor-delegation.md](./cursor-delegation.md) | Codex Luna/Sol と Cursor worker の委譲手順 |
 | `../receipt-manager/docs/project-overview.md` | A の生きた概要（隣リポジトリ） |
 
 ---
@@ -298,6 +310,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-26 | Codex Luna/Sol supervisor と Cursor worker の委譲基盤を追加。shared migration は receipt-manager に限定 |
 | 2026-09-26 | 本番 Compose を receipt-manager と同じ `default` + 外部 `edge` 構成に統一。Deploy で frontend / backend の running を検証 |
 | 2026-09-26 | 共通 DB migration の正本を receipt-manager に一本化。price-memo 側は migration を保持せず、push もしない |
 | 2026-09-08 | 本番 CD 初版: Docker Compose + GitHub Actions。旧構成では host :8081 を公開。migration はパイプライン外（A 側 / 適用済み） |

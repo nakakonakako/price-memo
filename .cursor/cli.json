@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(npm)",
+      "Shell(uv)",
+      "Shell(git)",
+      "Shell(ls)",
+      "Shell(cat)",
+      "Shell(cp)"
+    ],
+    "deny": [
+      "Shell(sudo)",
+      "Shell(rm)"
+    ]
+  }
+}

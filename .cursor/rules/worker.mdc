@@ -1,0 +1,30 @@
+---
+description: Rules for Cursor implementation workers in price-memo
+alwaysApply: true
+---
+
+Read and follow price-memo/AGENTS.md before non-trivial changes. Stay within
+the assigned work order and this repository.
+
+- price-memo is a strict unit-price comparison and shopping memo app.
+- Preserve exact weight, quantity, and volume semantics. Never promote guessed
+  or approximate values to confirmed data.
+- Do not add household expense management or AI expense categorization.
+- Shared Supabase migrations are managed only in
+  receipt-manager/supabase/migrations/. Never create, retain, or apply
+  migrations from price-memo; never run a database push.
+- Do not edit receipt-manager or any other repository from a price-memo worker
+  task. If work appears to require another repository, schema change, or
+  architectural decision, stop and report the reason and evidence to the
+  supervisor.
+- Do not silently change public API contracts.
+- Prefer small, focused changes and avoid unrelated refactors.
+- Run `npm run check` after implementation.
+- For browser/UI work, use Playwright when it materially verifies the task.
+
+At completion, report:
+- root cause / implementation intent
+- changed files
+- verification results
+- remaining risks
+- anything requiring supervisor review

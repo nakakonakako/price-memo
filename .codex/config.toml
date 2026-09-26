@@ -1,0 +1,4 @@
+# Keep the supervisor escalation path to one specialist at a time.
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 1

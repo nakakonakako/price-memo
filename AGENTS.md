@@ -89,3 +89,68 @@ When changing frontend UI:
   unless there is a specific reason.
 - After fixing a visual or interaction bug, verify the affected screen
   before considering the task complete.
+
+## Codex supervisor escalation (Luna → Sol)
+
+Classify the task before broad repository investigation. For an escalation
+trigger below, do only the minimum initial check needed to confirm context, then
+spawn exactly one project custom agent named `sol_supervisor` before design
+decisions or implementation. Pass a concise handoff with only:
+`task`, `escalation reason`, `known facts`, and `required decision`.
+
+Escalate early for:
+- database schema or migration needs
+- authentication, authorization, or security boundaries
+- public API contract changes
+- CI/CD or deployment
+- Docker, nginx, or production infrastructure
+- cross-repository changes
+- undocumented architecture decisions
+- complex bugs spanning multiple areas when the cause is unclear
+- a Cursor `hard` attempt that failed from implementation difficulty and needs
+  redesign
+
+For shared Supabase schema changes, price-memo must never create, keep, or apply
+migrations. The migration source of truth is
+`receipt-manager/supabase/migrations/`. Escalate the design to Sol and Luna;
+if implementation is required, treat it as a separately supervised
+cross-repository task in receipt-manager. A Cursor worker delegated from
+price-memo must not independently edit receipt-manager or any other repository.
+
+Do not escalate routine UI/CSS, understood local bugs, normal feature work,
+lint/test work, or small refactors. Keep those with the Luna supervisor and
+continue through the Cursor rules below.
+
+Sol is a read-only design and investigation adviser. It returns evidence,
+recommendation, tradeoffs, and a bounded implementation plan to Luna. Sol must
+not edit files, invoke Cursor, or spawn subagents. Luna owns the final decision
+and any Cursor delegation. Do not spawn another Sol for the same decision;
+re-escalate only if the scope changes materially and creates a new independent
+high-risk decision.
+
+## Cursor worker delegation (Codex supervisor only)
+
+When Codex CLI is acting as the supervisor, delegate bounded implementation
+work to Cursor CLI with `scripts/delegate-cursor.sh`. These instructions describe
+the supervisor's delegation process; they do not authorize Cursor, when acting
+as the implementation worker, to invoke the delegation script or re-delegate.
+Cursor must follow the repository rules above and the worker instructions in
+`.cursor/rules/worker.mdc`
+
+Model tiers are fixed: `light` uses `composer-2.5`, `normal` uses
+`grok-4.7-medium`, and `hard` uses `grok-4.7-high`. Use `normal` by default.
+Do not use `fast`, `xhigh`, or other model families by default.
+
+For the escalation areas above, Sol advises early and Luna makes the
+final design decision before implementation. Delegate only bounded implementation
+pieces after that decision.
+
+Use direct checkout for one worker when the checkout is clean and there are no
+concurrent edits. Use `--worktree` for parallel workers, a dirty checkout,
+concurrent edits, or a large/risky change that needs isolation.
+
+If Cursor encounters a tooling/environment failure, fix the environment rather
+than escalating the model. Retry implementation difficulty at the next tier
+after clarifying the work order. If a `hard` attempt still fails and redesign
+is needed, use the Sol escalation above before another implementation attempt.
+Review high-risk work in Codex even after a successful worker run.
