@@ -37,11 +37,15 @@ import {
   unitPrice,
 } from '@/features/records/utils/unitPrice'
 import { toUserMessage } from '@/lib/userError'
-import { getCatalogRevisions } from '@/lib/catalogSync'
+import {
+  getCatalogRevisions,
+  subscribeCatalogRevisions,
+} from '@/lib/catalogSync'
 import {
   createStore,
   deleteStore,
   getStoresCached,
+  peekStoresCache,
   removeFromStoresCache,
   renameStore,
   setStoresCache,
@@ -276,6 +280,18 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
     })
     return () => cancelAnimationFrame(frame)
   }, [refreshStores, refreshAllRecords])
+
+  const storeRevSeen = useRef(getCatalogRevisions().stores)
+  useEffect(
+    () =>
+      subscribeCatalogRevisions((revisions) => {
+        if (revisions.stores === storeRevSeen.current) return
+        storeRevSeen.current = revisions.stores
+        const current = peekStoresCache()
+        if (current) setStores(current)
+      }),
+    [],
+  )
 
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
     null,

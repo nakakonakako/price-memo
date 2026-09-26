@@ -93,6 +93,7 @@ export function filterStores(stores: PriceStore[], query: string): PriceStore[] 
 
 export {
   getStoresCached,
+  peekStoresCache,
   invalidateStoresCache,
   setStoresCache,
   upsertStoresCache,

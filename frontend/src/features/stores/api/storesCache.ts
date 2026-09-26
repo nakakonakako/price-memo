@@ -1,4 +1,5 @@
 import { equalsSearchQuery } from '@/lib/kanaSearch'
+import { bumpStoresRevision } from '@/lib/catalogSync'
 import { createStore, listStores } from './storesApi'
 import type { PriceStore } from '../types'
 
@@ -50,11 +51,14 @@ export function upsertStoresCache(store: PriceStore) {
       : [...cache, store]
   next.sort((a, b) => a.name.localeCompare(b.name, 'ja'))
   cache = next
+  bumpStoresRevision()
 }
 
 export function removeFromStoresCache(id: string) {
   if (!cache) return
+  if (!cache.some((store) => store.id === id)) return
   cache = cache.filter((s) => s.id !== id)
+  bumpStoresRevision()
 }
 
 /**

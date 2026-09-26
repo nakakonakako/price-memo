@@ -4,9 +4,11 @@ import {
   filterStores,
   findStoreByName,
   getStoresCached,
+  peekStoresCache,
   upsertStoresCache,
 } from '@/features/stores/api/storesApi'
 import type { PriceStore } from '@/features/stores/types'
+import { subscribeCatalogRevisions } from '@/lib/catalogSync'
 import { toUserMessage } from '@/lib/userError'
 
 type Props = {
@@ -36,9 +38,13 @@ export function StoreField({
 
   useEffect(() => {
     let cancelled = false
+    const unsubscribe = subscribeCatalogRevisions(() => {
+      const current = peekStoresCache()
+      if (current) setStores(current)
+    })
     getStoresCached()
       .then((nextStores) => {
-        if (!cancelled) setStores(nextStores)
+        if (!cancelled) setStores(peekStoresCache() ?? nextStores)
       })
       .catch(() => {
         /* optional */
@@ -48,6 +54,7 @@ export function StoreField({
       })
     return () => {
       cancelled = true
+      unsubscribe()
     }
   }, [])
 

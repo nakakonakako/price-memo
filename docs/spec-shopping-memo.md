@@ -76,6 +76,7 @@ B は支出管理アプリではなく **厳密単価の統計アプリ** であ
 
 - 既定タブのため、記録取得は掲載フォルダに限定
 - タブは keep-alive（`App.tsx`）。他タブでのフォルダ／記録変更は `catalogSync` の revision で、再表示時に差分同期
+- 店舗一覧は `storesCache` を共有し、作成・改名・削除は stores revision でマウント済み StoreField にも同期する。記録保存時の `ensureStore` による新規作成も同じ通知経路を通る
 
 ## 7. 典型フロー
 
@@ -107,6 +108,7 @@ B は支出管理アプリではなく **厳密単価の統計アプリ** であ
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-26 | 店舗カタログ変更を stores revision で StoreField と keep-alive 画面へ同期 |
 | 2026-09-06 | 新規メモ追加を一覧先頭に。タブ keep-alive と catalogSync による差分同期を追記 |
 | 2026-09-06 | メモ初期ロードを掲載フォルダの記録のみに限定（`listRecordsForFolders`） |
 | 2026-09-06 | ScrollToTop（四角）を追記。PCゴミ箱はドラッグ中のみである旨を明確化 |

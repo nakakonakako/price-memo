@@ -312,6 +312,7 @@ price-memo/
 |------|------|
 | 2026-09-26 | Codex Luna/Sol supervisor と Cursor worker の委譲基盤を追加。shared migration は receipt-manager に限定 |
 | 2026-09-26 | 本番 Compose を receipt-manager と同じ `default` + 外部 `edge` 構成に統一。Deploy で frontend / backend の running を検証 |
+| 2026-09-26 | 店舗カタログの変更を `storesCache` と `catalogSync` の revision で StoreField・keep-alive 画面へ同期 |
 | 2026-09-26 | 共通 DB migration の正本を receipt-manager に一本化。price-memo 側は migration を保持せず、push もしない |
 | 2026-09-08 | 本番 CD 初版: Docker Compose + GitHub Actions。旧構成では host :8081 を公開。migration はパイプライン外（A 側 / 適用済み） |
 | 2026-09-06 | パフォーマンス: タブ keep-alive、メモは掲載フォルダの記録のみ、catalogSync、storesCache、recharts lazy。メモ新規は一覧先頭 |

@@ -55,7 +55,7 @@ PC でゴミ箱ドラッグ中は重ならないよう非表示。
 
 - タブはアンマウントせず keep-alive（`App.tsx`）。初回訪問時だけマウント
 - フォルダ／記録の変更は `lib/catalogSync.ts` の revision。他タブを再表示したとき差分があれば静かに再取得
-- 店舗一覧は `storesCache`（`StoreField` / `ensureStore` で共有）
+- 店舗一覧は `storesCache`（`StoreField` / `ensureStore` で共有）。店舗の作成・改名・削除は stores revision で通知し、マウント済み StoreField と keep-alive の店舗カタログをキャッシュから同期
 - 値段推移パネル（recharts）は lazy 分割。開いたときだけ読み込み
 
 ### 2.2 品目名カード
@@ -154,6 +154,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-26 | 店舗の作成・改名・削除を stores revision で StoreField と keep-alive 画面へ同期 |
 | 2026-09-06 | パフォーマンス: keep-alive・catalogSync・storesCache・allRecords 派生・推移 lazy。詳細は同一タブ内状態である旨を明記 |
 | 2026-09-06 | プレビュー1行化（短い日付・単価非表示）。PCゴミ箱はドラッグ中のみ（メモと同型）。ScrollToTop は四角。記録並べ替え廃止・購入日降順 |
 | 2026-09-06 | 記録一覧の並べ替え廃止。表示は購入日降順固定 |
