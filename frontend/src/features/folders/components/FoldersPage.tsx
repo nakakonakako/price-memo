@@ -876,9 +876,13 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
                   />
                 </div>
               </div>
-              <p className="text-xs text-stone-600">{priceText}</p>
+              <p className="break-words text-xs text-stone-600 [overflow-wrap:anywhere]">
+                {priceText}
+              </p>
               {record.note && (
-                <p className="mt-1 text-xs text-stone-500">{record.note}</p>
+                <p className="mt-1 break-words text-xs text-stone-500 [overflow-wrap:anywhere]">
+                  {record.note}
+                </p>
               )}
             </div>
           )}
@@ -893,7 +897,7 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
     const folderRecords = recordsByFolder[folder.id] ?? []
     const previewRows = recentRecords(folderRecords)
     return (
-      <li key={folder.id} className="flex flex-col">
+      <li key={folder.id} className="flex min-w-0 flex-col">
         <DraggableCatalogItem
           dragEnabled={!isMobile}
           payload={{ kind: 'folder', id: folder.id }}
@@ -1063,7 +1067,7 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
     const storeRecords = getStoreRecords(store.name)
     const previewRows = recentRecords(storeRecords)
     return (
-      <li key={store.id} className="flex flex-col">
+      <li key={store.id} className="flex min-w-0 flex-col">
         <DraggableCatalogItem
           dragEnabled={!isMobile}
           payload={{ kind: 'store', id: store.id }}
@@ -1355,7 +1359,7 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
                           />
                         </div>
                       </div>
-                      <p className="text-xs text-stone-600">
+                      <p className="break-words text-xs text-stone-600 [overflow-wrap:anywhere]">
                         {formatYen(record.price, 0)} / {record.amount}
                         {unitLabel(record.unit)}
                       </p>
@@ -1481,7 +1485,7 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
             <div className="space-y-6">
               <div className="space-y-2">
                 <h3 className="text-sm font-medium text-stone-600">品目名</h3>
-                <ul className="grid gap-4 sm:grid-cols-2">
+                <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {visibleFolders.length === 0 ? (
                     <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-6 text-center text-sm text-stone-500">
                       一致するフォルダがありません。
@@ -1493,7 +1497,7 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
               </div>
               <div className="space-y-2">
                 <h3 className="text-sm font-medium text-stone-600">店名</h3>
-                <ul className="grid gap-4 sm:grid-cols-2">
+                <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   {visibleStores.length === 0 ? (
                     <li className="col-span-full rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-6 text-center text-sm text-stone-500">
                       一致する店舗がありません。
@@ -1505,7 +1509,7 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
               </div>
             </div>
           ) : catalogView === 'folder' ? (
-            <ul className="grid gap-4 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <li className="flex flex-col">
                 <button
                   type="button"
@@ -1535,7 +1539,7 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
               )}
             </ul>
           ) : (
-            <ul className="grid gap-4 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <li className="flex flex-col">
                 <button
                   type="button"
