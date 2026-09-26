@@ -71,3 +71,21 @@ migrations or run `db push` from this repository.
 - Follow existing architecture before adding abstractions.
 - Prefer small focused changes.
 - When changing shared A/B behavior, inspect the integration specification first.
+
+## UI verification
+
+When changing frontend UI:
+
+- Verify the rendered application when the change can affect layout,
+  responsive behavior, styling, or user interaction.
+- Choose the most appropriate browser tool for the task.
+- Do not use both Computer Use and Playwright unnecessarily.
+- Prefer Playwright when DOM structure, element dimensions,
+  overflow, responsive behavior, or deterministic interaction needs inspection.
+- Prefer Computer Use when visual appearance or behavior is best judged
+  from the rendered screen.
+- Use both only when one tool alone is insufficient.
+- For simple non-visual changes, browser verification is not required
+  unless there is a specific reason.
+- After fixing a visual or interaction bug, verify the affected screen
+  before considering the task complete.
