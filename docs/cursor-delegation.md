@@ -2,8 +2,41 @@
 
 ## Roles
 
-- **Codex CLI**: supervisor. Requirements, task decomposition, architecture decisions, escalation handling, and selective review.
-- **Cursor CLI**: implementation worker. Investigation, code edits, tests, browser verification, and completion report.
+- **Codex CLI / Luna**: supervisor and router. Requirement clarification, initial investigation and classification, Sol escalation decisions, implementation approach and work-order decisions, delegation, and review.
+- **Cursor CLI**: bounded implementation worker. Code edits, tests, browser verification, and completion report for assigned work orders.
+
+## Default implementation routing
+
+When Luna is acting as the Codex supervisor, bounded code implementation,
+UI fixes, bug fixes, test/lint fixes, and small refactors go to Cursor by
+default through `scripts/delegate-cursor.sh`. This routing applies whether or
+not Sol escalation is needed. A decision to keep routine UI/CSS or a known
+local bug off the Sol path means Luna retains supervisor ownership; it does not
+mean Luna should implement the change herself.
+
+Luna primarily clarifies requirements, investigates enough to classify and
+bound the task, decides whether Sol advice is needed, chooses the implementation
+approach, writes the Cursor work order, and reviews the result and diff. Luna
+may directly work on delegation infrastructure itself. A user may also
+explicitly assign implementation to Luna, which overrides the default route.
+
+Use `normal` by default. Select tiers via the delegation script:
+
+| Tier | Model |
+|---|---|
+| `light` | `composer-2.5` |
+| `normal` | `grok-4.7-medium` |
+| `hard` | `grok-4.7-high` |
+
+Do not take over implementation merely because the checkout is dirty. Use a
+direct checkout only when it is clean and has no concurrent work; otherwise
+delegate with `--worktree <name>` so the implementation is isolated.
+
+If Cursor CLI is unavailable, the delegation script is broken, or another
+tooling failure prevents delegation, report the concrete failure and repair
+the environment or delegation infrastructure, then resume delegation. Do not
+silently replace Cursor implementation with Luna implementation because
+delegation is inconvenient.
 
 ## Cursor model tiers
 
@@ -27,8 +60,9 @@ decision before implementation:
 - cross-repository changes
 - product-boundary or undocumented architecture decisions
 
-After Luna's decision, bounded implementation pieces may still be delegated to
-Cursor.
+After Luna's decision, bounded implementation pieces are delegated to Cursor
+under the default routing rule above, unless the user explicitly assigns the
+implementation to Luna or the work is delegation-infrastructure maintenance.
 
 ## Luna → Sol escalation
 
@@ -43,7 +77,8 @@ Sol is a read-only adviser: it investigates and returns evidence, a decision
 recommendation, tradeoffs, and a bounded implementation plan. Sol does not edit
 files, run Cursor, or spawn another agent. Luna makes the final decision and
 owns Cursor delegation. Routine UI/CSS, understood local bugs, normal features,
-lint/tests, and small refactors stay on the Luna → Cursor path.
+lint/tests, and small refactors stay on the Luna → Cursor path: Luna supervises
+and Cursor implements.
 
 ### price-memo boundary
 
@@ -73,7 +108,8 @@ Use `--worktree` when:
 
 ## Retry / escalation
 
-- Environment/tooling failure: fix the environment; do not escalate model just because setup failed.
+- Environment/tooling failure: report and repair the environment; do not escalate model just because setup failed.
+- Cursor CLI or delegation-script failure: report the failure, repair the environment or delegation infrastructure, then resume delegation; do not switch to Luna implementation as a shortcut.
 - `light` struggles with implementation: retry as `normal`.
 - `normal` struggles after a clarified work order: retry as `hard`.
 - `hard` still cannot complete due to implementation difficulty: escalate to the Sol supervisor before another implementation attempt.
