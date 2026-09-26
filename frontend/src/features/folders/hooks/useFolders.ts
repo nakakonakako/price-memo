@@ -38,6 +38,9 @@ export function useFolders() {
           setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
         }
       })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
     return () => {
       cancelled = true
     }
