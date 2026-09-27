@@ -121,7 +121,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 ## 3. 記録の追加・編集モーダル
 
-- `RecordForm` … 購入日は `date-field-wrap`（スマホで日付欄のはみ出し抑制）
+- `RecordForm` … 購入日とレシート検索の開始日・終了日は `date-field-wrap` と `min-width: 0` の列（`grid-cols-1` / `sm:grid-cols-2`）。スマホでは日付欄の最小幅が列幅を押し広げない
 - 数量と単位は横並び。単位列はやや広め（`6.5rem`）
 - 単位「その他…」は内容量行の下にインライン入力（`UnitField`、モーダルなし）
 

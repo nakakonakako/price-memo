@@ -25,37 +25,46 @@ body {
     font-size: 16px;
   }
 
+  /*
+    WebKit date controls report a min-content width of the formatted value
+    plus the calendar indicator. Grid and flex items default to
+    min-width: auto, so that width becomes the track minimum and the
+    control overflows a narrow column. Tailwind also sets
+    ::-webkit-datetime-edit { display: inline-flex }, whose automatic
+    minimum is the full date string.
+
+    Shrink the control and those inner parts so the border box follows
+    the column. Keep the picker indicator; do not clip the field wrapper.
+  */
   .date-field-wrap {
     min-width: 0;
-    overflow: hidden;
+    max-width: 100%;
   }
 
-  .date-field-wrap input[type='date'] {
+  input[type='date'] {
     box-sizing: border-box;
     display: block;
     width: 100%;
     max-width: 100%;
     min-width: 0;
-    padding-left: 0.375rem;
-    padding-right: 0.25rem;
   }
 
-  .date-field-wrap input[type='date']::-webkit-datetime-edit,
-  .date-field-wrap input[type='date']::-webkit-datetime-edit-fields-wrapper {
-    padding: 0;
+  input[type='date']::-webkit-datetime-edit {
+    display: inline-flex;
+    flex: 1 1 auto;
     min-width: 0;
-  }
-
-  .date-field-wrap input[type='date']::-webkit-date-and-time-value {
-    min-width: 0;
+    max-width: 100%;
     overflow: hidden;
-    text-overflow: ellipsis;
   }
 
-  .date-field-wrap input[type='date']::-webkit-calendar-picker-indicator {
-    margin: 0;
-    margin-left: 0.125rem;
-    padding: 0;
-    flex-shrink: 0;
+  input[type='date']::-webkit-datetime-edit-fields-wrapper,
+  input[type='date']::-webkit-date-and-time-value {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  input[type='date']::-webkit-calendar-picker-indicator {
+    flex: none;
+    margin-inline-start: 0.125rem;
   }
 }

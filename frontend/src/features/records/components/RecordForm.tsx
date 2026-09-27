@@ -184,7 +184,7 @@ export function RecordForm({
           </p>
           <form
             onSubmit={(e) => void runSearch(e)}
-            className="grid gap-2 sm:grid-cols-2"
+            className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2"
           >
             <input
               className={fieldClass}
@@ -198,18 +198,24 @@ export function RecordForm({
               onChange={(e) => setStore(e.target.value)}
               placeholder="店舗名"
             />
-            <input
-              type="date"
-              className={fieldClass}
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-            <input
-              type="date"
-              className={fieldClass}
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
+            <div className="date-field-wrap min-w-0">
+              <input
+                type="date"
+                className={fieldClass}
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                aria-label="検索開始日"
+              />
+            </div>
+            <div className="date-field-wrap min-w-0">
+              <input
+                type="date"
+                className={fieldClass}
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                aria-label="検索終了日"
+              />
+            </div>
             <button
               type="submit"
               disabled={searching}
@@ -278,7 +284,7 @@ export function RecordForm({
           </div>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="date-field-wrap block min-w-0 space-y-1">
             <span className="text-xs text-stone-500">購入日</span>
             <input
