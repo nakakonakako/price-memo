@@ -1,4 +1,15 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from 'react'
 import { EditIconButton } from '@/components/EditIconButton'
 import { CopyIconButton } from '@/components/CopyIconButton'
 import { ChartIcon } from '@/components/icons/ChartIcon'
@@ -87,6 +98,119 @@ function sortRecordsByDateDesc(rows: PriceRecord[]) {
 
 const catalogCardMinH = 'min-h-[4rem]'
 
+function recordPriceSummary(record: PriceRecord, showUnitPrice: boolean) {
+  const amountText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}`
+  if (!showUnitPrice) return amountText
+  const per = unitPrice(record.price, record.amount)
+  if (per == null) return amountText
+  return `${amountText}（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
+}
+
+function CatalogRecordRow({
+  record,
+  peerLabel,
+  compact,
+  showUnitPrice,
+  expanded,
+  onToggle,
+  onCopy,
+  onEdit,
+}: {
+  record: PriceRecord
+  peerLabel: string
+  compact: boolean
+  showUnitPrice: boolean
+  expanded: boolean
+  onToggle?: () => void
+  onCopy: () => void
+  onEdit: () => void
+}) {
+  const priceText = recordPriceSummary(record, showUnitPrice)
+  const interactive = onToggle != null
+  const showFull = !interactive || expanded
+  const dateLabel =
+    showFull || !compact
+      ? record.recorded_at
+      : formatShortRecordedAt(record.recorded_at)
+  const hasNote = Boolean(record.note?.trim())
+  const onSummaryClick = (event: MouseEvent<HTMLDivElement>) => {
+    event.stopPropagation()
+    onToggle?.()
+  }
+  const onSummaryKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!onToggle) return
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    event.preventDefault()
+    event.stopPropagation()
+    onToggle()
+  }
+  const summaryClass =
+    'min-w-0 flex-1 rounded-sm text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400'
+  const actions = (
+    <div className="flex shrink-0 items-center">
+      <CopyIconButton label="複製" onClick={onCopy} />
+      <EditIconButton label="編集" onClick={onEdit} />
+    </div>
+  )
+  const summaryProps = interactive
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        'aria-expanded': expanded,
+        onClick: onSummaryClick,
+        onKeyDown: onSummaryKeyDown,
+      }
+    : {}
+
+  if (showFull) {
+    return (
+      <div className="flex min-w-0 items-start gap-0.5">
+        <div
+          {...summaryProps}
+          className={interactive ? `${summaryClass} cursor-pointer` : summaryClass}
+        >
+          <div className="flex min-h-12 items-center">
+            <div className="min-w-0">
+              <p className="break-words text-sm font-medium text-stone-900 [overflow-wrap:anywhere]">
+                {dateLabel} · {peerLabel}
+              </p>
+              <p className="break-words text-xs text-stone-600 [overflow-wrap:anywhere]">
+                {priceText}
+              </p>
+            </div>
+          </div>
+          {hasNote && (
+            <p className="mt-1 break-words text-xs text-stone-500 [overflow-wrap:anywhere]">
+              {record.note}
+            </p>
+          )}
+        </div>
+        {actions}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <div
+        {...summaryProps}
+        className={`${summaryClass} flex cursor-pointer items-center gap-1`}
+      >
+        <p className="min-w-0 flex-1 truncate text-sm text-stone-900">
+          <span className="font-medium">
+            {dateLabel} · {peerLabel}
+          </span>
+          <span className="font-normal text-stone-600"> {priceText}</span>
+        </p>
+        {hasNote && (
+          <span className="shrink-0 text-xs text-stone-500">補足あり</span>
+        )}
+      </div>
+      {actions}
+    </div>
+  )
+}
+
 const TRENDS_ANIM_MS = 500
 
 const collapsedLayoutStyle = {
@@ -130,6 +254,10 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
   >({})
   const [recordsError, setRecordsError] = useState<string | null>(null)
   const [editingRecord, setEditingRecord] = useState<PriceRecord | null>(null)
+  const [expandedRecordIds, setExpandedRecordIds] = useState<Set<string>>(
+    () => new Set(),
+  )
+  const recordToggleLock = useRef(false)
   const [recordCounts, setRecordCounts] = useState<Record<string, number>>({})
   // derived counts preferred; setRecordCounts kept for patchFolderRecords sync
   const [addingFolderId, setAddingFolderId] = useState<string | null>(null)
@@ -573,6 +701,20 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
     setAddingFolderId(record.folder_id)
   }
 
+  const toggleRecordExpanded = useCallback((recordId: string) => {
+    if (recordToggleLock.current) return
+    recordToggleLock.current = true
+    setExpandedRecordIds((current) => {
+      const next = new Set(current)
+      if (next.has(recordId)) next.delete(recordId)
+      else next.add(recordId)
+      return next
+    })
+    window.setTimeout(() => {
+      recordToggleLock.current = false
+    }, 0)
+  }, [])
+
   const ensureFolderRecords = useCallback(
     async (folderId: string) => {
       if (recordsByFolder[folderId]) return
@@ -817,17 +959,10 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
     record: PriceRecord,
     opts: { dragEnabled: boolean; compact?: boolean },
   ) => {
-    const per = unitPrice(record.price, record.amount)
-    const amountText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}`
-    const priceText =
-      opts.compact || per == null
-        ? amountText
-        : `${amountText}（${formatYen(per, 2)}/${unitLabel(record.unit)}）`
-    const dateLabel = opts.compact
-      ? formatShortRecordedAt(record.recorded_at)
-      : record.recorded_at
+    const compact = opts.compact === true
+    const expanded = compact && expandedRecordIds.has(record.id)
     return (
-      <li key={record.id} className="list-none">
+      <li key={record.id} className="list-none min-w-0">
         <DraggableCatalogItem
           dragEnabled={opts.dragEnabled}
           payload={{
@@ -835,57 +970,26 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
             id: record.id,
             folderId,
           }}
+          onClick={
+            compact ? () => toggleRecordExpanded(record.id) : undefined
+          }
           onDelete={() => void requestDeleteRecord(record.id, folderId)}
-          className={`rounded-md border border-stone-200 bg-white px-2 sm:px-3 ${
-            opts.compact ? 'py-1.5' : 'py-2'
+          className={`min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-white px-2 sm:px-3 ${
+            compact ? 'py-1.5' : 'py-2'
           }`}
         >
-          {opts.compact ? (
-            <div className="flex min-w-0 items-center gap-1">
-              <p className="min-w-0 flex-1 truncate text-sm text-stone-900">
-                <span className="font-medium">
-                  {dateLabel} · {record.store_name}
-                </span>
-                <span className="font-normal text-stone-600"> {priceText}</span>
-              </p>
-              <div className="flex shrink-0 items-center">
-                <CopyIconButton
-                  label="複製"
-                  onClick={() => handleCopyRecord(record)}
-                />
-                <EditIconButton
-                  label="編集"
-                  onClick={() => setEditingRecord(record)}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="min-w-0 py-0.5">
-              <div className="flex min-w-0 items-center gap-0.5">
-                <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
-                  {dateLabel} · {record.store_name}
-                </p>
-                <div className="flex shrink-0 items-center">
-                  <CopyIconButton
-                    label="複製"
-                    onClick={() => handleCopyRecord(record)}
-                  />
-                  <EditIconButton
-                    label="編集"
-                    onClick={() => setEditingRecord(record)}
-                  />
-                </div>
-              </div>
-              <p className="break-words text-xs text-stone-600 [overflow-wrap:anywhere]">
-                {priceText}
-              </p>
-              {record.note && (
-                <p className="mt-1 break-words text-xs text-stone-500 [overflow-wrap:anywhere]">
-                  {record.note}
-                </p>
-              )}
-            </div>
-          )}
+          <CatalogRecordRow
+            record={record}
+            peerLabel={record.store_name}
+            compact={compact}
+            showUnitPrice={!compact}
+            expanded={expanded}
+            onToggle={
+              compact ? () => toggleRecordExpanded(record.id) : undefined
+            }
+            onCopy={() => handleCopyRecord(record)}
+            onEdit={() => setEditingRecord(record)}
+          />
         </DraggableCatalogItem>
       </li>
     )
@@ -1189,34 +1293,24 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
                 <div className="space-y-2">
                   <ul className="space-y-2">
                     {previewRows.map((record) => {
-                      const priceText = `${formatYen(record.price, 0)} / ${record.amount}${unitLabel(record.unit)}`
+                      const expanded = expandedRecordIds.has(record.id)
                       const itemName = parseFolderName(
                         folders.find((f) => f.id === record.folder_id)?.name ??
                           '—',
                       ).displayName
                       return (
-                        <li key={record.id} className="list-none">
-                          <div className="flex min-w-0 items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1.5 sm:px-3">
-                            <p className="min-w-0 flex-1 truncate text-sm text-stone-900">
-                              <span className="font-medium">
-                                {formatShortRecordedAt(record.recorded_at)} ·{' '}
-                                {itemName}
-                              </span>
-                              <span className="font-normal text-stone-600">
-                                {' '}
-                                {priceText}
-                              </span>
-                            </p>
-                            <div className="flex shrink-0 items-center">
-                              <CopyIconButton
-                                label="複製"
-                                onClick={() => handleCopyRecord(record)}
-                              />
-                              <EditIconButton
-                                label="編集"
-                                onClick={() => setEditingRecord(record)}
-                              />
-                            </div>
+                        <li key={record.id} className="list-none min-w-0">
+                          <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-white px-2 py-1.5 sm:px-3">
+                            <CatalogRecordRow
+                              record={record}
+                              peerLabel={itemName}
+                              compact
+                              showUnitPrice={false}
+                              expanded={expanded}
+                              onToggle={() => toggleRecordExpanded(record.id)}
+                              onCopy={() => handleCopyRecord(record)}
+                              onEdit={() => setEditingRecord(record)}
+                            />
                           </div>
                         </li>
                       )
@@ -1334,39 +1428,26 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
             </p>
           ) : (
             <ul className="space-y-2">
-              {getStoreRecords(detailStore.name).map((record) => (
-                <li key={record.id} className="list-none">
-                  <div className="flex items-start gap-1 rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3">
-                    <div className="min-w-0 flex-1 py-0.5">
-                      <div className="flex min-w-0 items-center gap-0.5">
-                        <p className="min-w-0 flex-1 truncate text-sm font-medium text-stone-900">
-                          {record.recorded_at} ·{' '}
-                          {
-                            parseFolderName(
-                              folders.find((f) => f.id === record.folder_id)
-                                ?.name ?? '—',
-                            ).displayName
-                          }
-                        </p>
-                        <div className="flex shrink-0 items-center">
-                          <CopyIconButton
-                            label="複製"
-                            onClick={() => handleCopyRecord(record)}
-                          />
-                          <EditIconButton
-                            label="編集"
-                            onClick={() => setEditingRecord(record)}
-                          />
-                        </div>
-                      </div>
-                      <p className="break-words text-xs text-stone-600 [overflow-wrap:anywhere]">
-                        {formatYen(record.price, 0)} / {record.amount}
-                        {unitLabel(record.unit)}
-                      </p>
+              {getStoreRecords(detailStore.name).map((record) => {
+                const itemName = parseFolderName(
+                  folders.find((f) => f.id === record.folder_id)?.name ?? '—',
+                ).displayName
+                return (
+                  <li key={record.id} className="list-none min-w-0">
+                    <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3">
+                      <CatalogRecordRow
+                        record={record}
+                        peerLabel={itemName}
+                        compact={false}
+                        showUnitPrice={false}
+                        expanded={false}
+                        onCopy={() => handleCopyRecord(record)}
+                        onEdit={() => setEditingRecord(record)}
+                      />
                     </div>
-                  </div>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
           )}
         </>
