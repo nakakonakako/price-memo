@@ -120,15 +120,103 @@ cmd=(agent --model "$model")
 if [[ -n "$worktree" ]]; then
   cmd+=(--worktree "$worktree")
 fi
-cmd+=(-p "$full_prompt")
-
 echo "[delegate-cursor] repo: $repo_root" >&2
 echo "[delegate-cursor] tier: $tier" >&2
 echo "[delegate-cursor] model: $model" >&2
+started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+echo "[delegate-cursor] started_at: $started_at" >&2
 if [[ -n "$worktree" ]]; then
   echo "[delegate-cursor] worktree: $worktree" >&2
 else
   echo "[delegate-cursor] worktree: direct checkout" >&2
 fi
 
-exec "${cmd[@]}"
+log_dir="$(mktemp -d "${TMPDIR:-/tmp}/delegate-cursor.XXXXXX")"
+stdout_log="$log_dir/stdout.log"
+stderr_log="$log_dir/stderr.log"
+echo "[delegate-cursor] stdout log: $stdout_log" >&2
+echo "[delegate-cursor] stderr log: $stderr_log" >&2
+
+# stream-json makes the terminal output inspectable and gives the supervisor a
+# structured final result event. Keep stdout and stderr visible and separately
+# captured so CLI/worktree diagnostics are not lost.
+cmd+=(--output-format stream-json -p "$full_prompt")
+exec {stderr_fd}> >(tee "$stderr_log" >&2)
+stderr_tee_pid=$!
+set +e
+"${cmd[@]}" \
+  2>&"$stderr_fd" | tee "$stdout_log"
+pipeline_status=("${PIPESTATUS[@]}")
+agent_exit_code="${pipeline_status[0]}"
+set -e
+exec {stderr_fd}>&-
+wait "$stderr_tee_pid" || true
+
+result_status="missing"
+result_event=""
+if result_event="$(node - "$stdout_log" <<'NODE'
+const fs = require('node:fs');
+const logPath = process.argv[2];
+let finalResult;
+for (const line of fs.readFileSync(logPath, 'utf8').split(/\r?\n/)) {
+  try {
+    const event = JSON.parse(line);
+    if (event && event.type === 'result') finalResult = event;
+  } catch {
+    // Ignore non-JSON lines so diagnostic text remains usable as well.
+  }
+}
+if (finalResult) {
+  process.stdout.write(JSON.stringify({
+    type: finalResult.type,
+    subtype: finalResult.subtype,
+    is_error: finalResult.is_error,
+    session_id: finalResult.session_id,
+  }));
+}
+NODE
+)" && [[ -n "$result_event" ]]; then
+  result_status="unknown"
+  if node -e 'const e=JSON.parse(process.argv[1]); process.exit(e.subtype === "success" || (e.is_error === false && e.subtype !== "error") ? 0 : 1)' "$result_event"; then
+    result_status="success"
+  elif node -e 'const e=JSON.parse(process.argv[1]); process.exit(e.subtype === "error" || e.is_error === true ? 0 : 1)' "$result_event"; then
+    result_status="error"
+  fi
+fi
+
+failure_stage="none"
+if [[ "$agent_exit_code" -ne 0 || "$result_status" == "error" ]]; then
+  if [[ -n "$worktree" ]] && { grep -Eiq 'worktree setup (failed|error)|setup script.*(failed|error)|failed.*setup' "$stderr_log" "$stdout_log" || { grep -Eiq 'Running worktree setup script' "$stderr_log" "$stdout_log" && ! grep -Eiq '\[worktree-setup\] Complete\.' "$stderr_log" "$stdout_log"; }; }; then
+    failure_stage="worktree_setup"
+  elif [[ -n "$worktree" ]] && grep -Eiq '(fatal:.*worktree|Error:.*(worktree|mkdir)|unable to create.*worktree|failed to create.*worktree)' "$stderr_log" "$stdout_log"; then
+    failure_stage="worktree_creation"
+  else
+    failure_stage="cursor_agent"
+  fi
+elif [[ "$agent_exit_code" -eq 0 && "$result_status" == "success" ]]; then
+  failure_stage="success"
+else
+  failure_stage="cursor_agent"
+fi
+
+finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+echo "[delegate-cursor] finished_at: $finished_at" >&2
+echo "[delegate-cursor] process_exit_code: $agent_exit_code" >&2
+echo "[delegate-cursor] result_event_status: $result_status" >&2
+if [[ -n "$result_event" ]]; then
+  echo "[delegate-cursor] final_result_event: $result_event" >&2
+fi
+echo "[delegate-cursor] outcome: $failure_stage" >&2
+if [[ "$agent_exit_code" -eq 0 && "$result_status" == "success" ]]; then
+  rm -rf -- "$log_dir"
+  echo "[delegate-cursor] logs: removed after successful completion" >&2
+else
+  echo "[delegate-cursor] logs: $log_dir" >&2
+fi
+
+if [[ "$agent_exit_code" -ne 0 ]]; then
+  exit "$agent_exit_code"
+fi
+if [[ "$result_status" != "success" ]]; then
+  exit 1
+fi

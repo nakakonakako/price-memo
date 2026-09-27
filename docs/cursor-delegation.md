@@ -38,6 +38,24 @@ the environment or delegation infrastructure, then resume delegation. Do not
 silently replace Cursor implementation with Luna implementation because
 delegation is inconvenient.
 
+### Delegation run evidence
+
+`scripts/delegate-cursor.sh` records the selected tier/model, worktree, and UTC
+start time before launching Cursor. It runs print mode with `stream-json`,
+relays stdout and stderr to the Codex terminal, and saves each stream under a
+temporary log directory printed at launch. On completion, it reports the
+process exit code and the final `result` event status (`success`, `error`, or
+`missing`), along with the finish time and outcome. After successful completion,
+the temporary log directory is removed. On failure or incomplete results, logs
+are retained and their location is reported. Treat a run as complete only when
+the process exits successfully and the final result event reports success.
+
+When a run fails, the script classifies recognizable worktree creation and
+setup failures separately from Cursor agent failures. Review the printed logs
+and actual process/result status before concluding that delegation failed;
+the diagnostic classification is based on Cursor CLI output and may be
+`cursor_agent` when the CLI does not emit a recognizable phase marker.
+
 ## Cursor model tiers
 
 | Tier | Model | Typical work |
