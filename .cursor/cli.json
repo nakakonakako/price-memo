@@ -6,7 +6,8 @@
       "Shell(git)",
       "Shell(ls)",
       "Shell(cat)",
-      "Shell(cp)"
+      "Shell(cp)",
+      "Mcp(playwright:*)"
     ],
     "deny": [
       "Shell(sudo)",

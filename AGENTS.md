@@ -76,6 +76,13 @@ migrations or run `db push` from this repository.
 
 When changing frontend UI:
 
+- For Cursor worker UI verification, use the dedicated `npm run dev:playwright`
+  server at `http://localhost:5273`; keep ordinary `npm run dev` on its existing
+  port. The Playwright MCP uses a shared persistent profile under the user's
+  home directory, so run MCP browser checks sequentially and never print, copy
+  into the repository, or include its profile contents or authentication data
+  in prompts or logs.
+
 - Verify the rendered application when the change can affect layout,
   responsive behavior, styling, or user interaction.
 - Choose the most appropriate browser tool for the task.

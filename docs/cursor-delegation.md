@@ -133,6 +133,24 @@ Use `--worktree` when:
 - the current checkout has uncommitted work that should be isolated
 - a risky/large implementation should be kept separate until reviewed
 
+## Cursor worker UI verification
+
+For local UI checks, Cursor workers should use the dedicated development
+server, started with `npm run dev:playwright`, at `http://localhost:5273`.
+This runs Vite with a fixed port and strict port handling, while ordinary
+`npm run dev` keeps its existing behavior and port. If 5273 is occupied, the
+dedicated server must fail to start instead of moving to another port.
+
+The Playwright MCP uses the shared persistent profile at
+`${userHome}/.local/state/price-memo/playwright-profile`. This path is outside
+the repository and resolves to the same user directory from the main checkout
+and Cursor worktrees. The first Google OAuth login is manual in the Playwright
+MCP browser; do not automate Google login or put credentials in Cursor prompts.
+Treat profile files as authentication secrets: never inspect, print, copy into
+the repository, or include their contents, cookies, or tokens in prompts or
+logs. Only one MCP browser may use the profile at a time; perform UI checks
+sequentially and close the browser before another worker starts one.
+
 ## Retry / escalation
 
 - Environment/tooling failure: report and repair the environment; do not escalate model just because setup failed. For Cursor delegation, make the first attempt network-enabled as described above; do not intentionally make a restricted attempt first.
