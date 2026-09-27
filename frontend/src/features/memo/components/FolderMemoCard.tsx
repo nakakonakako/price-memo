@@ -370,7 +370,7 @@ export function FolderMemoCard({
             <label className="min-w-0 space-y-1">
               <span className="text-xs text-stone-500">確認日</span>
               <DateInput
-                wrapClassName="px-2.5 py-2"
+                wrapClassName="px-2.5"
                 value={recordedAt}
                 onChange={(e) => setRecordedAt(e.target.value)}
               />

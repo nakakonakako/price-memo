@@ -200,13 +200,13 @@ export function RecordForm({
               placeholder="店舗名"
             />
             <DateInput
-              wrapClassName="px-3 py-2"
+              wrapClassName="px-3"
               value={from}
               onChange={(e) => setFrom(e.target.value)}
               aria-label="検索開始日"
             />
             <DateInput
-              wrapClassName="px-3 py-2"
+              wrapClassName="px-3"
               value={to}
               onChange={(e) => setTo(e.target.value)}
               aria-label="検索終了日"
@@ -283,7 +283,7 @@ export function RecordForm({
           <label className="block min-w-0 space-y-1">
             <span className="text-xs text-stone-500">購入日</span>
             <DateInput
-              wrapClassName="px-3 py-2"
+              wrapClassName="px-3"
               value={form.recorded_at}
               onChange={(e) =>
                 setForm((s) => ({ ...s, recorded_at: e.target.value }))

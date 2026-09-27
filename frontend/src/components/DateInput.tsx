@@ -12,7 +12,7 @@ export function DateInput({
 }: Props) {
   return (
     <div
-      className={`date-input-wrap w-full rounded-md border border-stone-300 bg-white focus-within:border-stone-500 ${wrapClassName}`}
+      className={`date-input-wrap w-full rounded-md border border-stone-300 bg-white text-sm focus-within:border-stone-500 ${wrapClassName}`}
     >
       <input
         type="date"
