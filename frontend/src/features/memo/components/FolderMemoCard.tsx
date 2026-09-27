@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
 import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
+import { DateInput } from '@/components/DateInput'
 import { StoreField } from '@/components/StoreField'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { parseFolderName } from '@/features/folders/utils/folderName'
@@ -366,11 +367,10 @@ export function FolderMemoCard({
             onClick={(e) => e.stopPropagation()}
           >
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-3 sm:gap-x-3">
-            <label className="date-field-wrap min-w-0 space-y-1">
+            <label className="min-w-0 space-y-1">
               <span className="text-xs text-stone-500">確認日</span>
-              <input
-                type="date"
-                className={`${fieldClass} min-w-0 max-w-full`}
+              <DateInput
+                wrapClassName="px-2.5 py-2"
                 value={recordedAt}
                 onChange={(e) => setRecordedAt(e.target.value)}
               />

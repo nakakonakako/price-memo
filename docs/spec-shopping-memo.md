@@ -1,6 +1,6 @@
 # 仕様: 買い物メモ（店頭での使い方）
 
-最終更新: 2026-09-06
+最終更新: 2026-09-27
 
 関連: [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md) / [project-overview.md](./project-overview.md) / [spec-folders-catalog.md](./spec-folders-catalog.md)
 
@@ -46,6 +46,7 @@ B は支出管理アプリではなく **厳密単価の統計アプリ** であ
 ## 5. 行内試算・保存
 
 - 入力: 確認日、店名（`StoreField`・カタログから選択）、総額、内容量、単位、補足
+- 確認日と店名は 2 列（`minmax(0, 1fr)`）。確認日はネイティブ `input type="date"`（`DateInput`）。枠線・角丸・背景・余白はラッパーが持ち、入力本体に padding はない
 - **単位「その他…」** … モーダルではなく内容量の下にテキスト欄。入力中は下書きのみ、フォーカスが外れたときに確定（`UnitField`）
 - **店名を選ぶと、平均／最安／直近はその店の記録だけで計算**（未入力時は全体）
 - 店名は保存時に `price_stores` へ登録され、記録に正規名が入る
@@ -108,6 +109,7 @@ B は支出管理アプリではなく **厳密単価の統計アプリ** であ
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-27 | 確認日は `DateInput`。余白はラッパー、ネイティブ日付入力は padding なし。確認日 / 店名の 2 列は維持 |
 | 2026-09-26 | 店舗カタログ変更を stores revision で StoreField と keep-alive 画面へ同期 |
 | 2026-09-06 | 新規メモ追加を一覧先頭に。タブ keep-alive と catalogSync による差分同期を追記 |
 | 2026-09-06 | メモ初期ロードを掲載フォルダの記録のみに限定（`listRecordsForFolders`） |

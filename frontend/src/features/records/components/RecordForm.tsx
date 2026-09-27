@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { DateInput } from '@/components/DateInput'
 import { StoreField } from '@/components/StoreField'
 import { searchReceiptItems } from '../api/recordsApi'
 import type { PriceRecordInput, PriceUnit, ReceiptItemRef } from '../types'
@@ -198,24 +199,18 @@ export function RecordForm({
               onChange={(e) => setStore(e.target.value)}
               placeholder="店舗名"
             />
-            <div className="date-field-wrap min-w-0">
-              <input
-                type="date"
-                className={fieldClass}
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                aria-label="検索開始日"
-              />
-            </div>
-            <div className="date-field-wrap min-w-0">
-              <input
-                type="date"
-                className={fieldClass}
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                aria-label="検索終了日"
-              />
-            </div>
+            <DateInput
+              wrapClassName="px-3 py-2"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              aria-label="検索開始日"
+            />
+            <DateInput
+              wrapClassName="px-3 py-2"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              aria-label="検索終了日"
+            />
             <button
               type="submit"
               disabled={searching}
@@ -285,11 +280,10 @@ export function RecordForm({
         )}
 
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="date-field-wrap block min-w-0 space-y-1">
+          <label className="block min-w-0 space-y-1">
             <span className="text-xs text-stone-500">購入日</span>
-            <input
-              type="date"
-              className={fieldClass}
+            <DateInput
+              wrapClassName="px-3 py-2"
               value={form.recorded_at}
               onChange={(e) =>
                 setForm((s) => ({ ...s, recorded_at: e.target.value }))

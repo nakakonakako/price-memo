@@ -121,7 +121,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 ## 3. 記録の追加・編集モーダル
 
-- `RecordForm` … 購入日とレシート検索の開始日・終了日は `date-field-wrap` と `min-width: 0` の列（`grid-cols-1` / `sm:grid-cols-2`）。スマホでは日付欄の最小幅が列幅を押し広げない
+- `RecordForm` … 購入日とレシート検索の開始日・終了日は `DateInput`（`grid-cols-1` / `sm:grid-cols-2`、列は `min-width: 0`）。枠線・余白はラッパー側。ネイティブ日付入力に padding は付けない
 - 数量と単位は横並び。単位列はやや広め（`6.5rem`）
 - 単位「その他…」は内容量行の下にインライン入力（`UnitField`、モーダルなし）
 
@@ -165,6 +165,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 | 日付 | 内容 |
 |------|------|
+| 2026-09-27 | 購入日とレシート検索の日付欄は `DateInput`。余白はラッパー、ネイティブ `input type="date"` は padding なし |
 | 2026-09-27 | プレビューの記録行は折りたたみ初期で要約押下により全文表示。展開時の日付・値段はアイコン行で縦中央、補足なしは折りたたみ時と同じ高さ。詳細は最初から全文でタップ開閉なし |
 | 2026-09-26 | 店舗の作成・改名・削除を stores revision で StoreField と keep-alive 画面へ同期 |
 | 2026-09-06 | パフォーマンス: keep-alive・catalogSync・storesCache・allRecords 派生・推移 lazy。詳細は同一タブ内状態である旨を明記 |

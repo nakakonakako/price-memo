@@ -24,47 +24,31 @@ body {
   textarea {
     font-size: 16px;
   }
+}
 
-  /*
-    WebKit date controls report a min-content width of the formatted value
-    plus the calendar indicator. Grid and flex items default to
-    min-width: auto, so that width becomes the track minimum and the
-    control overflows a narrow column. Tailwind also sets
-    ::-webkit-datetime-edit { display: inline-flex }, whose automatic
-    minimum is the full date string.
+/*
+  WebKit bug 301648: iOS Safari adds a date input's padding outside
+  `width: 100%` (text inputs do not). The wrapper owns the border, radius,
+  background, and padding. The native control stays padding-free, borderless,
+  and transparent so its border box matches the wrapper content box.
+  box-sizing is border-box; with zero padding and border it does not change
+  the used width.
+*/
+.date-input-wrap {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
 
-    Shrink the control and those inner parts so the border box follows
-    the column. Keep the picker indicator; do not clip the field wrapper.
-  */
-  .date-field-wrap {
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  input[type='date'] {
-    box-sizing: border-box;
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-  }
-
-  input[type='date']::-webkit-datetime-edit {
-    display: inline-flex;
-    flex: 1 1 auto;
-    min-width: 0;
-    max-width: 100%;
-    overflow: hidden;
-  }
-
-  input[type='date']::-webkit-datetime-edit-fields-wrapper,
-  input[type='date']::-webkit-date-and-time-value {
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  input[type='date']::-webkit-calendar-picker-indicator {
-    flex: none;
-    margin-inline-start: 0.125rem;
-  }
+input[type='date'].date-input {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  outline: none;
 }
