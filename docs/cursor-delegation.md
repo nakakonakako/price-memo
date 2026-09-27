@@ -14,6 +14,15 @@ not Sol escalation is needed. A decision to keep routine UI/CSS or a known
 local bug off the Sol path means Luna retains supervisor ownership; it does not
 mean Luna should implement the change herself.
 
+Cursor CLI must reach Cursor's external API. The Codex Supervisor must run each
+`scripts/delegate-cursor.sh` invocation with network-enabled execution from the
+start (`functions.exec_command` using `sandbox_permissions: "require_escalated"`).
+Do not first run it in the restricted sandbox and then retry after
+`getaddrinfo EAI_AGAIN`; the restricted attempt is expected to fail before the
+Cursor API can be reached. Keep network access scoped to this delegation
+command. Do not enable network access for the project sandbox globally solely
+for Cursor delegation.
+
 Luna primarily clarifies requirements, investigates enough to classify and
 bound the task, decides whether Sol advice is needed, chooses the implementation
 approach, writes the Cursor work order, and reviews the result and diff. Luna
@@ -126,7 +135,7 @@ Use `--worktree` when:
 
 ## Retry / escalation
 
-- Environment/tooling failure: report and repair the environment; do not escalate model just because setup failed.
+- Environment/tooling failure: report and repair the environment; do not escalate model just because setup failed. For Cursor delegation, make the first attempt network-enabled as described above; do not intentionally make a restricted attempt first.
 - Cursor CLI or delegation-script failure: report the failure, repair the environment or delegation infrastructure, then resume delegation; do not switch to Luna implementation as a shortcut.
 - `light` struggles with implementation: retry as `normal`.
 - `normal` struggles after a clarified work order: retry as `hard`.

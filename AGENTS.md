@@ -160,6 +160,14 @@ it is dirty, shared with concurrent edits, or needs isolation, use
 `--worktree <name>`; do not replace worktree delegation with Luna's direct
 implementation.
 
+Cursor CLI connects to Cursor's external API. Every Codex Supervisor invocation
+of `scripts/delegate-cursor.sh` must use network-enabled execution from the
+first attempt (`functions.exec_command` with `sandbox_permissions:
+"require_escalated"`). Do not run it once in the restricted sandbox and retry
+after `getaddrinfo EAI_AGAIN`; that failure is expected when the command lacks
+network access. Keep this permission scoped to the delegation command. Do not
+enable network access for the whole project sandbox solely to support Cursor.
+
 If Cursor CLI is unavailable, the delegate script fails, or another tooling
 failure prevents delegation, report the specific failure and repair the
 environment or delegation infrastructure, then resume delegation. Do not
