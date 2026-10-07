@@ -134,21 +134,37 @@ function CatalogRecordRow({
       ? record.recorded_at
       : formatShortRecordedAt(record.recorded_at)
   const hasNote = Boolean(record.note?.trim())
-  const onSummaryClick = (event: MouseEvent<HTMLDivElement>) => {
+  const stopBubble = (
+    event: MouseEvent<HTMLElement> | KeyboardEvent<HTMLElement>,
+  ) => {
     event.stopPropagation()
+  }
+  const onSummaryClick = (event: MouseEvent<HTMLDivElement>) => {
+    stopBubble(event)
     onToggle?.()
   }
   const onSummaryKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (!onToggle) return
     if (event.key !== 'Enter' && event.key !== ' ') return
     event.preventDefault()
-    event.stopPropagation()
+    stopBubble(event)
     onToggle()
+  }
+  const rowShellProps = {
+    onPointerDown: stopBubble,
+    onPointerUp: stopBubble,
+    onClick: stopBubble,
+    onKeyDown: stopBubble,
   }
   const summaryClass =
     'min-w-0 flex-1 rounded-sm text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-400'
   const actions = (
-    <div className="flex shrink-0 items-center">
+    <div
+      className="flex shrink-0 items-center"
+      onPointerDown={stopBubble}
+      onPointerUp={stopBubble}
+      onKeyDown={stopBubble}
+    >
       <CopyIconButton label="複製" onClick={onCopy} />
       <EditIconButton label="編集" onClick={onEdit} />
     </div>
@@ -165,7 +181,7 @@ function CatalogRecordRow({
 
   if (showFull) {
     return (
-      <div className="flex min-w-0 items-start gap-0.5">
+      <div className="flex min-w-0 items-start gap-0.5" {...rowShellProps}>
         <div
           {...summaryProps}
           className={interactive ? `${summaryClass} cursor-pointer` : summaryClass}
@@ -192,7 +208,7 @@ function CatalogRecordRow({
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <div className="flex min-w-0 items-center gap-1" {...rowShellProps}>
       <div
         {...summaryProps}
         className={`${summaryClass} flex cursor-pointer items-center gap-1`}
@@ -272,11 +288,6 @@ export function FoldersPage({
   const [addingFolderId, setAddingFolderId] = useState<string | null>(null)
   const [addingForStore, setAddingForStore] = useState<PriceStore | null>(null)
   const [storeAddFolderId, setStoreAddFolderId] = useState('')
-  const [storeAddNewFolderOpen, setStoreAddNewFolderOpen] = useState(false)
-  const [storeAddNewFolderName, setStoreAddNewFolderName] = useState('')
-  const [storeAddNewFolderError, setStoreAddNewFolderError] = useState<
-    string | null
-  >(null)
   const [addingBusy, setAddingBusy] = useState(false)
   const [editingBusy, setEditingBusy] = useState(false)
   const [catalogQuery, setCatalogQuery] = useState('')
@@ -312,7 +323,6 @@ export function FoldersPage({
     useState<RecordFormState | null>(null)
 
   const addingFolder = folders.find((f) => f.id === addingFolderId) ?? null
-  const storeAddFolder = folders.find((f) => f.id === storeAddFolderId) ?? null
   const deleteConfirmFolder =
     folders.find((f) => f.id === deleteConfirmFolderId) ?? null
   const deleteConfirmStore =
@@ -665,57 +675,18 @@ export function FoldersPage({
     }
   }
 
-  const resetStoreAddInlineState = useCallback(() => {
-    setStoreAddNewFolderOpen(false)
-    setStoreAddNewFolderName('')
-    setStoreAddNewFolderError(null)
-  }, [])
-
   const closeAddingForStore = useCallback(() => {
     setAddingForStore(null)
     setStoreAddFolderId('')
-    resetStoreAddInlineState()
-  }, [resetStoreAddInlineState])
+  }, [])
 
   const openAddingForStore = useCallback(
     (store: PriceStore) => {
-      if (addingForStore?.id !== store.id) {
-        resetStoreAddInlineState()
-      }
       setAddingForStore(store)
-      setStoreAddFolderId(folders[0]?.id ?? '')
+      setStoreAddFolderId('')
     },
-    [addingForStore?.id, folders, resetStoreAddInlineState],
+    [],
   )
-
-  const handleStoreAddCreateFolder = async (e: FormEvent) => {
-    e.preventDefault()
-    const trimmed = storeAddNewFolderName.trim()
-    if (!trimmed) {
-      setStoreAddNewFolderError('品目名を入力してください。')
-      return
-    }
-    const existing = folders.find((f) => f.name === trimmed)
-    if (existing) {
-      setStoreAddFolderId(existing.id)
-      setStoreAddNewFolderOpen(false)
-      setStoreAddNewFolderName('')
-      setStoreAddNewFolderError('同名の品目が既にあるため、選択しました。')
-      return
-    }
-    setStoreAddNewFolderError(null)
-    try {
-      const created = await create(trimmed)
-      setStoreAddFolderId(created.id)
-      setStoreAddNewFolderOpen(false)
-      setStoreAddNewFolderName('')
-      setStoreAddNewFolderError(null)
-    } catch (err) {
-      setStoreAddNewFolderError(
-        toUserMessage(err, 'フォルダの追加に失敗しました。'),
-      )
-    }
-  }
 
   useOutsidePointerDown(editingId != null, cancelEdit)
 
@@ -1216,6 +1187,8 @@ export function FoldersPage({
               className="border-t border-amber-200/70 bg-white/80 px-3 py-3"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
             >
               {openFolderLoadingId === folder.id ? (
                 <p className="text-sm text-stone-500">中身を読み込み中...</p>
@@ -1369,6 +1342,8 @@ export function FoldersPage({
               className="border-t border-emerald-200/70 bg-white/80 px-3 py-3"
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
+              onPointerDown={(e) => e.stopPropagation()}
+              onPointerUp={(e) => e.stopPropagation()}
             >
               {storeRecords.length === 0 ? (
                 <p className="text-sm text-stone-500">
@@ -1831,139 +1806,46 @@ export function FoldersPage({
         onClose={closeAddingForStore}
       >
         {addingForStore && (
-          <div className="space-y-3">
-            <p className="text-sm text-stone-600">
-              店舗:{' '}
-              <span className="font-medium text-stone-900">
-                {addingForStore.name}
-              </span>
-            </p>
-            {folders.length > 0 && (
-              <label className="block space-y-1">
-                <span className="text-xs text-stone-500">品目（フォルダ）</span>
-                <select
-                  value={storeAddFolderId}
-                  onChange={(e) => {
-                    setStoreAddFolderId(e.target.value)
-                    setStoreAddNewFolderOpen(false)
-                    setStoreAddNewFolderName('')
-                    setStoreAddNewFolderError(null)
-                  }}
-                  className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-                >
-                  {folders.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {parseFolderName(f.name).displayName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {folders.length > 0 && !storeAddNewFolderOpen ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setStoreAddNewFolderOpen(true)
-                  setStoreAddNewFolderError(null)
-                }}
-                className="text-sm text-stone-600 underline decoration-stone-300 underline-offset-2 hover:text-stone-900"
-              >
-                新しい品目を作成
-              </button>
-            ) : (
-              <form
-                className="space-y-2"
-                onSubmit={(e) => void handleStoreAddCreateFolder(e)}
-              >
-                <p className="text-xs text-stone-500">
-                  {folders.length === 0
-                    ? '品目（フォルダ）を作成してください'
-                    : '新しい品目名'}
-                </p>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <input
-                    type="text"
-                    value={storeAddNewFolderName}
-                    onChange={(e) => {
-                      setStoreAddNewFolderName(e.target.value)
-                      setStoreAddNewFolderError(null)
-                    }}
-                    placeholder="品目名（例: 牛乳）"
-                    autoComplete="off"
-                    autoCorrect="off"
-                    autoCapitalize="off"
-                    spellCheck={false}
-                    className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-                    disabled={isMutating}
-                    autoFocus={folders.length === 0 || storeAddNewFolderOpen}
-                  />
-                  <button
-                    type="submit"
-                    disabled={isMutating || !storeAddNewFolderName.trim()}
-                    className="shrink-0 rounded-md bg-stone-900 px-4 py-2 text-sm text-white hover:bg-stone-800 disabled:opacity-50"
-                  >
-                    作成
-                  </button>
-                </div>
-                {folders.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStoreAddNewFolderOpen(false)
-                      setStoreAddNewFolderName('')
-                      setStoreAddNewFolderError(null)
-                    }}
-                    className="text-sm text-stone-500 hover:text-stone-700"
-                  >
-                    キャンセル
-                  </button>
-                )}
-              </form>
-            )}
-            {storeAddNewFolderError && (
-              <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {storeAddNewFolderError}
-              </p>
-            )}
-            {storeAddFolder &&
-              !(folders.length > 0 && storeAddNewFolderOpen) && (
-                <RecordForm
-                  key={`store-add-${addingForStore.id}-${storeAddFolderId}`}
-                  folderId={storeAddFolderId}
-                  folderName={storeAddFolder.name}
-                  initial={{
-                    ...emptyRecordForm(),
-                    store_name: addingForStore.name,
-                  }}
-                  preferredUnits={[
-                    ...new Set(
-                      (
-                        recordsByFolder[storeAddFolderId] ?? []
-                      ).map((r) => r.unit),
-                    ),
-                  ]}
-                  busy={addingBusy}
-                  onCancel={closeAddingForStore}
-                  onSubmit={async (input) => {
-                    setAddingBusy(true)
-                    try {
-                      const created = await createRecord(input)
-                      patchFolderRecords(storeAddFolderId, (rows) => [
-                        ...rows,
-                        created,
-                      ])
-                      setAllRecords((prev) => [created, ...prev])
-                      if (openStoreId !== addingForStore.id) {
-                        setPreviewStoreId(addingForStore.id)
-                      }
-                      closeAddingForStore()
-                    } finally {
-                      setAddingBusy(false)
-                    }
-                  }}
-                />
-              )}
-          </div>
+          <RecordForm
+            key={`store-add-${addingForStore.id}`}
+            folderId={storeAddFolderId}
+            fixedStoreName={addingForStore.name}
+            folderPicker={{
+              folders,
+              folderId: storeAddFolderId,
+              onFolderChange: setStoreAddFolderId,
+              onCreateFolder: create,
+              foldersBusy: isMutating,
+            }}
+            initial={{
+              ...emptyRecordForm(),
+              store_name: addingForStore.name,
+            }}
+            preferredUnits={[
+              ...new Set(
+                (recordsByFolder[storeAddFolderId] ?? []).map((r) => r.unit),
+              ),
+            ]}
+            busy={addingBusy}
+            onCancel={closeAddingForStore}
+            onSubmit={async (input) => {
+              setAddingBusy(true)
+              try {
+                const created = await createRecord({
+                  ...input,
+                  store_name: addingForStore.name,
+                })
+                patchFolderRecords(input.folder_id, (rows) => [...rows, created])
+                setAllRecords((prev) => [created, ...prev])
+                if (openStoreId !== addingForStore.id) {
+                  setPreviewStoreId(addingForStore.id)
+                }
+                closeAddingForStore()
+              } finally {
+                setAddingBusy(false)
+              }
+            }}
+          />
         )}
       </Modal>
 

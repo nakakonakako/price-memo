@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { toUserMessage } from '@/lib/userError'
 import {
   createFolder,
@@ -9,11 +9,16 @@ import {
 } from '../api/foldersApi'
 import type { PriceFolder } from '../types'
 
+function appendFolderUnique(prev: PriceFolder[], created: PriceFolder): PriceFolder[] {
+  return prev.some((f) => f.id === created.id) ? prev : [...prev, created]
+}
+
 export function useFolders() {
   const [folders, setFolders] = useState<PriceFolder[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isMutating, setIsMutating] = useState(false)
+  const createInFlightRef = useRef(false)
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setIsLoading(true)
@@ -50,12 +55,17 @@ export function useFolders() {
     name: string,
     options?: { atStart?: boolean },
   ) => {
+    if (createInFlightRef.current) {
+      throw new Error('品目の作成中です。完了までお待ちください。')
+    }
+    createInFlightRef.current = true
     setIsMutating(true)
     setError(null)
     try {
       const created = await createFolder(name)
       if (options?.atStart) {
-        const next = [created, ...folders].map((f, sort_order) => ({
+        const prevWithoutDup = folders.filter((f) => f.id !== created.id)
+        const next = [created, ...prevWithoutDup].map((f, sort_order) => ({
           ...f,
           sort_order,
         }))
@@ -69,12 +79,13 @@ export function useFolders() {
         }
         return created
       }
-      setFolders((prev) => [...prev, created])
+      setFolders((prev) => appendFolderUnique(prev, created))
       return created
     } catch (err) {
       setError(toUserMessage(err, 'フォルダの追加に失敗しました。'))
       throw err
     } finally {
+      createInFlightRef.current = false
       setIsMutating(false)
     }
   }

@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { DateInput } from '@/components/DateInput'
+import { FolderField } from '@/components/FolderField'
 import { StoreField } from '@/components/StoreField'
+import type { PriceFolder } from '@/features/folders/types'
 import { searchReceiptItems } from '../api/recordsApi'
 import type { PriceRecordInput, PriceUnit, ReceiptItemRef } from '../types'
 import {
@@ -19,10 +21,22 @@ import {
 
 type FolderOption = { id: string; label: string }
 
+type FolderPickerProps = {
+  folders: PriceFolder[]
+  folderId: string
+  onFolderChange: (id: string) => void
+  onCreateFolder: (name: string) => Promise<PriceFolder>
+  foldersBusy?: boolean
+}
+
 type Props = {
   folderId: string
   folderName?: string
   folderOptions?: FolderOption[]
+  /** Store name fixed for store-origin record create (hides store field). */
+  fixedStoreName?: string
+  /** Inline folder search/create for store-origin record create. */
+  folderPicker?: FolderPickerProps
   preferredUnits?: PriceUnit[]
   busy?: boolean
   submitLabel?: string
@@ -37,6 +51,8 @@ export function RecordForm({
   folderId,
   folderName,
   folderOptions,
+  fixedStoreName,
+  folderPicker,
   preferredUnits = [],
   busy,
   submitLabel,
@@ -61,11 +77,14 @@ export function RecordForm({
   const [showReceiptSearch, setShowReceiptSearch] = useState(false)
 
   const resolvedFolderId =
-    isEdit && folderOptions && folderOptions.length > 0
-      ? selectedFolderId
-      : folderId
+    folderPicker != null
+      ? folderPicker.folderId
+      : isEdit && folderOptions && folderOptions.length > 0
+        ? selectedFolderId
+        : folderId
   const resolvedFolderLabel =
     folderOptions?.find((f) => f.id === resolvedFolderId)?.label ?? folderName
+  const storeFixed = fixedStoreName != null && fixedStoreName.length > 0
   const resolvedSubmitLabel =
     submitLabel ?? (isEdit ? '保存する' : '追加する')
   const [q, setQ] = useState('')
@@ -89,7 +108,14 @@ export function RecordForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const parsed = parseRecordForm(resolvedFolderId, form)
+    if (folderPicker != null && !resolvedFolderId) {
+      setFormError('品目（フォルダ）を選択または作成してください。')
+      return
+    }
+    const formForSubmit = storeFixed
+      ? { ...form, store_name: fixedStoreName }
+      : form
+    const parsed = parseRecordForm(resolvedFolderId, formForSubmit)
     if (typeof parsed === 'string') {
       setFormError(parsed)
       return
@@ -153,6 +179,8 @@ export function RecordForm({
           </select>
         </label>
       ) : (
+        !storeFixed &&
+        !folderPicker &&
         resolvedFolderLabel && (
           <p className="text-sm text-stone-600">
             フォルダ:{' '}
@@ -292,18 +320,35 @@ export function RecordForm({
               disabled={busy}
             />
           </label>
-          <label className="block min-w-0 space-y-1">
-            <span className="text-xs text-stone-500">店舗</span>
-            <StoreField
-              value={form.store_name}
-              onChange={(store_name) =>
-                setForm((s) => ({ ...s, store_name }))
-              }
-              disabled={busy}
-              required
-              className={fieldClass}
-            />
-          </label>
+          {folderPicker ? (
+            <label className="block min-w-0 space-y-1">
+              <span className="text-xs text-stone-500">品目（フォルダ）</span>
+              <FolderField
+                folders={folderPicker.folders}
+                folderId={folderPicker.folderId}
+                onFolderChange={folderPicker.onFolderChange}
+                onCreateFolder={folderPicker.onCreateFolder}
+                disabled={busy || folderPicker.foldersBusy}
+                required
+                className={fieldClass}
+              />
+            </label>
+          ) : !storeFixed ? (
+            <label className="block min-w-0 space-y-1">
+              <span className="text-xs text-stone-500">店舗</span>
+              <StoreField
+                value={form.store_name}
+                onChange={(store_name) =>
+                  setForm((s) => ({ ...s, store_name }))
+                }
+                disabled={busy}
+                required
+                className={fieldClass}
+              />
+            </label>
+          ) : (
+            <div className="hidden sm:block" aria-hidden />
+          )}
           <UnitField
             value={form.unit}
             onChange={(unit) => setForm((s) => ({ ...s, unit }))}

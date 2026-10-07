@@ -1,6 +1,6 @@
 # 仕様: フォルダタブ（品目名・店名カタログ）
 
-最終更新: 2026-10-07
+最終更新: 2026-10-08
 
 関連: [project-overview.md](./project-overview.md) / [spec-shopping-memo.md](./spec-shopping-memo.md)
 
@@ -99,7 +99,7 @@ PC では独立の **値段推移タブは出さない**（フォルダ内パネ
 - タップで **詳細ビュー**（当店舗の記録一覧・全フォルダ横断）
 - プレビューの記録行は品目側と同じ折りたたみ／展開（店名の代わりに品目名。単価は出さない。補足は展開時に全文）
 - 店名詳細は全記録を最初から全文表示する（単価は出さない。補足を含む）。タップでの開閉はない
-- 記録追加（＋）… モーダルで **品目（フォルダ）を選択** するか、**モーダル内で新規品目を作成** してから記録フォームへ進む。店名は事前入力。フォルダが 0 件のときもモーダル内で品目を作成できる。同名の品目がある場合は既存を選択する
+- 記録追加（＋）… モーダル内の記録フォームで `FolderField`（`StoreField` 同型の検索＋候補選択）により品目を選ぶか、未登録名をその場で 1 回だけ作成する。店名は `fixedStoreName` で固定（UI から変更不可）。フォルダ 0 件でも同フィールドで作成可能。完全一致の既存品目は登録候補を出さず選択のみ
 - 店名変更時は、同店名の既存記録の `store_name` も一括更新
 
 ### 2.5 ドラッグ・ゴミ箱・スワイプ
@@ -151,6 +151,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 | フォルダ API / hook | `frontend/src/features/folders/` |
 | 店舗 API | `frontend/src/features/stores/` |
 | 店舗入力 | `frontend/src/components/StoreField.tsx` |
+| 品目入力 | `frontend/src/components/FolderField.tsx` |
 | 記録フォーム | `frontend/src/features/records/components/RecordForm.tsx` |
 | 単位入力 | `frontend/src/features/records/components/UnitField.tsx` |
 | 読み付き名前 | `frontend/src/features/folders/utils/folderName.ts` |
@@ -166,6 +167,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-08 | 店名起点の記録追加を `FolderField` に統合（select＋別作成 UI 廃止）。店名固定・品目 1 操作 1 回作成。プレビュー記録行の操作が親カード開閉に伝播しないよう修正 |
 | 2026-10-07 | 店名カード／詳細の記録追加モーダルで、既存フォルダ選択に加えインライン品目作成を追加。0 件時もモーダル内で作成可能 |
 | 2026-10-07 | 買い物メモの「フォルダへ」から `openFolderDetail` で品目詳細を開く入口を追記 |
 | 2026-09-27 | 購入日とレシート検索の日付欄は `DateInput`。余白はラッパー、ネイティブ `input type="date"` は padding なし |

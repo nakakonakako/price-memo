@@ -1,6 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import { bumpFoldersRevision } from '@/lib/catalogSync'
+import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import type { PriceFolder } from '../types'
+import { parseFolderName } from '../utils/folderName'
 
 export async function listFolders(): Promise<PriceFolder[]> {
   const { data, error } = await supabase
@@ -71,6 +73,28 @@ export async function deleteFolder(id: string): Promise<void> {
 }
 
 /** Persist folder display order (ids in desired order). */
+export function findFolderByName(
+  folders: PriceFolder[],
+  input: string,
+): PriceFolder | undefined {
+  const nq = input.trim()
+  if (!nq) return undefined
+  return folders.find((f) => {
+    if (equalsSearchQuery(f.name, nq)) return true
+    return equalsSearchQuery(parseFolderName(f.name).displayName, nq)
+  })
+}
+
+export function filterFolders(folders: PriceFolder[], query: string): PriceFolder[] {
+  const q = query.trim()
+  if (!q) return folders
+  return folders.filter((f) => {
+    const { displayName, reading } = parseFolderName(f.name)
+    const hay = `${displayName} ${reading ?? ''} ${f.name}`
+    return matchesSearchQuery(hay, q)
+  })
+}
+
 export async function reorderFolders(ids: string[]): Promise<void> {
   if (ids.length === 0) return
   const now = new Date().toISOString()
