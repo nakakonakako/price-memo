@@ -200,11 +200,22 @@ for implementation reasons. Tooling or environment failures do not justify a
 model escalation. Do not use `fast`, `xhigh`, or other model families by default.
 
 Composer and Grok are both in Cursor Models. Switching between them does not
-provide a quota fallback. Do not automatically switch to an Other Models model:
-the current Cursor CLI does not expose a verified quota-specific error signal,
-and Other Models requests can incur on-demand charges. Keep quota failures
-unclassified unless Cursor provides a structured quota signal; inspect the
-preserved CLI logs and report the failure without retrying on another model.
+provide a quota fallback. The CLI does not expose a verified quota-specific
+error signal, so never grep guessed quota strings or automatically switch model
+pools. Only the Supervisor may select an explicit Other Models route after
+reviewing the failure and deciding it is usage/quota related; do not use it for
+MCP, network, worktree, dev server, browser, or other tooling failures. Other
+Models requests may incur on-demand charges; the delegate must not enable or
+change billing settings.
+
+Explicit routes are `--fallback-tier light` → `gemini-3.8-flash-low` and
+`--fallback-tier normal` → `claude-sonnet-5-5-medium`. The reserve
+`--model-override gpt-5.6-luna-medium` is available only by explicit
+Supervisor choice. These options cannot be combined with `--tier`. To resume a
+partial task, use `--continue-worktree <path>` with an explicit Other Models
+route. The worker must inspect staged/unstaged diffs and relevant untracked
+files before editing and preserve all existing work. Regular tier retries
+remain Composer → Grok medium → Grok high for implementation difficulty only.
 
 For the escalation areas above, Sol advises early and Luna makes the
 final design decision before implementation. After that decision, delegate

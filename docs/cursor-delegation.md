@@ -37,6 +37,32 @@ Use `light` by default. Select tiers via the delegation script:
 | `normal` | `grok-4.7-medium` |
 | `hard` | `grok-4.7-high` |
 
+The script also supports an explicit Other Models route, selected only by the
+Supervisor after diagnosing a likely Cursor Models usage/quota failure:
+
+| Option | Model |
+|---|---|
+| `--fallback-tier light` | `gemini-3.8-flash-low` |
+| `--fallback-tier normal` | `claude-sonnet-5-5-medium` |
+| `--model-override gpt-5.6-luna-medium` | Reserve candidate, explicit only |
+
+Examples:
+
+```sh
+scripts/delegate-cursor.sh --fallback-tier light --task-file /tmp/work-order.md --worktree fallback-light
+scripts/delegate-cursor.sh --fallback-tier normal --task-file /tmp/work-order.md --continue-worktree /path/to/existing/worktree
+scripts/delegate-cursor.sh --model-override gpt-5.6-luna-medium --task-file /tmp/work-order.md --worktree luna-reserve
+```
+
+`--tier` and `--fallback-tier` cannot be combined. A model override cannot be
+combined with either tier. `--continue-worktree` is only available with an
+explicit Other Models route and requires a worktree belonging to this checkout.
+The continuation prompt requires the worker to inspect status, staged and
+unstaged diffs, and relevant untracked files before editing, then preserve and
+continue existing work in place. The standard `--trust`, `--approve-mcps`,
+worktree, `stream-json`, Playwright MCP, shared profile, and dev server flows
+apply to both routes.
+
 Do not take over implementation merely because the checkout is dirty. Use a
 direct checkout only when it is clean and has no concurrent work; otherwise
 delegate with `--worktree <name>` so the implementation is isolated.
@@ -105,24 +131,24 @@ $0.20/M input and $1.20/M output. These models draw from the separate Other
 Models pool. If that pool is exhausted and on-demand usage is enabled, requests
 may be billed at those rates.
 
-For a future explicitly authorized fallback, `gemini-3.8-flash-low` is the
-cost-conscious candidate for light bounded edits, while
-`claude-sonnet-5-5-medium` is the more suitable normal implementation
-candidate when stronger coding performance matters. GPT-5.6 Luna is cheaper,
-but its suitability as a coding-agent continuation has not been validated in
-this workflow. These are recommendations only; the delegate does not switch to
-Other Models automatically.
+The benchmark favored `gemini-3.8-flash-low` for light bounded work and
+`claude-sonnet-5-5-medium` for normal implementation. GPT-5.6 Luna remains a
+low-cost reserve candidate, but it did not complete the benchmark's Playwright
+acceptance criteria, so it is not the default fallback. These routes are now
+available only through the explicit options above; the delegate never switches
+to Other Models automatically.
 
 The current CLI help documents `--model`, while `--output-format stream-json`
 provides a final result event with success/error status. Neither `agent models`
 nor this result event exposes a verified quota-specific error code or remaining
-pool balance. We will not infer quota exhaustion from guessed message text or
-retry failures on a third-party model. Failed Cursor agent runs remain
-`cursor_agent_unclassified` unless the CLI later provides a structured reason;
-preserve the logs for supervisor review. Worktree setup/creation failures are
-reported separately, and success remains explicit. Tooling/environment versus
-implementation difficulty and quota cannot currently be distinguished reliably
-from the CLI result event alone.
+pool balance. The script does not grep guessed quota text or retry a failed
+worker on another model. The Supervisor reviews the retained logs and selects
+an explicit fallback only when the evidence supports a usage/quota diagnosis;
+MCP, network, worktree, dev server, and browser failures remain environment
+issues to repair first. All failed runs are returned as ordinary failures with
+their logs retained. Billing and on-demand settings are never changed by the
+script; the chosen Other Models route may still be subject to the account's
+existing billing configuration.
 
 ## Supervisor-only / supervisor-first areas
 
@@ -223,5 +249,5 @@ revision together after checking the package metadata and
 - `light` struggles with implementation: clarify the work order and retry as `normal`.
 - `normal` struggles after a clarified work order: retry as `hard`.
 - `hard` still cannot complete due to implementation difficulty: escalate to the Sol supervisor before another implementation attempt.
-- Cursor Models usage/quota limit: do not try another Cursor Models tier (same pool) or silently switch to Other Models. If there is no structured quota signal, report `cursor_agent_unclassified` and preserve logs. Any future Other Models fallback requires explicit user authorization for possible on-demand charges and must resume in the same worktree after reviewing its existing diff.
+- Cursor Models usage/quota limit: do not try another Cursor Models tier (same pool) or silently switch to Other Models. The Supervisor may explicitly choose `--fallback-tier light|normal` after reviewing the failure; no quota string matching is used. For partial work, use `--continue-worktree` so the worker reviews and preserves the existing diff. Tooling/environment failures are repaired without fallback. Other Models failures are returned normally; billing settings are never changed.
 - High-risk areas listed above should receive Codex review even if Cursor succeeds.

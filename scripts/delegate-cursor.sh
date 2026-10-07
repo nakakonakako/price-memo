@@ -6,12 +6,18 @@ usage() {
 Usage:
   scripts/delegate-cursor.sh [--tier <light|normal|hard>] --task-file <path> [--worktree <name>]
   scripts/delegate-cursor.sh [--tier <light|normal|hard>] --prompt <text> [--worktree <name>]
+  scripts/delegate-cursor.sh --fallback-tier <light|normal> --task-file <path> [--worktree <name>]
+  scripts/delegate-cursor.sh --fallback-tier <light|normal> --task-file <path> --continue-worktree <path>
+  scripts/delegate-cursor.sh --model-override gpt-5.6-luna-medium --task-file <path>
 
 Options:
   --tier        Cursor model tier. Default: light
+  --fallback-tier  Explicit Other Models route (Supervisor decision only).
+  --model-override Explicit reserve model; currently gpt-5.6-luna-medium only.
   --task-file   Read the work order from a file.
   --prompt      Pass the work order directly.
-  --worktree    Run Cursor in an isolated Git worktree.
+  --worktree    Create and run in an isolated Git worktree.
+  --continue-worktree  Continue in an existing worktree after reviewing its diff.
   --allow-dirty Allow direct execution in a dirty current checkout.
   -h, --help    Show this help.
 
@@ -19,33 +25,80 @@ Model mapping:
   light  -> composer-2.5 (default)
   normal -> grok-4.7-medium
   hard   -> grok-4.7-high
+
+Explicit Other Models mapping (no automatic quota detection or retry):
+  fallback light -> gemini-3.8-flash-low
+  fallback normal -> claude-sonnet-5-5-medium
+  model override -> gpt-5.6-luna-medium (reserve)
 EOF
 }
 
 tier="light"
+fallback_tier=""
+model_override=""
 task_file=""
 prompt=""
 worktree=""
+continue_worktree=""
 allow_dirty=0
+tier_was_set=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --tier) tier="${2:?missing value for --tier}"; shift 2 ;;
+    --tier) tier="${2:?missing value for --tier}"; tier_was_set=1; shift 2 ;;
+    --fallback-tier) fallback_tier="${2:?missing value for --fallback-tier}"; shift 2 ;;
+    --model-override) model_override="${2:?missing value for --model-override}"; shift 2 ;;
     --task-file) task_file="${2:?missing value for --task-file}"; shift 2 ;;
     --prompt) prompt="${2:?missing value for --prompt}"; shift 2 ;;
     --worktree) worktree="${2:?missing value for --worktree}"; shift 2 ;;
+    --continue-worktree) continue_worktree="${2:?missing value for --continue-worktree}"; shift 2 ;;
     --allow-dirty) allow_dirty=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
-case "$tier" in
-  light)  model="composer-2.5" ;;
-  normal) model="grok-4.7-medium" ;;
-  hard)   model="grok-4.7-high" ;;
-  *) echo "Invalid tier: $tier (expected light, normal, or hard)" >&2; exit 2 ;;
-esac
+route="cursor"
+if [[ -n "$fallback_tier" && ( "$tier_was_set" -eq 1 || -n "$model_override" ) ]]; then
+  echo "--fallback-tier cannot be combined with --tier or --model-override." >&2
+  exit 2
+fi
+if [[ -n "$model_override" && "$tier_was_set" -eq 1 ]]; then
+  echo "--model-override cannot be combined with --tier." >&2
+  exit 2
+fi
+if [[ -n "$fallback_tier" ]]; then
+  route="other-models"
+  case "$fallback_tier" in
+    light) model="gemini-3.8-flash-low" ;;
+    normal) model="claude-sonnet-5-5-medium" ;;
+    *) echo "Invalid fallback tier: $fallback_tier (expected light or normal)" >&2; exit 2 ;;
+  esac
+  tier="fallback-$fallback_tier"
+elif [[ -n "$model_override" ]]; then
+  route="other-models-reserve"
+  case "$model_override" in
+    gpt-5.6-luna-medium) model="$model_override" ;;
+    *) echo "Unsupported model override: $model_override (allowed: gpt-5.6-luna-medium)" >&2; exit 2 ;;
+  esac
+  tier="model-override"
+else
+  case "$tier" in
+    light)  model="composer-2.5" ;;
+    normal) model="grok-4.7-medium" ;;
+    hard)   model="grok-4.7-high" ;;
+    *) echo "Invalid tier: $tier (expected light, normal, or hard)" >&2; exit 2 ;;
+  esac
+fi
+
+if [[ -n "$worktree" && -n "$continue_worktree" ]]; then
+  echo "Use either --worktree or --continue-worktree, not both." >&2
+  exit 2
+fi
+if [[ -n "$continue_worktree" && "$route" == "cursor" ]]; then
+  echo "--continue-worktree is reserved for an explicitly selected Other Models route." >&2
+  exit 2
+fi
 
 if [[ -n "$task_file" && -n "$prompt" ]]; then
   echo "Use either --task-file or --prompt, not both." >&2
@@ -61,6 +114,25 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "Not inside a Git repository." >&2
   exit 2
 }
+origin_root="$repo_root"
+if [[ -n "$continue_worktree" ]]; then
+  if [[ ! -d "$continue_worktree" ]]; then
+    echo "Existing worktree not found: $continue_worktree" >&2
+    exit 2
+  fi
+  continue_worktree="$(cd "$continue_worktree" && pwd -P)"
+  if ! git -C "$continue_worktree" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Not a Git worktree: $continue_worktree" >&2
+    exit 2
+  fi
+  origin_common="$(git -C "$origin_root" rev-parse --path-format=absolute --git-common-dir)"
+  target_common="$(git -C "$continue_worktree" rev-parse --path-format=absolute --git-common-dir)"
+  if [[ "$origin_common" != "$target_common" ]]; then
+    echo "Worktree belongs to a different repository: $continue_worktree" >&2
+    exit 2
+  fi
+  repo_root="$(git -C "$continue_worktree" rev-parse --show-toplevel)"
+fi
 cd "$repo_root"
 
 if [[ -n "$task_file" ]]; then
@@ -73,7 +145,7 @@ else
   work_order="$prompt"
 fi
 
-if [[ -z "$worktree" && "$allow_dirty" -ne 1 && -n "$(git status --porcelain)" ]]; then
+if [[ -z "$worktree" && -z "$continue_worktree" && "$allow_dirty" -ne 1 && -n "$(git status --porcelain)" ]]; then
   cat >&2 <<'EOF'
 Current checkout has uncommitted changes.
 Refusing to run Cursor directly because its edits could mix with existing work.
@@ -83,6 +155,10 @@ Use one of:
   --allow-dirty       (only when mixing changes is intentional)
 EOF
   exit 3
+fi
+
+if [[ -n "$continue_worktree" ]]; then
+  work_order="$(printf '%s\n\n%s' 'CONTINUATION REQUIREMENT: This is an existing worktree that may contain partial work from a previous worker. Before editing, inspect git status --short, staged and unstaged diffs, and relevant untracked files. Explain what is already changed, preserve all existing work, and continue the same work order in this worktree. Do not reset, checkout, stash, clean, or revert existing changes. If the existing diff is ambiguous or conflicts with the work order, stop and report it to the supervisor.' "$work_order")"
 fi
 
 read -r -d '' supervisor_prefix <<'EOF' || true
@@ -108,7 +184,7 @@ End with:
 3. verification performed and results
 4. remaining risks
 5. supervisor decisions required
-If unable to complete, state whether the evidence points to implementation difficulty or tooling/environment failure. Report a Cursor Models usage/quota limit only when the CLI provides a structured quota-specific signal; otherwise say unclassified. Do not switch to an Other Models model or retry in another model pool.
+If unable to complete, state whether the evidence points to implementation difficulty or tooling/environment failure. Do not change models or initiate a retry in another model pool.
 EOF
 
 full_prompt="${supervisor_prefix}
@@ -121,13 +197,19 @@ cmd=(agent --approve-mcps --trust --model "$model")
 if [[ -n "$worktree" ]]; then
   cmd+=(--worktree "$worktree")
 fi
+if [[ -n "$continue_worktree" ]]; then
+  cmd+=(--workspace "$continue_worktree")
+fi
 echo "[delegate-cursor] repo: $repo_root" >&2
+echo "[delegate-cursor] route: $route" >&2
 echo "[delegate-cursor] tier: $tier" >&2
 echo "[delegate-cursor] model: $model" >&2
 started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "[delegate-cursor] started_at: $started_at" >&2
 if [[ -n "$worktree" ]]; then
   echo "[delegate-cursor] worktree: $worktree" >&2
+elif [[ -n "$continue_worktree" ]]; then
+  echo "[delegate-cursor] worktree: continue $continue_worktree" >&2
 else
   echo "[delegate-cursor] worktree: direct checkout" >&2
 fi
