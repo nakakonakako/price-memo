@@ -50,7 +50,8 @@ delegation is inconvenient.
 ### Delegation run evidence
 
 `scripts/delegate-cursor.sh` records the selected tier/model, worktree, and UTC
-start time before launching Cursor. It runs print mode with `stream-json`,
+start time before launching Cursor with `agent --trust --approve-mcps`. It runs
+print mode with `stream-json`,
 relays stdout and stderr to the Codex terminal, and saves each stream under a
 temporary log directory printed at launch. On completion, it reports the
 process exit code and the final `result` event status (`success`, `error`, or
@@ -135,11 +136,18 @@ Use `--worktree` when:
 
 ## Cursor worker UI verification
 
-For local UI checks, Cursor workers should use the dedicated development
-server, started with `npm run dev:playwright`, at `http://localhost:5273`.
-This runs Vite with a fixed port and strict port handling, while ordinary
-`npm run dev` keeps its existing behavior and port. If 5273 is occupied, the
-dedicated server must fail to start instead of moving to another port.
+For local UI checks, Cursor workers should run `npm run devserver:ensure`
+before Playwright MCP checks at `http://localhost:5273`, then
+`npm run devserver:stop` when finished. The helper (`scripts/cursor-devserver.sh`)
+starts or reuses the price-memo backend on `:8001` and frontend on `:5273`
+(Vite `strictPort`). If a port is occupied by an unrelated process, the helper
+refuses to start and does not kill or fall back to another port. It records only
+process groups started by that ensure invocation in per-worktree state under
+`${userHome}/.local/state/price-memo/cursor-devserver/`, so a fresh session cannot
+stop reused servers. Workers start 5273 as needed; it does not need to be
+prestarted for them. Human development and browser debugging continue to use
+`npm run dev` at `http://localhost:5173`. Ordinary `npm run dev:playwright`
+remains available unchanged for manual use.
 
 The Playwright MCP uses the shared persistent profile at
 `${userHome}/.local/state/price-memo/playwright-profile`. This path is outside

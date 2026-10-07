@@ -76,12 +76,18 @@ migrations or run `db push` from this repository.
 
 When changing frontend UI:
 
-- For Cursor worker UI verification, use the dedicated `npm run dev:playwright`
-  server at `http://localhost:5273`; keep ordinary `npm run dev` on its existing
-  port. The Playwright MCP uses a shared persistent profile under the user's
-  home directory, so run MCP browser checks sequentially and never print, copy
-  into the repository, or include its profile contents or authentication data
-  in prompts or logs.
+- For Cursor worker UI verification, run `npm run devserver:ensure` before
+  Playwright MCP checks at `http://localhost:5273`, then `npm run devserver:stop`
+  when finished. The helper starts or reuses the price-memo backend on `:8001`
+  and frontend on `:5273` (`strictPort`), refuses unrelated port occupants
+  without fallback or kill, and stops only process groups started by that ensure
+  invocation. State is per worktree under the user's home directory, so a fresh
+  session cannot stop reused processes. Human development and browser debugging
+  use `npm run dev` at `http://localhost:5173`; workers start 5273 themselves
+  only when needed. The Playwright MCP uses a shared persistent profile
+  under the user's home directory, so run MCP browser checks sequentially and
+  never print, copy into the repository, or include its profile contents or
+  authentication data in prompts or logs.
 
 - Verify the rendered application when the change can affect layout,
   responsive behavior, styling, or user interaction.

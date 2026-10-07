@@ -210,6 +210,8 @@ A 参照（読み取り・紐付け用）:
 
 ### 7.1 ローカル開発
 
+通常の人間向け開発・ブラウザー確認は `npm run dev` の `http://localhost:5173` を使う。Cursor worker の Playwright MCP 検証は下記の専用手順を使い、5273 の事前起動は不要。
+
 ```bash
 npm install
 cd frontend && npm install
@@ -218,7 +220,7 @@ cd .. && npm run dev
 ```
 
 - Vite が `/api` を `http://localhost:8001` へプロキシ（A の 8000 と併走可能）
-- Cursor / Playwright MCP のローカル UI 確認は `npm run dev:playwright` を使い、`http://localhost:5273` を固定利用する（Vite `strictPort`）。通常の `npm run dev` は従来どおり
+- Cursor / Playwright MCP のローカル UI 確認は `npm run devserver:ensure` で `:8001` / `:5273` を起動または再利用し、`http://localhost:5273` を固定利用する（Vite `strictPort`）。完了後は `npm run devserver:stop` で当該 ensure が起動したプロセスのみ停止。通常の `npm run dev` / `npm run dev:playwright` は従来どおり
 - Playwright MCP はユーザー home 配下の共通 persistent profile を利用する。初回 Google OAuth はブラウザー上で手動実施し、main checkout と worktree からの確認は逐次実行する。詳細は [cursor-delegation.md](./cursor-delegation.md)
 - Playwright MCP / Playwright / Chromium revision は `.cursor/playwright-mcp.sh` で固定し、browser binary はユーザー共通 cache を利用する。更新手順は [cursor-delegation.md](./cursor-delegation.md)
 - DB: A と同じ Supabase プロジェクトを利用。schema migration は receipt-manager 側で管理・push する
@@ -313,6 +315,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-07 | Cursor worker 向け `npm run devserver:ensure` / `devserver:stop` を追加。`:8001` / `:5273` の起動・再利用と per-worktree 状態管理 |
 | 2026-09-27 | Cursor / Playwright UI 確認用に Vite の固定ポート 5273 とユーザー home 配下の共通 persistent profile を追加 |
 | 2026-09-26 | Codex Luna/Sol supervisor と Cursor worker の委譲基盤を追加。shared migration は receipt-manager に限定 |
 | 2026-09-26 | 本番 Compose を receipt-manager と同じ `default` + 外部 `edge` 構成に統一。Deploy で frontend / backend の running を検証 |
