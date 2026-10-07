@@ -1,8 +1,9 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from 'react'
 import { Auth } from '@/components/Auth'
 import { MainLayout, type TabId } from '@/components/MainLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
+import type { FolderDetailRequest } from '@/features/folders/folderDetailRequest'
 import { ShoppingMemoPage } from '@/features/memo/components/ShoppingMemoPage'
 
 const FoldersPage = lazy(() =>
@@ -52,6 +53,9 @@ export default function App() {
     howto: false,
   })
   const isLargeScreen = useMediaQuery('(min-width: 1024px)')
+  const [folderDetailRequest, setFolderDetailRequest] =
+    useState<FolderDetailRequest | null>(null)
+  const folderDetailRequestSeq = useRef(0)
 
   const activeTab = isLargeScreen && tab === 'trends' ? 'folders' : tab
   const changeTab = (nextTab: TabId) => {
@@ -59,6 +63,19 @@ export default function App() {
     setTab(next)
     setVisited((prev) => (prev[next] ? prev : { ...prev, [next]: true }))
   }
+  const requestFolderDetail = (folderId: string) => {
+    folderDetailRequestSeq.current += 1
+    setFolderDetailRequest({
+      id: folderDetailRequestSeq.current,
+      folderId,
+    })
+    changeTab('folders')
+  }
+  const handleFolderDetailRequestHandled = useCallback((requestId: number) => {
+    setFolderDetailRequest((current) =>
+      current?.id === requestId ? null : current,
+    )
+  }, [])
 
   if (isLoading) {
     return (
@@ -81,12 +98,19 @@ export default function App() {
       hiddenTabs={isLargeScreen ? ['trends'] : []}
     >
       <TabPanel active={activeTab === 'memo'}>
-        <ShoppingMemoPage active={activeTab === 'memo'} />
+        <ShoppingMemoPage
+          active={activeTab === 'memo'}
+          onOpenFolder={requestFolderDetail}
+        />
       </TabPanel>
       {(visited.folders || activeTab === 'folders') && (
         <TabPanel active={activeTab === 'folders'}>
           <Suspense fallback={<TabFallback />}>
-            <FoldersPage active={activeTab === 'folders'} />
+            <FoldersPage
+              active={activeTab === 'folders'}
+              folderDetailRequest={folderDetailRequest}
+              onFolderDetailRequestHandled={handleFolderDetailRequestHandled}
+            />
           </Suspense>
         </TabPanel>
       )}

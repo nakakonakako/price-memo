@@ -70,7 +70,13 @@ function MemoListEndMarker({ lastId }: { lastId: string | null }) {
   return <div className="h-1 rounded-full bg-stone-800" aria-hidden />
 }
 
-export function ShoppingMemoPage({ active = true }: { active?: boolean }) {
+export function ShoppingMemoPage({
+  active = true,
+  onOpenFolder,
+}: {
+  active?: boolean
+  onOpenFolder?: (folderId: string) => void
+}) {
   const isMobile = useMediaQuery('(max-width: 1023px)')
   const [allFolders, setAllFolders] = useState<PriceFolder[]>([])
   const [memoItems, setMemoItems] = useState<PriceMemoItem[]>([])
@@ -426,6 +432,11 @@ export function ShoppingMemoPage({ active = true }: { active?: boolean }) {
                   onSaved={handleSaved}
                   dragEnabled={!isMobile}
                   onRemoveFromMemo={() => void removeFromMemo(item.folder_id)}
+                  onOpenFolder={
+                    onOpenFolder
+                      ? () => onOpenFolder(item.folder_id)
+                      : undefined
+                  }
                 />
               ))}
               {!isMobile && (

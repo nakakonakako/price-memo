@@ -37,6 +37,7 @@ type Props = {
   onSaved: (record: PriceRecord) => void
   dragEnabled?: boolean
   onRemoveFromMemo?: () => void
+  onOpenFolder?: () => void
 }
 
 export function FolderMemoCard({
@@ -50,6 +51,7 @@ export function FolderMemoCard({
   onSaved,
   dragEnabled = true,
   onRemoveFromMemo,
+  onOpenFolder,
 }: Props) {
   const isMobile = useMediaQuery('(max-width: 1023px)')
   const displayName = parseFolderName(folderName).displayName
@@ -116,6 +118,22 @@ export function FolderMemoCard({
 
   const fieldClass =
     'w-full rounded-md border border-stone-300 bg-white px-2.5 py-2 text-sm outline-none focus:border-stone-500'
+
+  const openFolderButton =
+    isOpen && onOpenFolder ? (
+      <button
+        type="button"
+        data-no-trash-drag
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation()
+          onOpenFolder()
+        }}
+        className="shrink-0 whitespace-nowrap rounded px-1 py-0.5 text-xs text-stone-400 hover:bg-black/5 hover:text-stone-600"
+      >
+        フォルダへ
+      </button>
+    ) : null
 
   const setTrialUnit = (next: PriceUnit) => {
     setUnit(next)
@@ -204,16 +222,17 @@ export function FolderMemoCard({
         <div className="px-3 py-2.5">
           {isMobile ? (
             <div className="space-y-2">
-              <div className="flex items-center justify-start gap-1.5">
+              <div className="flex min-w-0 items-center gap-1.5">
                 <span
                   className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
                   aria-hidden
                 >
                   ▸
                 </span>
-                <p className="truncate text-left text-base font-semibold text-stone-900">
+                <p className="min-w-0 flex-1 truncate text-left text-base font-semibold text-stone-900">
                   {displayName}
                 </p>
+                {openFolderButton}
               </div>
 
               {activeStats ? (
@@ -281,16 +300,17 @@ export function FolderMemoCard({
           ) : (
           <div className="flex items-start gap-2 sm:items-center">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
+              <div className="flex min-w-0 items-center gap-1.5">
                 <span
                   className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
                   aria-hidden
                 >
                   ▸
                 </span>
-                <p className="truncate text-base font-semibold text-stone-900 sm:text-lg">
+                <p className="min-w-0 flex-1 truncate text-base font-semibold text-stone-900 sm:text-lg">
                   {displayName}
                 </p>
+                {openFolderButton}
               </div>
             </div>
 

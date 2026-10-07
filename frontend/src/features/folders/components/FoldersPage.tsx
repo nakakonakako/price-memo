@@ -67,6 +67,7 @@ import { useFolders } from '../hooks/useFolders'
 import type { PriceFolder } from '../types'
 import { folderSortKey, parseFolderName } from '../utils/folderName'
 import { ScrollToTopButton } from '@/components/ScrollToTopButton'
+import type { FolderDetailRequest } from '../folderDetailRequest'
 
 const FolderTrendPanel = lazy(() =>
   import('@/features/trends/components/FolderTrendPanel').then((m) => ({
@@ -231,7 +232,15 @@ const expandedLayoutStyle = {
   paddingRight: '2rem',
 } as const
 
-export function FoldersPage({ active = true }: { active?: boolean }) {
+export function FoldersPage({
+  active = true,
+  folderDetailRequest = null,
+  onFolderDetailRequestHandled,
+}: {
+  active?: boolean
+  folderDetailRequest?: FolderDetailRequest | null
+  onFolderDetailRequestHandled?: (requestId: number) => void
+}) {
   const {
     folders,
     isLoading,
@@ -653,7 +662,7 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
 
   useOutsidePointerDown(editingId != null, cancelEdit)
 
-  const openFolderDetail = async (folderId: string) => {
+  const openFolderDetail = useCallback(async (folderId: string) => {
     setPreviewFolderId(null)
     setPreviewStoreId(null)
     setOpenStoreId(null)
@@ -683,7 +692,27 @@ export function FoldersPage({ active = true }: { active?: boolean }) {
     } finally {
       setOpenFolderLoadingId(null)
     }
-  }
+  }, [allRecordsLoaded, hydrateFolderFromAll, recordsByFolder])
+
+  const handledFolderDetailRequestId = useRef<number | null>(null)
+  useEffect(() => {
+    if (!active || folderDetailRequest == null || isLoading) return
+    const target = folders.find(
+      (folder) => folder.id === folderDetailRequest.folderId,
+    )
+    if (!target) return
+    if (handledFolderDetailRequestId.current === folderDetailRequest.id) return
+    handledFolderDetailRequestId.current = folderDetailRequest.id
+    void openFolderDetail(target.id)
+    onFolderDetailRequestHandled?.(folderDetailRequest.id)
+  }, [
+    active,
+    folderDetailRequest,
+    folders,
+    isLoading,
+    onFolderDetailRequestHandled,
+    openFolderDetail,
+  ])
 
   const patchFolderRecords = useCallback(
     (folderId: string, updater: (rows: PriceRecord[]) => PriceRecord[]) => {

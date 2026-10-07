@@ -118,7 +118,7 @@ Supabase（A の Dev または Prod）
 
 | 画面 | ラベル（仮） | ステータス | 概要 |
 |------|--------------|------------|------|
-| `memo` | 買い物メモ | **現行** | 店頭用ピン留めリスト。掲載フォルダの記録のみロード。新規追加は先頭。詳細は [spec-shopping-memo.md](./spec-shopping-memo.md) |
+| `memo` | 買い物メモ | **現行** | 店頭用ピン留めリスト。掲載フォルダの記録のみロード。新規追加は先頭。開いたカードからフォルダ詳細へ移動できる。詳細は [spec-shopping-memo.md](./spec-shopping-memo.md) |
 | `folders` | フォルダ | **現行** | 品目名／店名カタログ、直近プレビュー＋詳細一覧、横断検索。詳細は [spec-folders-catalog.md](./spec-folders-catalog.md) |
 | `trends` | 値段推移 | **現行（スマホのみ）** | 独立タブ。`lg` 以上では非表示（フォルダタブの分割パネルに統合） |
 | `howto` | 使い方 | **現行** | 機能説明・操作ヒント。詳細は [spec-guide.md](./spec-guide.md) |
@@ -315,6 +315,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-07 | 買い物メモの開いたカードから、フォルダタブの品目詳細へ移動できる |
 | 2026-10-07 | Cursor worker 向け `npm run devserver:ensure` / `devserver:stop` を追加。`:8001` / `:5273` の起動・再利用と per-worktree 状態管理 |
 | 2026-09-27 | Cursor / Playwright UI 確認用に Vite の固定ポート 5273 とユーザー home 配下の共通 persistent profile を追加 |
 | 2026-09-26 | Codex Luna/Sol supervisor と Cursor worker の委譲基盤を追加。shared migration は receipt-manager に限定 |
