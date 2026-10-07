@@ -220,6 +220,7 @@ cd .. && npm run dev
 - Vite が `/api` を `http://localhost:8001` へプロキシ（A の 8000 と併走可能）
 - Cursor / Playwright MCP のローカル UI 確認は `npm run dev:playwright` を使い、`http://localhost:5273` を固定利用する（Vite `strictPort`）。通常の `npm run dev` は従来どおり
 - Playwright MCP はユーザー home 配下の共通 persistent profile を利用する。初回 Google OAuth はブラウザー上で手動実施し、main checkout と worktree からの確認は逐次実行する。詳細は [cursor-delegation.md](./cursor-delegation.md)
+- Playwright MCP / Playwright / Chromium revision は `.cursor/playwright-mcp.sh` で固定し、browser binary はユーザー共通 cache を利用する。更新手順は [cursor-delegation.md](./cursor-delegation.md)
 - DB: A と同じ Supabase プロジェクトを利用。schema migration は receipt-manager 側で管理・push する
 
 ### 7.2 環境変数

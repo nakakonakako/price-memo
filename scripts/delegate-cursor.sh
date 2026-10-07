@@ -116,7 +116,7 @@ WORK ORDER
 ==========
 ${work_order}"
 
-cmd=(agent --model "$model")
+cmd=(agent --approve-mcps --model "$model")
 if [[ -n "$worktree" ]]; then
   cmd+=(--worktree "$worktree")
 fi

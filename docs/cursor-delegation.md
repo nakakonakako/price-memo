@@ -151,6 +151,15 @@ the repository, or include their contents, cookies, or tokens in prompts or
 logs. Only one MCP browser may use the profile at a time; perform UI checks
 sequentially and close the browser before another worker starts one.
 
+The MCP launcher pins `@playwright/mcp` 0.0.83, its exact `playwright` /
+`playwright-core` dependency 1.64.0-alpha-1790635538000, and Chromium revision
+1247 in `.cursor/playwright-mcp.sh`. It sets
+`PLAYWRIGHT_BROWSERS_PATH` to the shared `${userHome}/.cache/ms-playwright`
+cache and installs the pinned Chromium only when its expected headless-shell
+binary is absent. Update the MCP version, Playwright version, and browser
+revision together after checking the package metadata and
+`playwright-core/browsers.json`; do not use `@latest` or system Chrome.
+
 ## Retry / escalation
 
 - Environment/tooling failure: report and repair the environment; do not escalate model just because setup failed. For Cursor delegation, make the first attempt network-enabled as described above; do not intentionally make a restricted attempt first.
