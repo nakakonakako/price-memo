@@ -192,6 +192,15 @@ authorize Cursor, when acting as the implementation worker, to invoke the
 delegation script or re-delegate. Cursor must follow the repository rules above
 and `.cursor/rules/worker.mdc`.
 
+The project-level Cursor CLI shell allowlist explicitly permits common
+read-only inspection tools (`pwd`, `rg`, `grep`, `head`, `tail`, `wc`, `sort`,
+`uniq`, `cut`, and `ss`) alongside the existing `npm`, `uv`, `git`, `ls`, `cat`,
+and `cp` entries. Keep `sudo`, `rm`, and broad `bash`/`sh` permissions denied;
+do not add `Shell(*)`. Prefer one simple command per shell call or an existing
+`npm` script instead of compound shell expressions. This keeps non-interactive
+worker execution predictable while allowing routine repository and local-port
+inspection.
+
 Model tiers are fixed: `light` uses `composer-2.5`, `normal` uses
 `grok-4.7-medium`, and `hard` uses `grok-4.7-high`. Start bounded routine work
 with `light`. If Composer has implementation difficulty, clarify the work order

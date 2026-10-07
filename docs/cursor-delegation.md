@@ -107,6 +107,28 @@ The last three classifications are not safely machine-detectable from the
 current CLI result event. That ambiguity is intentional: a generic agent error
 must not trigger a paid Other Models request.
 
+## Shell permissions and Auto-review
+
+`.cursor/cli.json` keeps an explicit allowlist for routine worker commands. It
+includes read-only `pwd`, `rg`, `grep`, `head`, `tail`, `wc`, `sort`, `uniq`,
+`cut`, and `ss`, plus the existing `npm`, `uv`, `git`, `ls`, `cat`, and `cp`.
+`find` is omitted because `rg --files` covers repository file discovery;
+`dirname`, `basename`, and `stat` have no demonstrated direct worker need;
+`ps` can expose broader process details and is unnecessary for normal checks.
+The dev-server lifecycle is provided through the existing `npm run
+devserver:*` scripts, which do their own process ownership checks.
+
+Do not allow `sudo`, `rm`, `bash`, `sh`, or `Shell(*)`. When a compound shell
+expression is denied, split it into simple commands or use an existing npm
+script; do not broaden the allowlist to make arbitrary shell composition work.
+
+The current CLI's `--auto-review` mode uses a server classifier to auto-run
+calls judged safe and prompts for the rest. That can reduce approval friction,
+but leaves execution dependent on classification and prompts, which is less
+reproducible for this non-interactive worker workflow. Keep using the fixed
+read-only allowlist as the default; do not add `--auto-review` to the launcher
+unless the workflow is deliberately redesigned and tested for prompt handling.
+
 ## Cursor model tiers
 
 | Tier | Model | Typical work |
