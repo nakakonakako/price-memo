@@ -232,28 +232,56 @@ Use `--worktree` when:
 
 ## Cursor worker UI verification
 
-For local UI checks, Cursor workers should run `npm run devserver:ensure`
-before Playwright MCP checks at `http://localhost:5273`, then
-`npm run devserver:stop` when finished. The helper (`scripts/cursor-devserver.sh`)
-starts or reuses the price-memo backend on `:8001` and frontend on `:5273`
-(Vite `strictPort`). If a port is occupied by an unrelated process, the helper
-refuses to start and does not kill or fall back to another port. It records only
-process groups started by that ensure invocation in per-worktree state under
-`${userHome}/.local/state/price-memo/cursor-devserver/`, so a fresh session cannot
-stop reused servers. Workers start 5273 as needed; it does not need to be
-prestarted for them. Human development and browser debugging continue to use
-`npm run dev` at `http://localhost:5173`. Ordinary `npm run dev:playwright`
-remains available unchanged for manual use.
+### Roles
 
-The Playwright MCP uses the shared persistent profile at
-`${userHome}/.local/state/price-memo/playwright-profile`. This path is outside
-the repository and resolves to the same user directory from the main checkout
-and Cursor worktrees. The first Google OAuth login is manual in the Playwright
-MCP browser; do not automate Google login or put credentials in Cursor prompts.
-Treat profile files as authentication secrets: never inspect, print, copy into
-the repository, or include their contents, cookies, or tokens in prompts or
-logs. Only one MCP browser may use the profile at a time; perform UI checks
-sequentially and close the browser before another worker starts one.
+- **Cursor worker**: the only official actor for live UI verification. Workers
+  execute the path below and report what they observed.
+- **Codex / Luna supervisor**: does not operate a browser. Reviews the worker
+  diff and completion report. Missing browser tools in a supervisor session is
+  not a verification failure. Delegate additional UI checks to a
+  verification-only Cursor worker; do not attempt supervisor-side browser work.
+- **Human developers**: use `npm run dev` at `http://localhost:5173` for local
+  development and manual browser debugging. This is not the Codex supervisor UI
+  verification path and not a supervisor fallback when MCP is unavailable.
+  `npm run dev:playwright` remains available for ordinary manual use only.
+
+### Official verification path (Cursor worker only)
+
+Use this path end to end; do not substitute standalone Playwright CLI,
+`npx playwright`, system Chrome, or other browser tools:
+
+1. `npm run devserver:ensure`
+2. Cursor Playwright MCP
+3. `.cursor/playwright-mcp.sh` (stdio server from `.cursor/mcp.json`)
+4. managed Chromium (pinned revision/cache in the wrapper script)
+5. shared persistent profile at
+   `${userHome}/.local/state/price-memo/playwright-profile`
+6. `http://localhost:5273`
+7. `npm run devserver:stop` for process groups started by that ensure invocation
+
+The helper (`scripts/cursor-devserver.sh`) starts or reuses the price-memo
+backend on `:8001` and frontend on `:5273` (Vite `strictPort`). If a port is
+occupied by an unrelated process, the helper refuses to start and does not kill
+or fall back to another port. It records only process groups started by that
+ensure invocation in per-worktree state under
+`${userHome}/.local/state/price-memo/cursor-devserver/`, so a fresh session
+cannot stop reused servers. Workers start 5273 as needed; it does not need to be
+prestarted for them.
+
+### MCP and authentication policy
+
+- If Playwright MCP tools are unavailable, repair the MCP environment and retry
+  the official path. Do not fall back to another browser route from the
+  supervisor or worker.
+- Never automate Google OAuth. Never read, inspect, print, copy into the
+  repository, or include profile files, cookies, tokens, `localStorage`, or
+  `sessionStorage` in prompts or logs.
+- When the official path shows a Google login screen, treat the profile
+  authentication session as expired, report that fact, and stop for manual
+  re-login in the Playwright MCP browser. Do not continue UI verification until
+  authentication is restored manually.
+- Only one MCP browser may use the profile at a time; perform UI checks
+  sequentially and close the browser before another worker starts one.
 
 The MCP launcher pins `@playwright/mcp` 0.0.83, its exact `playwright` /
 `playwright-core` dependency 1.64.0-alpha-1790635538000, and Chromium revision

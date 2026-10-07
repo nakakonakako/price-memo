@@ -74,34 +74,55 @@ migrations or run `db push` from this repository.
 
 ## UI verification
 
-When changing frontend UI:
+When frontend UI changes can affect layout, responsive behavior, styling, or
+user interaction, verify the rendered application through the single official
+path below. Simple non-visual changes do not require browser verification unless
+there is a specific reason. After fixing a visual or interaction bug, verify the
+affected screen before considering the task complete.
 
-- For Cursor worker UI verification, run `npm run devserver:ensure` before
-  Playwright MCP checks at `http://localhost:5273`, then `npm run devserver:stop`
-  when finished. The helper starts or reuses the price-memo backend on `:8001`
-  and frontend on `:5273` (`strictPort`), refuses unrelated port occupants
-  without fallback or kill, and stops only process groups started by that ensure
-  invocation. State is per worktree under the user's home directory, so a fresh
-  session cannot stop reused processes. Human development and browser debugging
-  use `npm run dev` at `http://localhost:5173`; workers start 5273 themselves
-  only when needed. The Playwright MCP uses a shared persistent profile
-  under the user's home directory, so run MCP browser checks sequentially and
-  never print, copy into the repository, or include its profile contents or
-  authentication data in prompts or logs.
+### Roles
 
-- Verify the rendered application when the change can affect layout,
-  responsive behavior, styling, or user interaction.
-- Choose the most appropriate browser tool for the task.
-- Do not use both Computer Use and Playwright unnecessarily.
-- Prefer Playwright when DOM structure, element dimensions,
-  overflow, responsive behavior, or deterministic interaction needs inspection.
-- Prefer Computer Use when visual appearance or behavior is best judged
-  from the rendered screen.
-- Use both only when one tool alone is insufficient.
-- For simple non-visual changes, browser verification is not required
-  unless there is a specific reason.
-- After fixing a visual or interaction bug, verify the affected screen
-  before considering the task complete.
+- **Cursor worker**: the only official actor for live UI verification in this
+  repository. Workers run the path below and report what they observed.
+- **Codex / Luna supervisor**: does not operate a browser. Reviews the worker
+  diff and completion report. A supervisor session without browser tools is not
+  a verification failure. Delegate additional UI checks to a verification-only
+  Cursor worker instead of attempting browser work from the supervisor.
+- **Human developers**: use `npm run dev` at `http://localhost:5173` for local
+  development and manual browser debugging. This is not the Codex supervisor UI
+  verification path and not a supervisor fallback when MCP is unavailable.
+
+### Official verification path (Cursor worker only)
+
+Use this path end to end; do not substitute standalone Playwright CLI,
+`npx playwright`, system Chrome, or other browser tools:
+
+1. `npm run devserver:ensure`
+2. Cursor Playwright MCP
+3. `.cursor/playwright-mcp.sh` (stdio server from `.cursor/mcp.json`)
+4. managed Chromium (pinned revision/cache in the wrapper script)
+5. shared persistent profile at
+   `~/.local/state/price-memo/playwright-profile`
+6. `http://localhost:5273`
+7. `npm run devserver:stop` for process groups started by that ensure invocation
+
+The helper starts or reuses the price-memo backend on `:8001` and frontend on
+`:5273` (`strictPort`), refuses unrelated port occupants without fallback or
+kill, and records per-worktree state under the user's home directory so a fresh
+session cannot stop reused servers. Run MCP browser checks sequentially; only
+one MCP browser may use the profile at a time.
+
+### MCP and authentication policy
+
+- If Playwright MCP tools are unavailable, repair the MCP environment and retry
+  the official path. Do not fall back to another browser route.
+- Never automate Google OAuth. Never read, inspect, print, copy into the
+  repository, or include profile files, cookies, tokens, `localStorage`, or
+  `sessionStorage` in prompts or logs.
+- When the official path shows a Google login screen, treat the profile
+  authentication session as expired, report that fact, and stop for manual
+  re-login in the Playwright MCP browser. Do not continue UI verification until
+  authentication is restored manually.
 
 ## Codex supervisor escalation (Luna → Sol)
 
