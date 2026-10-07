@@ -29,7 +29,7 @@ approach, writes the Cursor work order, and reviews the result and diff. Luna
 may directly work on delegation infrastructure itself. A user may also
 explicitly assign implementation to Luna, which overrides the default route.
 
-Use `normal` by default. Select tiers via the delegation script:
+Use `light` by default. Select tiers via the delegation script:
 
 | Tier | Model |
 |---|---|
@@ -64,17 +64,65 @@ When a run fails, the script classifies recognizable worktree creation and
 setup failures separately from Cursor agent failures. Review the printed logs
 and actual process/result status before concluding that delegation failed;
 the diagnostic classification is based on Cursor CLI output and may be
-`cursor_agent` when the CLI does not emit a recognizable phase marker.
+`cursor_agent_unclassified` when the CLI does not emit a recognizable phase marker.
+
+Current triage boundaries:
+
+| Classification | Evidence / handling |
+|---|---|
+| `success` | Process exits 0 and the final result event reports success |
+| `worktree_setup` / `worktree_creation` | Recognized setup or Git worktree diagnostics in the retained run logs |
+| `tooling_environment_failure` | Supervisor diagnosis from the retained logs; the final result event has no stable subtype for this |
+| `implementation_difficulty` | Explicit worker completion/failure report, if available; do not infer it from a generic CLI error |
+| `cursor_models_usage_quota_limit` | Only when Cursor provides a structured quota-specific reason; not currently verified |
+| `cursor_agent_unclassified` | Any remaining failed or incomplete run; preserve logs and do not model-fallback automatically |
+
+The last three classifications are not safely machine-detectable from the
+current CLI result event. That ambiguity is intentional: a generic agent error
+must not trigger a paid Other Models request.
 
 ## Cursor model tiers
 
 | Tier | Model | Typical work |
 |---|---|---|
-| `light` | `composer-2.5` | CSS tweaks, lint fixes, docs, simple tests, small local edits |
-| `normal` | `grok-4.7-medium` | Default. Normal feature work, multi-file fixes, ordinary bug investigation |
-| `hard` | `grok-4.7-high` | Complex bugs, larger refactors, broad implementation work |
+| `light` | `composer-2.5` | **Default.** Bounded routine implementation, UI/CSS, small-to-medium local changes, clear bug fixes, lint/tests/docs, ordinary Playwright verification |
+| `normal` | `grok-4.7-medium` | Retry after Composer implementation difficulty and a clarified work order |
+| `hard` | `grok-4.7-high` | Retry after medium implementation difficulty; redesign after a hard failure goes to Sol |
 
-Use `normal` by default. Do not use xhigh/fast models by default.
+Start at `light`. Escalate only for implementation difficulty: clarify the work
+order, then retry `normal`, and use `hard` only if medium still cannot complete.
+Tooling, environment, network, MCP, or worktree failures must be repaired or
+reported without changing models. Do not use xhigh/fast models by default.
+
+## Cursor Models quota and Other Models fallback
+
+The CLI's current `agent models` output confirms Other Models IDs for this
+account, including `gemini-3.8-flash-low`, `gemini-3.8-flash-medium`,
+`claude-sonnet-5-5-medium`, and `gpt-5.6-luna-medium`. Cursor's published rates
+are token-based, not per task: Gemini 3.8 Flash is $0.75/M input and $3.50/M
+output; Claude Sonnet 5.5 is $2/M input and $10/M output; GPT-5.6 Luna is
+$0.20/M input and $1.20/M output. These models draw from the separate Other
+Models pool. If that pool is exhausted and on-demand usage is enabled, requests
+may be billed at those rates.
+
+For a future explicitly authorized fallback, `gemini-3.8-flash-low` is the
+cost-conscious candidate for light bounded edits, while
+`claude-sonnet-5-5-medium` is the more suitable normal implementation
+candidate when stronger coding performance matters. GPT-5.6 Luna is cheaper,
+but its suitability as a coding-agent continuation has not been validated in
+this workflow. These are recommendations only; the delegate does not switch to
+Other Models automatically.
+
+The current CLI help documents `--model`, while `--output-format stream-json`
+provides a final result event with success/error status. Neither `agent models`
+nor this result event exposes a verified quota-specific error code or remaining
+pool balance. We will not infer quota exhaustion from guessed message text or
+retry failures on a third-party model. Failed Cursor agent runs remain
+`cursor_agent_unclassified` unless the CLI later provides a structured reason;
+preserve the logs for supervisor review. Worktree setup/creation failures are
+reported separately, and success remains explicit. Tooling/environment versus
+implementation difficulty and quota cannot currently be distinguished reliably
+from the CLI result event alone.
 
 ## Supervisor-only / supervisor-first areas
 
@@ -172,7 +220,8 @@ revision together after checking the package metadata and
 
 - Environment/tooling failure: report and repair the environment; do not escalate model just because setup failed. For Cursor delegation, make the first attempt network-enabled as described above; do not intentionally make a restricted attempt first.
 - Cursor CLI or delegation-script failure: report the failure, repair the environment or delegation infrastructure, then resume delegation; do not switch to Luna implementation as a shortcut.
-- `light` struggles with implementation: retry as `normal`.
+- `light` struggles with implementation: clarify the work order and retry as `normal`.
 - `normal` struggles after a clarified work order: retry as `hard`.
 - `hard` still cannot complete due to implementation difficulty: escalate to the Sol supervisor before another implementation attempt.
+- Cursor Models usage/quota limit: do not try another Cursor Models tier (same pool) or silently switch to Other Models. If there is no structured quota signal, report `cursor_agent_unclassified` and preserve logs. Any future Other Models fallback requires explicit user authorization for possible on-demand charges and must resume in the same worktree after reviewing its existing diff.
 - High-risk areas listed above should receive Codex review even if Cursor succeeds.

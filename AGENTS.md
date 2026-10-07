@@ -162,7 +162,7 @@ and diff, and maintenance of the delegation infrastructure itself. Do not take
 over ordinary implementation just because delegation takes extra setup or the
 current checkout is dirty.
 
-Select the Cursor tier through the script, using `normal` by default:
+Select the Cursor tier through the script, using `light` by default:
 
 - `light` → `composer-2.5`
 - `normal` → `grok-4.7-medium`
@@ -193,8 +193,18 @@ delegation script or re-delegate. Cursor must follow the repository rules above
 and `.cursor/rules/worker.mdc`.
 
 Model tiers are fixed: `light` uses `composer-2.5`, `normal` uses
-`grok-4.7-medium`, and `hard` uses `grok-4.7-high`. Use `normal` by default.
-Do not use `fast`, `xhigh`, or other model families by default.
+`grok-4.7-medium`, and `hard` uses `grok-4.7-high`. Start bounded routine work
+with `light`. If Composer has implementation difficulty, clarify the work order
+and retry with `normal`, then use `hard` only if medium still cannot complete
+for implementation reasons. Tooling or environment failures do not justify a
+model escalation. Do not use `fast`, `xhigh`, or other model families by default.
+
+Composer and Grok are both in Cursor Models. Switching between them does not
+provide a quota fallback. Do not automatically switch to an Other Models model:
+the current Cursor CLI does not expose a verified quota-specific error signal,
+and Other Models requests can incur on-demand charges. Keep quota failures
+unclassified unless Cursor provides a structured quota signal; inspect the
+preserved CLI logs and report the failure without retrying on another model.
 
 For the escalation areas above, Sol advises early and Luna makes the
 final design decision before implementation. After that decision, delegate

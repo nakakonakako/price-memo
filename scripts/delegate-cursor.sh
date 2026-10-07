@@ -4,11 +4,11 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/delegate-cursor.sh --tier <light|normal|hard> --task-file <path> [--worktree <name>]
-  scripts/delegate-cursor.sh --tier <light|normal|hard> --prompt <text> [--worktree <name>]
+  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --task-file <path> [--worktree <name>]
+  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --prompt <text> [--worktree <name>]
 
 Options:
-  --tier        Cursor model tier. Default: normal
+  --tier        Cursor model tier. Default: light
   --task-file   Read the work order from a file.
   --prompt      Pass the work order directly.
   --worktree    Run Cursor in an isolated Git worktree.
@@ -16,13 +16,13 @@ Options:
   -h, --help    Show this help.
 
 Model mapping:
-  light  -> composer-2.5
+  light  -> composer-2.5 (default)
   normal -> grok-4.7-medium
   hard   -> grok-4.7-high
 EOF
 }
 
-tier="normal"
+tier="light"
 task_file=""
 prompt=""
 worktree=""
@@ -108,6 +108,7 @@ End with:
 3. verification performed and results
 4. remaining risks
 5. supervisor decisions required
+If unable to complete, state whether the evidence points to implementation difficulty or tooling/environment failure. Report a Cursor Models usage/quota limit only when the CLI provides a structured quota-specific signal; otherwise say unclassified. Do not switch to an Other Models model or retry in another model pool.
 EOF
 
 full_prompt="${supervisor_prefix}
@@ -191,12 +192,12 @@ if [[ "$agent_exit_code" -ne 0 || "$result_status" == "error" ]]; then
   elif [[ -n "$worktree" ]] && grep -Eiq '(fatal:.*worktree|Error:.*(worktree|mkdir)|unable to create.*worktree|failed to create.*worktree)' "$stderr_log" "$stdout_log"; then
     failure_stage="worktree_creation"
   else
-    failure_stage="cursor_agent"
+    failure_stage="cursor_agent_unclassified"
   fi
 elif [[ "$agent_exit_code" -eq 0 && "$result_status" == "success" ]]; then
   failure_stage="success"
 else
-  failure_stage="cursor_agent"
+  failure_stage="cursor_agent_unclassified"
 fi
 
 finished_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
