@@ -109,7 +109,7 @@ export function FolderField({
   }
 
   return (
-    <div ref={rootRef} className="relative space-y-1">
+    <div ref={rootRef} className="relative">
       <input
         type="text"
         value={displayedQuery}
@@ -179,7 +179,7 @@ export function FolderField({
         </div>
       )}
       {fieldError && (
-        <p className="text-xs text-red-700">{fieldError}</p>
+        <p className="mt-1 text-xs text-red-700">{fieldError}</p>
       )}
     </div>
   )

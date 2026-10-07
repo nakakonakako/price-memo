@@ -40,16 +40,11 @@ export function invalidateStoresCache() {
 }
 
 export function upsertStoresCache(store: PriceStore) {
-  if (!cache) {
-    cache = [store]
-    return
-  }
-  const idx = cache.findIndex((s) => s.id === store.id)
-  const next =
-    idx >= 0
-      ? cache.map((s, i) => (i === idx ? store : s))
-      : [...cache, store]
-  next.sort((a, b) => a.name.localeCompare(b.name, 'ja'))
+  const base = cache ?? []
+  const withoutId = base.filter((s) => s.id !== store.id)
+  const next = [...withoutId, store].sort((a, b) =>
+    a.name.localeCompare(b.name, 'ja'),
+  )
   cache = next
   bumpStoresRevision()
 }

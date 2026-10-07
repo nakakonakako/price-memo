@@ -530,9 +530,6 @@ export function FoldersPage({
     try {
       const updated = await renameStore(editingStoreId, editingStoreName)
       upsertStoresCache(updated)
-      setStores((prev) =>
-        prev.map((s) => (s.id === updated.id ? updated : s)),
-      )
       if (previousName && previousName !== updated.name) {
         setAllRecords((prev) =>
           prev.map((r) =>
@@ -573,7 +570,6 @@ export function FoldersPage({
     try {
       const created = await createStore(name)
       upsertStoresCache(created)
-      setStores((prev) => [...prev, created])
       startEditStore(created)
     } catch (err) {
       setStoresError(toUserMessage(err, '店舗の追加に失敗しました。'))
@@ -603,7 +599,6 @@ export function FoldersPage({
       if (openStoreId === storeId) setOpenStoreId(null)
       if (previewStoreId === storeId) setPreviewStoreId(null)
       removeFromStoresCache(storeId)
-      setStores((prev) => prev.filter((s) => s.id !== storeId))
     },
     [cancelEditStore, editingStoreId, openStoreId, previewStoreId],
   )

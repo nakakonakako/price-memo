@@ -95,9 +95,6 @@ export function StoreField({
     try {
       const created = await createStore(trimmedQuery)
       upsertStoresCache(created)
-      setStores((prev) =>
-        [...prev, created].sort((a, b) => a.name.localeCompare(b.name, 'ja')),
-      )
       pick(created.name)
     } catch (err) {
       setFieldError(toUserMessage(err, '店舗の登録に失敗しました。'))
@@ -107,7 +104,7 @@ export function StoreField({
   }
 
   return (
-    <div ref={rootRef} className="relative space-y-1">
+    <div ref={rootRef} className="relative">
       <input
         type="text"
         value={displayedQuery}
@@ -176,7 +173,7 @@ export function StoreField({
         </div>
       )}
       {fieldError && (
-        <p className="text-xs text-red-700">{fieldError}</p>
+        <p className="mt-1 text-xs text-red-700">{fieldError}</p>
       )}
     </div>
   )
