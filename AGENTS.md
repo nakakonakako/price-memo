@@ -233,10 +233,17 @@ Composer and Grok are both in Cursor Models. Switching between them does not
 provide a quota fallback. The CLI does not expose a verified quota-specific
 error signal, so never grep guessed quota strings or automatically switch model
 pools. Only the Supervisor may select an explicit Other Models route after
-reviewing the failure and deciding it is usage/quota related; do not use it for
-MCP, network, worktree, dev server, browser, or other tooling failures. Other
-Models requests may incur on-demand charges; the delegate must not enable or
-change billing settings.
+reviewing evidence of either a Cursor Models usage/quota limit or a persistent
+Cursor service/model-side failure (for example, repeated `resource_exhausted`
+errors). A single error is not enough: confirm the same failure in a second
+independent, bounded normal-route run, and do not retry indefinitely. Repair
+MCP, network, worktree, dev server, browser, or other tooling/environment
+failures first; those do not justify fallback. Keep quota exhaustion distinct
+from service capacity or other model-side failures, and do not label an
+ambiguous failure as quota exhaustion. Other Models runs use the same Cursor
+CLI infrastructure, so fallback is not guaranteed to succeed. They may incur
+on-demand charges; the Supervisor and delegate must not enable or change
+billing settings.
 
 Explicit routes are `--fallback-tier light` → `gemini-3.8-flash-low` and
 `--fallback-tier normal` → `claude-sonnet-5-5-medium`. The reserve

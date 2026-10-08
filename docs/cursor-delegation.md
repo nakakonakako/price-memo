@@ -100,12 +100,21 @@ Current triage boundaries:
 | `worktree_setup` / `worktree_creation` | Recognized setup or Git worktree diagnostics in the retained run logs |
 | `tooling_environment_failure` | Supervisor diagnosis from the retained logs; the final result event has no stable subtype for this |
 | `implementation_difficulty` | Explicit worker completion/failure report, if available; do not infer it from a generic CLI error |
-| `cursor_models_usage_quota_limit` | Only when Cursor provides a structured quota-specific reason; not currently verified |
+| `cursor_models_usage_quota_limit` | Supervisor diagnosis supported by evidence of usage/quota exhaustion; the CLI does not currently expose a verified quota-specific signal |
+| `cursor_service_model_failure` | Supervisor diagnosis of a persistent service/model-side failure, such as repeated `resource_exhausted`; this is not itself proof of quota exhaustion |
 | `cursor_agent_unclassified` | Any remaining failed or incomplete run; preserve logs and do not model-fallback automatically |
 
-The last three classifications are not safely machine-detectable from the
-current CLI result event. That ambiguity is intentional: a generic agent error
-must not trigger a paid Other Models request.
+These classifications are not safely machine-detectable from the current CLI
+result event. A single error never triggers fallback. For a suspected persistent
+service/model-side failure, the Supervisor may make one bounded confirmation
+run on the normal Cursor Models route; if the same failure recurs in that
+independent run, the Supervisor may stop normal-route retries and explicitly
+select an Other Models route. Do not retry indefinitely. Repair MCP, network,
+worktree, dev server, browser, or other tooling/environment failures first.
+Keep quota exhaustion distinct from capacity or other service/model-side
+failures; when evidence cannot distinguish them, do not call it quota
+exhaustion. A fallback still runs through the Cursor CLI infrastructure and is
+not guaranteed to succeed.
 
 ## Shell permissions and Auto-review
 
@@ -164,13 +173,16 @@ The current CLI help documents `--model`, while `--output-format stream-json`
 provides a final result event with success/error status. Neither `agent models`
 nor this result event exposes a verified quota-specific error code or remaining
 pool balance. The script does not grep guessed quota text or retry a failed
-worker on another model. The Supervisor reviews the retained logs and selects
-an explicit fallback only when the evidence supports a usage/quota diagnosis;
-MCP, network, worktree, dev server, and browser failures remain environment
-issues to repair first. All failed runs are returned as ordinary failures with
-their logs retained. Billing and on-demand settings are never changed by the
-script; the chosen Other Models route may still be subject to the account's
-existing billing configuration.
+worker on another model. The Supervisor reviews retained logs and may explicitly
+select a fallback for either supported usage/quota evidence or a recurring
+service/model-side failure after one bounded confirmation run. The latter does
+not establish quota exhaustion; capacity and quota must not be conflated. MCP,
+network, worktree, dev server, browser, and other tooling/environment failures
+remain issues to repair first. All failed runs are returned as ordinary
+failures with logs retained. Other Models uses the same Cursor CLI
+infrastructure, so success is not guaranteed. Billing and on-demand settings
+are never changed by the script; the chosen route may still be subject to the
+account's existing billing configuration.
 
 ## Supervisor-only / supervisor-first areas
 
