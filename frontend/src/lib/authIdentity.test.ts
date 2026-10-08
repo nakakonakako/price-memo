@@ -1,5 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Session } from '@supabase/supabase-js'
+
+vi.mock('@/features/stores/api/storesApi', () => ({
+  listStores: vi.fn(),
+  createStore: vi.fn(),
+}))
+
 import {
   applyAuthIdentity,
   resetAuthIdentityForTests,
