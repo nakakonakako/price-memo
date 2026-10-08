@@ -56,6 +56,7 @@ import {
   createStore,
   deleteStore,
   getStoresCached,
+  getStoresCacheEpoch,
   peekStoresCache,
   removeFromStoresCache,
   renameStore,
@@ -395,16 +396,19 @@ export function FoldersPage({
   }, [catalogQueryTrimmed, storeSort, stores])
 
   const refreshStores = useCallback(async () => {
+    const epoch = getStoresCacheEpoch()
     setStoresLoading(true)
     setStoresError(null)
     try {
       const list = await getStoresCached()
-      setStoresCache(list)
+      if (epoch !== getStoresCacheEpoch()) return
+      setStoresCache(list, epoch)
       setStores(list)
     } catch (err) {
+      if (epoch !== getStoresCacheEpoch()) return
       setStoresError(toUserMessage(err, '店舗の読み込みに失敗しました。'))
     } finally {
-      setStoresLoading(false)
+      if (epoch === getStoresCacheEpoch()) setStoresLoading(false)
     }
   }, [])
 
@@ -427,10 +431,17 @@ export function FoldersPage({
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     const frame = requestAnimationFrame(() => {
-      void Promise.all([refreshStores(), refreshAllRecords()])
+      void (async () => {
+        await Promise.all([refreshStores(), refreshAllRecords()])
+        if (cancelled) return
+      })()
     })
-    return () => cancelAnimationFrame(frame)
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(frame)
+    }
   }, [refreshStores, refreshAllRecords])
 
   const storeRevSeen = useRef(getCatalogRevisions().stores)
@@ -523,13 +534,15 @@ export function FoldersPage({
   const handleRenameStore = async (e: FormEvent) => {
     e.preventDefault()
     if (!editingStoreId) return
+    const epoch = getStoresCacheEpoch()
     const previous = stores.find((s) => s.id === editingStoreId)
     const previousName = previous?.name
     setStoreMutating(true)
     setStoresError(null)
     try {
       const updated = await renameStore(editingStoreId, editingStoreName)
-      upsertStoresCache(updated)
+      if (epoch !== getStoresCacheEpoch()) return
+      upsertStoresCache(updated, epoch)
       if (previousName && previousName !== updated.name) {
         setAllRecords((prev) =>
           prev.map((r) =>
@@ -559,6 +572,7 @@ export function FoldersPage({
   }
 
   const handleAddStore = async () => {
+    const epoch = getStoresCacheEpoch()
     let name = '新しい店舗'
     let n = 2
     while (stores.some((s) => s.name === name)) {
@@ -569,7 +583,8 @@ export function FoldersPage({
     setStoresError(null)
     try {
       const created = await createStore(name)
-      upsertStoresCache(created)
+      if (epoch !== getStoresCacheEpoch()) return
+      upsertStoresCache(created, epoch)
       startEditStore(created)
     } catch (err) {
       setStoresError(toUserMessage(err, '店舗の追加に失敗しました。'))
@@ -580,11 +595,13 @@ export function FoldersPage({
 
   const confirmDeleteStore = async () => {
     if (!deleteConfirmStoreId) return
+    const epoch = getStoresCacheEpoch()
     const storeId = deleteConfirmStoreId
     setDeleteConfirmStoreBusy(true)
     try {
       await deleteStore(storeId)
-      finalizeStoreRemoved(storeId)
+      if (epoch !== getStoresCacheEpoch()) return
+      finalizeStoreRemoved(storeId, epoch)
       setDeleteConfirmStoreId(null)
     } catch (err) {
       setStoresError(toUserMessage(err, '店舗の削除に失敗しました。'))
@@ -594,11 +611,11 @@ export function FoldersPage({
   }
 
   const finalizeStoreRemoved = useCallback(
-    (storeId: string) => {
+    (storeId: string, epoch?: number) => {
       if (editingStoreId === storeId) cancelEditStore()
       if (openStoreId === storeId) setOpenStoreId(null)
       if (previewStoreId === storeId) setPreviewStoreId(null)
-      removeFromStoresCache(storeId)
+      removeFromStoresCache(storeId, epoch)
     },
     [cancelEditStore, editingStoreId, openStoreId, previewStoreId],
   )

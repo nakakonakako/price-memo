@@ -46,3 +46,10 @@ export function subscribeCatalogRevisions(listener: Listener): () => void {
     listeners.delete(listener)
   }
 }
+
+/** Reset revision counters when the authenticated user changes. */
+export function resetCatalogSync() {
+  foldersRev = 0
+  recordsRev = 0
+  storesRev = 0
+}

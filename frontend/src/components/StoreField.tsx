@@ -4,6 +4,7 @@ import {
   filterStores,
   findStoreByName,
   getStoresCached,
+  getStoresCacheEpoch,
   peekStoresCache,
   upsertStoresCache,
 } from '@/features/stores/api/storesApi'
@@ -90,11 +91,12 @@ export function StoreField({
 
   const registerNew = async () => {
     if (!trimmedQuery) return
+    const epoch = getStoresCacheEpoch()
     setRegistering(true)
     setFieldError(null)
     try {
       const created = await createStore(trimmedQuery)
-      upsertStoresCache(created)
+      upsertStoresCache(created, epoch)
       pick(created.name)
     } catch (err) {
       setFieldError(toUserMessage(err, '店舗の登録に失敗しました。'))

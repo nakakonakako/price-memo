@@ -1,6 +1,11 @@
+import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { supabase } from '@/lib/supabase'
 import type { PriceStore } from '../types'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
+import {
+  getStoresCacheEpoch,
+  StoresCacheStaleError,
+} from './storesCache'
 
 export async function listStores(): Promise<PriceStore[]> {
   const { data, error } = await supabase
@@ -12,7 +17,18 @@ export async function listStores(): Promise<PriceStore[]> {
   return (data ?? []) as PriceStore[]
 }
 
+function assertCreateStoreEpoch(startEpoch: number, userId: string): void {
+  if (
+    getStoresCacheEpoch() !== startEpoch ||
+    getCurrentAuthUserId() !== userId
+  ) {
+    throw new StoresCacheStaleError()
+  }
+}
+
 export async function createStore(name: string): Promise<PriceStore> {
+  const startEpoch = getStoresCacheEpoch()
+
   const {
     data: { user },
     error: userError,
@@ -20,8 +36,12 @@ export async function createStore(name: string): Promise<PriceStore> {
   if (userError) throw userError
   if (!user) throw new Error('ログインが必要です')
 
+  assertCreateStoreEpoch(startEpoch, user.id)
+
   const trimmed = name.trim()
   if (!trimmed) throw new Error('店舗名を入力してください')
+
+  assertCreateStoreEpoch(startEpoch, user.id)
 
   const { data, error } = await supabase
     .from('price_stores')
@@ -93,6 +113,7 @@ export function filterStores(stores: PriceStore[], query: string): PriceStore[] 
 
 export {
   getStoresCached,
+  getStoresCacheEpoch,
   peekStoresCache,
   invalidateStoresCache,
   setStoresCache,

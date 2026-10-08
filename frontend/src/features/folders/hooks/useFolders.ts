@@ -19,13 +19,24 @@ export function useFolders() {
   const [error, setError] = useState<string | null>(null)
   const [isMutating, setIsMutating] = useState(false)
   const createInFlightRef = useRef(false)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     if (!opts?.silent) setIsLoading(true)
     setError(null)
     try {
-      setFolders(await listFolders())
+      const next = await listFolders()
+      if (!mountedRef.current) return
+      setFolders(next)
     } catch (err) {
+      if (!mountedRef.current) return
       setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
     } finally {
       if (!opts?.silent) setIsLoading(false)
@@ -63,6 +74,7 @@ export function useFolders() {
     setError(null)
     try {
       const created = await createFolder(name)
+      if (!mountedRef.current) return created
       if (options?.atStart) {
         const prevWithoutDup = folders.filter((f) => f.id !== created.id)
         const next = [created, ...prevWithoutDup].map((f, sort_order) => ({

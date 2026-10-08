@@ -64,6 +64,7 @@ PC でゴミ箱ドラッグ中は重ならないよう非表示。
 ### 2.1d パフォーマンス・タブ同期
 
 - タブはアンマウントせず keep-alive（`App.tsx`）。初回訪問時だけマウント
+- 認証済み画面と店舗キャッシュは `session.user.id` ごとに分離する。ユーザー切替時は keep-alive 画面と店舗キャッシュを破棄し、同じユーザーのトークン更新では維持する。切替前に始まった店舗取得結果は新しいユーザーへ渡さない
 - フォルダ／記録の変更は `lib/catalogSync.ts` の revision。他タブを再表示したとき差分があれば静かに再取得
 - 店舗一覧は `storesCache`（`StoreField` / `ensureStore` で共有）。店舗の作成・改名・削除は stores revision で通知し、マウント済み StoreField と keep-alive の店舗カタログをキャッシュから同期
 - 値段推移パネル（recharts）は lazy 分割。開いたときだけ読み込み

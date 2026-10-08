@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { applyAuthIdentity } from '@/lib/authIdentity'
 import { supabase } from '@/lib/supabase'
 
 type AuthContextType = {
@@ -27,16 +28,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setIsLoading(false)
-    })
+    let authListenerHandled = false
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      authListenerHandled = true
+      applyAuthIdentity(session)
       setSession(session)
       setIsLoading(false)
+    })
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!authListenerHandled) {
+        applyAuthIdentity(session)
+        setSession(session)
+        setIsLoading(false)
+      }
     })
 
     return () => subscription.unsubscribe()

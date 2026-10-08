@@ -1,4 +1,12 @@
-import { lazy, Suspense, useCallback, useRef, useState, type ReactNode } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react'
+import type { Session } from '@supabase/supabase-js'
 import { Auth } from '@/components/Auth'
 import { MainLayout, type TabId } from '@/components/MainLayout'
 import { useAuth } from '@/contexts/AuthContext'
@@ -43,8 +51,13 @@ function TabFallback() {
   return <p className="text-sm text-stone-500">読み込み中...</p>
 }
 
-export default function App() {
-  const { session, isLoading, logout } = useAuth()
+function AuthenticatedApp({
+  session,
+  logout,
+}: {
+  session: Session
+  logout: () => Promise<void>
+}) {
   const [tab, setTab] = useState<TabId>('memo')
   const [visited, setVisited] = useState<Record<TabId, boolean>>({
     memo: true,
@@ -76,18 +89,6 @@ export default function App() {
       current?.id === requestId ? null : current,
     )
   }, [])
-
-  if (isLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-stone-500">
-        読み込み中...
-      </div>
-    )
-  }
-
-  if (!session) {
-    return <Auth />
-  }
 
   return (
     <MainLayout
@@ -129,5 +130,29 @@ export default function App() {
         </TabPanel>
       )}
     </MainLayout>
+  )
+}
+
+export default function App() {
+  const { session, isLoading, logout } = useAuth()
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center text-sm text-stone-500">
+        読み込み中...
+      </div>
+    )
+  }
+
+  if (!session) {
+    return <Auth />
+  }
+
+  return (
+    <AuthenticatedApp
+      key={session.user.id}
+      session={session}
+      logout={logout}
+    />
   )
 }
