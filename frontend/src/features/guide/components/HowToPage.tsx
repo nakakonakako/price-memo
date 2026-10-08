@@ -168,21 +168,9 @@ export function HowToPage() {
                   />
                 </GuideDeviceFrame>
                 <GuideDeviceFrame label="PC：ゴミ箱へドラッグでメモから外す">
-                  <GuideBeforeAfter
-                    actionLabel="ドロップ"
-                    before={
-                      <div className="space-y-1.5">
-                        <MemoRowCard name="牛乳" dragging />
-                        <p className="text-xs text-stone-500">
-                          ドラッグ中だけゴミ箱が表示されます。
-                        </p>
-                      </div>
-                    }
-                    after={
-                      <TrashDropTarget caption="ゴミ箱に落とすとメモから外れます。">
-                        <MemoRowCard name="牛乳" dragging />
-                      </TrashDropTarget>
-                    }
+                  <TrashDragScene
+                    card={<MemoRowCard name="牛乳" dragging />}
+                    caption="ドラッグ中だけゴミ箱が表示されます。ゴミ箱に落とすとメモから外れます。"
                   />
                 </GuideDeviceFrame>
                 <GuideDeviceFrame label="スマホ：左スワイプでメモから外す">
@@ -219,14 +207,9 @@ export function HowToPage() {
               </p>
               <div className="space-y-3">
                 <GuideDeviceFrame label="PC：ドラッグ中だけゴミ箱が表示">
-                  <GuideBeforeAfter
-                    actionLabel="ドロップ"
-                    before={<FolderRowCard name="牛乳" dragging />}
-                    after={
-                      <TrashDropTarget caption="ゴミ箱に落として削除します。">
-                        <FolderRowCard name="牛乳" dragging />
-                      </TrashDropTarget>
-                    }
+                  <TrashDragScene
+                    card={<FolderRowCard name="牛乳" dragging />}
+                    caption="ドラッグ中だけゴミ箱が表示されます。ゴミ箱に落とすとフォルダを削除します。"
                   />
                 </GuideDeviceFrame>
                 <GuideDeviceFrame label="スマホ：左スワイプで削除">
@@ -525,11 +508,14 @@ const MEMO_ANNOTATIONS = [
 ] as const
 
 const FOLDER_ANNOTATIONS = [
-  { n: 1, text: '品目名と店名を横断して検索します。' },
-  { n: 2, text: '件数を押すとフォルダの詳細が開きます。' },
-  { n: 3, text: '＋で記録を追加します。' },
-  { n: 4, text: '記録を複製します。' },
-  { n: 5, text: '記録を編集します。' },
+  { n: 1, text: '品目名と店名の表示を切り替えます。' },
+  { n: 2, text: '品目名と店名を横断して検索します。' },
+  { n: 3, text: '追加順と名前順を切り替えます。' },
+  { n: 4, text: '青いタイルで新しいフォルダを追加します。' },
+  { n: 5, text: '件数を押すとフォルダの詳細が開きます。' },
+  { n: 6, text: 'フォルダカードの＋で記録を追加します。' },
+  { n: 7, text: '記録を複製します。' },
+  { n: 8, text: '記録を編集します。' },
 ] as const
 
 /**
@@ -715,17 +701,44 @@ function FolderRowCard({ name, dragging }: { name: string; dragging?: boolean })
   )
 }
 
-function TrashDropTarget({
-  children,
+function TrashIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M4 7h16" />
+      <path d="M9 7V4.5h6V7" />
+      <path d="M6 7l1 13h10l1-13" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  )
+}
+
+/** Shared PC drag scene: the trash is only shown while a card is being dragged. */
+function TrashDragScene({
+  card,
   caption,
 }: {
-  children: ReactNode
+  card: ReactNode
   caption: string
 }) {
   return (
-    <div className="space-y-1.5 rounded-lg border-2 border-dashed border-red-300 bg-red-50 p-2">
-      {children}
-      <p className="text-xs font-medium text-red-700">🗑 {caption}</p>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2" aria-hidden>
+        <div className="min-w-0 flex-1">{card}</div>
+        <span className="shrink-0 text-xl leading-none text-red-600">→</span>
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border-2 border-dashed border-red-400 bg-red-50 text-red-600 sm:h-20 sm:w-20">
+          <TrashIcon className="h-8 w-8 sm:h-10 sm:w-10" />
+        </div>
+      </div>
+      <p className="text-xs leading-snug text-stone-700">{caption}</p>
     </div>
   )
 }
@@ -773,57 +786,90 @@ function SwipeRow({
 
 function MockFolderCardAnnotated() {
   return (
-    <div className="space-y-2" aria-hidden>
-      <div className="flex items-center gap-2">
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-stone-300 bg-white text-stone-600">
-          <SearchIcon />
-        </span>
-        <GuideMarker n={1} />
-      </div>
-
-      <div className="relative overflow-hidden rounded-lg border border-amber-200/90 bg-gradient-to-b from-amber-50 via-amber-50/90 to-amber-100/40 shadow-sm">
-        <div className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-amber-300/70 bg-amber-200/90" />
-        <div className="flex min-h-[4rem] flex-wrap items-center gap-y-1 px-4 pb-2 pt-4">
-          <span className="min-w-[4rem] truncate px-1 text-base font-semibold text-stone-900">
-            牛乳
-          </span>
-          <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-stone-400/70">
-            <PencilIcon className="h-3.5 w-3.5" />
-          </span>
-          <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-stone-600">
-              <ChartIcon className="h-4 w-4" />
+    <div className="space-y-4" aria-hidden>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5">
+          <div className="flex rounded-md border border-stone-300 bg-white p-0.5">
+            <span className="rounded bg-stone-900 px-3 py-1.5 text-sm text-white">
+              品目名
             </span>
-            <span className="rounded-md px-1.5 py-1 tabular-nums text-sm text-stone-500">
-              12
+            <span className="rounded px-3 py-1.5 text-sm text-stone-700">
+              店名
             </span>
-            <span className="shrink-0 text-stone-400">▸</span>
-            <GuideMarker n={2} />
-            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700">
-              ＋
-            </span>
-            <GuideMarker n={3} />
           </div>
+          <GuideMarker n={1} />
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-stone-300 bg-white text-stone-600">
+            <SearchIcon />
+          </span>
+          <GuideMarker n={2} />
+          <span className="flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-600">
+            追加順
+            <span className="text-[10px] text-stone-400">▼</span>
+          </span>
+          <GuideMarker n={3} />
         </div>
       </div>
 
-      <div className="rounded-md border border-stone-200 bg-white/80 px-2 py-1">
-        <div className="flex min-w-0 items-center gap-0.5">
-          <div className="min-w-0 flex-1 py-2">
-            <p className="text-sm font-medium text-stone-900">
-              2026-03-01 · イオン
-            </p>
-            <p className="text-xs text-stone-600">¥398 / 1000ml（¥0.40/ml）</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:items-start">
+        <div className="relative flex min-h-[4rem] w-full items-center justify-center gap-2 overflow-hidden rounded-lg border border-sky-200/90 bg-gradient-to-b from-sky-50 via-sky-50/90 to-sky-100/50 shadow-sm">
+          <div className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-sky-300/70 bg-sky-200/80" />
+          <span className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-sky-500 text-xl font-light leading-none text-sky-700">
+            ＋
+          </span>
+          <GuideMarker n={4} />
+        </div>
+
+        <div className="relative flex min-w-0 flex-col overflow-hidden rounded-lg border border-amber-400/80 bg-gradient-to-b from-amber-50 via-amber-50/90 to-amber-100/40 shadow-md">
+          <div className="absolute left-4 top-0 h-2 w-12 rounded-b-sm border border-t-0 border-amber-300/70 bg-amber-200/90" />
+          <div className="flex flex-col gap-2 px-4 pb-2 pt-4">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-y-1">
+              <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
+                牛乳
+              </span>
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded text-stone-400/70">
+                <PencilIcon className="h-3.5 w-3.5" />
+              </span>
+              <div className="ml-auto flex shrink-0 items-center gap-0.5 pl-1">
+                <span className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-md text-stone-600 lg:inline-flex">
+                  <ChartIcon className="h-4 w-4" />
+                </span>
+                <span className="rounded-md px-1.5 py-1 tabular-nums text-sm text-stone-500">
+                  12
+                </span>
+                <GuideMarker n={5} />
+                <span className="ml-1.5 shrink-0 rotate-90 text-stone-400">▸</span>
+                <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg font-medium text-stone-700">
+                  ＋
+                </span>
+                <GuideMarker n={6} />
+              </div>
+            </div>
           </div>
-          <div className="flex shrink-0 items-center gap-0.5">
-            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-stone-600">
-              <CopyIcon className="h-5 w-5" />
-            </span>
-            <GuideMarker n={4} />
-            <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-stone-600">
-              <PencilIcon className="h-6 w-6" />
-            </span>
-            <GuideMarker n={5} />
+          <div className="border-t border-amber-200/70 bg-white/80 px-3 py-3">
+            <div className="rounded-md border border-stone-200 bg-white px-2 py-1">
+              <div className="flex min-w-0 items-center gap-0.5">
+                <div className="min-w-0 flex-1 py-2">
+                  <p className="text-sm font-medium text-stone-900">
+                    2026-03-01 · イオン
+                  </p>
+                  <p className="text-xs text-stone-600">
+                    ¥398 / 1000ml（¥0.40/ml）
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center justify-end gap-0.5">
+                  <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-stone-600">
+                    <CopyIcon className="h-5 w-5" />
+                  </span>
+                  <GuideMarker n={7} />
+                  <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-md text-stone-600">
+                    <PencilIcon className="h-6 w-6" />
+                  </span>
+                  <GuideMarker n={8} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -836,8 +882,15 @@ function MockFolderCardAnnotated() {
  * the name; the list shows only the name, while search matches the reading and
  * name order uses the reading as sort key.
  */
+function KanaChip({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-base font-semibold text-stone-900">
+      {children}
+    </span>
+  )
+}
+
 function KanaBlock() {
-  const theme = useGuideTheme()
   return (
     <div className="space-y-3">
       <p className="text-sm font-semibold text-stone-800">
@@ -857,21 +910,11 @@ function KanaBlock() {
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <KanaStage
           title="保存後の表示"
-          result={
-            <span className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1 text-base font-semibold text-stone-900">
-              牛乳
-            </span>
-          }
+          result={<KanaChip>牛乳</KanaChip>}
         />
         <KanaStage
           title="検索・名前順"
-          result={
-            <span
-              className={`text-sm font-semibold leading-snug ${theme.emphasis}`}
-            >
-              ぎゅうにゅうを利用
-            </span>
-          }
+          result={<KanaChip>ぎゅうにゅう</KanaChip>}
         />
       </div>
     </div>
@@ -924,7 +967,7 @@ function MockPcFolderRow() {
 }
 
 function MockMobileTrendsEntry() {
-  const tabs = ['買い物メモ', 'フォルダ', '値段推移', '使い方']
+  const tabs = ['買い物メモ', 'フォルダ', '値段推移']
   return (
     <div className="w-full min-w-0 space-y-2" aria-hidden>
       <div className="flex flex-wrap items-center gap-1">

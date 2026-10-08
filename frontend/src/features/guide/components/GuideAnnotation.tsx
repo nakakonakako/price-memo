@@ -19,23 +19,15 @@ export type GuideAnnotationItem = {
   text: ReactNode
 }
 
-/** Explanations in normal flow: single column on mobile, two columns from sm. */
-export function GuideAnnotationList({
+function GuideAnnotationItems({
   items,
-  label,
-  singleColumn = false,
+  start,
 }: {
   items: readonly GuideAnnotationItem[]
-  label: string
-  singleColumn?: boolean
+  start?: number
 }) {
   return (
-    <ol
-      aria-label={label}
-      className={`mt-3 grid grid-cols-1 gap-x-4 gap-y-2 ${
-        singleColumn ? '' : 'sm:grid-cols-2'
-      }`}
-    >
+    <ol start={start} className="space-y-2">
       {items.map((item) => (
         <li key={item.n} className="flex min-w-0 items-start gap-2">
           <span className="mt-[3px]">
@@ -47,6 +39,40 @@ export function GuideAnnotationList({
         </li>
       ))}
     </ol>
+  )
+}
+
+/**
+ * Explanations in normal flow. Single column on mobile; from sm the items are
+ * split into two columns (1..ceil(n/2), then the rest). The two groups are
+ * sequential in the DOM so reading order stays numeric.
+ */
+export function GuideAnnotationList({
+  items,
+  label,
+  singleColumn = false,
+}: {
+  items: readonly GuideAnnotationItem[]
+  label: string
+  singleColumn?: boolean
+}) {
+  if (singleColumn || items.length < 2) {
+    return (
+      <div role="group" aria-label={label} className="mt-3">
+        <GuideAnnotationItems items={items} />
+      </div>
+    )
+  }
+  const split = Math.ceil(items.length / 2)
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 sm:items-start"
+    >
+      <GuideAnnotationItems items={items.slice(0, split)} />
+      <GuideAnnotationItems items={items.slice(split)} start={items[split].n} />
+    </div>
   )
 }
 
