@@ -203,7 +203,7 @@ A 参照（読み取り・紐付け用）:
 | 技術 | 目安 |
 |------|------|
 | Docker Compose | `docker-compose.production.yml`（FE + BE） |
-| GitHub Actions | `main` push → GHCR → VPS（frontend は外部 `edge` network 経由） |
+| GitHub Actions | PR（`main` 向け）で品質チェック。`main` push → GHCR → VPS（frontend は外部 `edge` network 経由） |
 | nginx | SPA + `/api` → backend |
 
 ---
@@ -244,6 +244,8 @@ cd .. && npm run dev
 ### 7.3 本番（Docker Compose + GitHub Actions）
 
 A（`receipt-manager`）と同型。
+
+`main` 向け Pull Request では `.github/workflows/ci.yml` が `npm run check` を実行する。本番 Secrets、Docker image の push、デプロイ、DB 接続・migration は行わない。本番の Build / Deploy は従来どおり `main` push 時に `.github/workflows/deploy.yml` が実行する。
 
 | 項目 | 内容 |
 |------|------|
@@ -315,6 +317,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-10 | `main` 向け Pull Request の品質チェック workflow を追加 |
 | 2026-10-10 | S1-03: バックエンドの CORS ミドルウェアを除去。ブラウザ API は同一オリジン `/api`（Vite / nginx）のみ |
 | 2026-10-10 | S1-07: 本番 deploy の `.env` から未使用の `GEMINI_API_KEY` 注入を除去。必須 Secrets 一覧を現行利用に合わせて更新 |
 | 2026-10-08 | 認証済み画面状態と店舗キャッシュをユーザーIDで分離し、切替前の非同期結果を破棄 |
