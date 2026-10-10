@@ -21,9 +21,12 @@ import type { PriceRecord } from '@/features/records/types'
 import { reorderIds } from '@/lib/listOrder'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import { toUserMessage } from '@/lib/userError'
+import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { getCatalogRevisions } from '@/lib/catalogSync'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   addMemoItem,
+  isMemoReorderStaleError,
   listMemoItems,
   removeMemoItem,
   reorderMemoItems,
@@ -48,6 +51,14 @@ const nameCollator = new Intl.Collator('ja', {
   numeric: true,
   sensitivity: 'base',
 })
+
+const MEMO_REORDER_STALE_MESSAGE =
+  'メモの一覧が変更されました。もう一度並べ替えてください。'
+
+function reorderFailureMessage(err: unknown): string {
+  if (isMemoReorderStaleError(err)) return MEMO_REORDER_STALE_MESSAGE
+  return toUserMessage(err, '並べ替えの保存に失敗しました。')
+}
 
 function findFolderByInput(
   folders: PriceFolder[],
@@ -77,6 +88,8 @@ export function ShoppingMemoPage({
   active?: boolean
   onOpenFolder?: (folderId: string) => void
 }) {
+  const { session } = useAuth()
+  const authUserId = session?.user?.id ?? null
   const isMobile = useMediaQuery('(max-width: 1023px)')
   const [allFolders, setAllFolders] = useState<PriceFolder[]>([])
   const [memoItems, setMemoItems] = useState<PriceMemoItem[]>([])
@@ -88,56 +101,92 @@ export function ShoppingMemoPage({
   const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const cardRefs = useRef(new Map<string, HTMLElement>())
+  const loadGenerationRef = useRef(0)
+  const reorderGenerationRef = useRef(0)
+  const reorderInFlightRef = useRef(false)
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setIsLoading(true)
-    setError(null)
-    try {
-      const [folderList, memoList] = await Promise.all([
-        listFolders(),
-        listMemoItems(),
-      ])
-      const recordList = await listRecordsForFolders(
-        memoList.map((m) => m.folder_id),
-      )
-      setAllFolders(folderList)
-      setMemoItems(memoList)
-      setRecords(recordList)
-    } catch (err) {
-      setError(toUserMessage(err, '読み込みに失敗しました。'))
-    } finally {
-      if (!opts?.silent) setIsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    const loadInitial = async () => {
-      setIsLoading(true)
-      setError(null)
+  const load = useCallback(
+    async (opts?: { silent?: boolean; preserveError?: boolean }) => {
+      const generation = loadGenerationRef.current
+      const userIdAtStart = getCurrentAuthUserId()
+      if (!userIdAtStart) return
+      if (!opts?.silent) setIsLoading(true)
+      if (!opts?.preserveError) setError(null)
       try {
         const [folderList, memoList] = await Promise.all([
           listFolders(),
           listMemoItems(),
         ])
         const recordList = await listRecordsForFolders(
-          memoList.map((item) => item.folder_id),
+          memoList.map((m) => m.folder_id),
         )
-        if (cancelled) return
+        if (
+          loadGenerationRef.current !== generation ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          return
+        }
         setAllFolders(folderList)
         setMemoItems(memoList)
         setRecords(recordList)
       } catch (err) {
-        if (!cancelled) setError(toUserMessage(err, '読み込みに失敗しました。'))
+        if (
+          loadGenerationRef.current !== generation ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          return
+        }
+        const message = toUserMessage(err, '読み込みに失敗しました。')
+        setError((current) =>
+          opts?.preserveError && current
+            ? `${current} 最新の一覧を再取得できませんでした。`
+            : message,
+        )
       } finally {
-        if (!cancelled) setIsLoading(false)
+        if (
+          loadGenerationRef.current === generation &&
+          getCurrentAuthUserId() === userIdAtStart &&
+          !opts?.silent
+        ) {
+          setIsLoading(false)
+        }
       }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    loadGenerationRef.current += 1
+    reorderGenerationRef.current += 1
+    reorderInFlightRef.current = false
+
+    if (!authUserId) {
+      const generation = loadGenerationRef.current
+      void Promise.resolve().then(() => {
+        if (
+          loadGenerationRef.current !== generation ||
+          getCurrentAuthUserId() !== null
+        ) {
+          return
+        }
+        setAllFolders([])
+        setMemoItems([])
+        setRecords([])
+        setError(null)
+        setIsLoading(false)
+      })
+      return
     }
-    void loadInitial()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+
+    void (async () => {
+      setIsLoading(true)
+      setError(null)
+      setAllFolders([])
+      setMemoItems([])
+      setRecords([])
+      await load()
+    })()
+  }, [authUserId, load])
 
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
     null,
@@ -159,12 +208,30 @@ export function ShoppingMemoPage({
         .catch(() => {})
     }
     if (cur.records !== prev.records) {
+      const generation = loadGenerationRef.current
+      const userIdAtStart = getCurrentAuthUserId()
+      if (!userIdAtStart) return
       void listMemoItems()
         .then((memoList) => {
+          if (
+            loadGenerationRef.current !== generation ||
+            getCurrentAuthUserId() !== userIdAtStart
+          ) {
+            return null
+          }
           setMemoItems(memoList)
           return listRecordsForFolders(memoList.map((m) => m.folder_id))
         })
-        .then(setRecords)
+        .then((recordList) => {
+          if (
+            recordList == null ||
+            loadGenerationRef.current !== generation ||
+            getCurrentAuthUserId() !== userIdAtStart
+          ) {
+            return
+          }
+          setRecords(recordList)
+        })
         .catch(() => {})
     }
   }, [active])
@@ -294,17 +361,27 @@ export function ShoppingMemoPage({
       if (result.payload.kind !== 'memo-folder') return
 
       if (result.action === 'delete') {
+        if (reorderInFlightRef.current) return
         await removeFromMemo(result.payload.id)
         return
       }
 
       if (result.action === 'reorder') {
+        if (reorderInFlightRef.current) return
+
+        const userIdAtStart = getCurrentAuthUserId()
+        if (!userIdAtStart) return
+
         const prev = memoItems
-        const ids = reorderIds(
-          prev.map((m) => m.folder_id),
-          result.payload.id,
-          result.beforeId,
-        )
+        const expectedIds = prev.map((m) => m.folder_id)
+        const ids = reorderIds(expectedIds, result.payload.id, result.beforeId)
+        if (ids.length === expectedIds.length && ids.every((id, i) => id === expectedIds[i])) {
+          return
+        }
+        const reorderGeneration = reorderGenerationRef.current + 1
+        reorderGenerationRef.current = reorderGeneration
+        reorderInFlightRef.current = true
+
         const map = new Map(prev.map((m) => [m.folder_id, m]))
         const next = ids
           .map((folderId, sort_order) => {
@@ -314,10 +391,27 @@ export function ShoppingMemoPage({
           .filter((m): m is PriceMemoItem => m != null)
         setMemoItems(next)
         try {
-          await reorderMemoItems(ids)
+          await reorderMemoItems(expectedIds, ids)
+          if (
+            reorderGenerationRef.current !== reorderGeneration ||
+            getCurrentAuthUserId() !== userIdAtStart
+          ) {
+            return
+          }
         } catch (err) {
-          setError(toUserMessage(err, '並べ替えの保存に失敗しました。'))
-          void load({ silent: true })
+          if (
+            reorderGenerationRef.current !== reorderGeneration ||
+            getCurrentAuthUserId() !== userIdAtStart
+          ) {
+            return
+          }
+          setError(reorderFailureMessage(err))
+          loadGenerationRef.current += 1
+          await load({ silent: true, preserveError: true })
+        } finally {
+          if (reorderGenerationRef.current === reorderGeneration) {
+            reorderInFlightRef.current = false
+          }
         }
       }
     },

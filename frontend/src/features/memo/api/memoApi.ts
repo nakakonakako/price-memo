@@ -38,6 +38,7 @@ export async function listMemoItems(): Promise<PriceMemoItem[]> {
     .select('id, user_id, folder_id, sort_order, created_at, folder:price_folders(*)')
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
 
   if (error) throw error
   return ((data ?? []) as MemoRow[])
@@ -108,17 +109,19 @@ export async function removeMemoItem(folderId: string): Promise<void> {
   if (error) throw error
 }
 
-/** Persist memo display order (folder ids in desired order). */
-export async function reorderMemoItems(folderIds: string[]): Promise<void> {
-  if (folderIds.length === 0) return
-  const results = await Promise.all(
-    folderIds.map((folder_id, sort_order) =>
-      supabase
-        .from('price_memo_items')
-        .update({ sort_order })
-        .eq('folder_id', folder_id),
-    ),
-  )
-  const failed = results.find((r) => r.error)
-  if (failed?.error) throw failed.error
+/** Persist memo display order using the atomic reorder RPC. */
+export async function reorderMemoItems(
+  expectedFolderIds: string[],
+  folderIds: string[],
+): Promise<void> {
+  const { error } = await supabase.rpc('reorder_price_memo_items', {
+    p_expected_folder_ids: expectedFolderIds,
+    p_folder_ids: folderIds,
+  })
+  if (error) throw error
+}
+
+export function isMemoReorderStaleError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  return (err as { code?: string }).code === 'PM001'
 }

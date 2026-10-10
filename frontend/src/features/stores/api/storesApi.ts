@@ -1,9 +1,11 @@
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
+import { bumpRecordsRevision, bumpStoresRevision } from '@/lib/catalogSync'
 import { supabase } from '@/lib/supabase'
 import type { PriceStore } from '../types'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import {
   getStoresCacheEpoch,
+  setStoresCache,
   StoresCacheStaleError,
 } from './storesCache'
 
@@ -17,13 +19,72 @@ export async function listStores(): Promise<PriceStore[]> {
   return (data ?? []) as PriceStore[]
 }
 
-function assertCreateStoreEpoch(startEpoch: number, userId: string): void {
+function assertStoresMutationEpoch(startEpoch: number, userId: string): void {
   if (
     getStoresCacheEpoch() !== startEpoch ||
     getCurrentAuthUserId() !== userId
   ) {
     throw new StoresCacheStaleError()
   }
+}
+
+function parseRenameStoreRpcResult(
+  data: unknown,
+  expectedId: string,
+  expectedUserId: string,
+  expectedName: string,
+): PriceStore {
+  const rowValue = Array.isArray(data)
+    ? data.length === 1
+      ? data[0]
+      : null
+    : data
+  if (!rowValue || typeof rowValue !== 'object') {
+    throw new Error('店舗名の変更に失敗しました。')
+  }
+  const row = rowValue as Record<string, unknown>
+  const id = row.id
+  const user_id = row.user_id
+  const name = row.name
+  const created_at = row.created_at
+  if (
+    typeof id !== 'string' ||
+    typeof user_id !== 'string' ||
+    typeof name !== 'string' ||
+    typeof created_at !== 'string' ||
+    !id ||
+    !name
+  ) {
+    throw new Error('店舗名の変更に失敗しました。')
+  }
+  if (user_id !== expectedUserId) throw new StoresCacheStaleError()
+  if (id !== expectedId || name !== expectedName) {
+    throw new Error('店舗名の変更に失敗しました。')
+  }
+  return { id, user_id, name, created_at }
+}
+
+async function reconcileRenameAfterFailure(
+  startEpoch: number,
+  userId: string,
+): Promise<void> {
+  try {
+    assertStoresMutationEpoch(startEpoch, userId)
+    const stores = await listStores()
+    assertStoresMutationEpoch(startEpoch, userId)
+    setStoresCache(stores, startEpoch)
+  } catch {
+    // The original RPC error remains authoritative; a failed read must not
+    // turn it into a success or apply data from a different account.
+  }
+  if (
+    getStoresCacheEpoch() !== startEpoch ||
+    getCurrentAuthUserId() !== userId
+  ) {
+    return
+  }
+  bumpStoresRevision()
+  bumpRecordsRevision()
 }
 
 export async function createStore(name: string): Promise<PriceStore> {
@@ -36,12 +97,12 @@ export async function createStore(name: string): Promise<PriceStore> {
   if (userError) throw userError
   if (!user) throw new Error('ログインが必要です')
 
-  assertCreateStoreEpoch(startEpoch, user.id)
+  assertStoresMutationEpoch(startEpoch, user.id)
 
   const trimmed = name.trim()
   if (!trimmed) throw new Error('店舗名を入力してください')
 
-  assertCreateStoreEpoch(startEpoch, user.id)
+  assertStoresMutationEpoch(startEpoch, user.id)
 
   const { data, error } = await supabase
     .from('price_stores')
@@ -54,6 +115,8 @@ export async function createStore(name: string): Promise<PriceStore> {
 }
 
 export async function renameStore(id: string, name: string): Promise<PriceStore> {
+  const startEpoch = getStoresCacheEpoch()
+
   const {
     data: { user },
     error: userError,
@@ -61,34 +124,34 @@ export async function renameStore(id: string, name: string): Promise<PriceStore>
   if (userError) throw userError
   if (!user) throw new Error('ログインが必要です')
 
+  assertStoresMutationEpoch(startEpoch, user.id)
+
   const trimmed = name.trim()
   if (!trimmed) throw new Error('店舗名を入力してください')
 
-  const { data: current, error: fetchError } = await supabase
-    .from('price_stores')
-    .select('name')
-    .eq('id', id)
-    .single()
-  if (fetchError) throw fetchError
+  assertStoresMutationEpoch(startEpoch, user.id)
 
-  const { data, error } = await supabase
-    .from('price_stores')
-    .update({ name: trimmed })
-    .eq('id', id)
-    .select()
-    .single()
-  if (error) throw error
-
-  if (current.name !== trimmed) {
-    const { error: recordsError } = await supabase
-      .from('price_records')
-      .update({ store_name: trimmed, updated_at: new Date().toISOString() })
-      .eq('user_id', user.id)
-      .eq('store_name', current.name)
-    if (recordsError) throw recordsError
+  const { data, error } = await supabase.rpc('rename_price_store', {
+    p_store_id: id,
+    p_name: trimmed,
+  })
+  if (error) {
+    await reconcileRenameAfterFailure(startEpoch, user.id)
+    throw error
   }
 
-  return data as PriceStore
+  assertStoresMutationEpoch(startEpoch, user.id)
+
+  let updated: PriceStore
+  try {
+    updated = parseRenameStoreRpcResult(data, id, user.id, trimmed)
+  } catch (parseError) {
+    await reconcileRenameAfterFailure(startEpoch, user.id)
+    throw parseError
+  }
+
+  bumpRecordsRevision()
+  return updated
 }
 
 export async function deleteStore(id: string): Promise<void> {
