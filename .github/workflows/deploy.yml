@@ -112,7 +112,6 @@ jobs:
             cd ~/price-memo
 
             cat <<'EOF' > .env
-            GEMINI_API_KEY=${{ secrets.PROD_GEMINI_API_KEY }}
             SUPABASE_URL=${{ secrets.PROD_SUPABASE_URL }}
             SUPABASE_KEY=${{ secrets.PROD_SUPABASE_PUBLISHABLE_KEY }}
             EOF

@@ -238,7 +238,6 @@ cd .. && npm run dev
 **バック**（VPS 上 `.env`。デプロイ時に Actions が書き込み）
 
 - `SUPABASE_URL` / `SUPABASE_KEY`
-- `GEMINI_API_KEY`（OCR を将来足す場合）
 
 `.env` は gitignore 対象。OAuth のリダイレクト URL は A / B それぞれのオリジンを Supabase ダッシュボードに追加する。
 
@@ -258,7 +257,6 @@ A（`receipt-manager`）と同型。
 必要な GitHub Secrets（A と共用できるものは同じ値でよい）:
 
 - `PROD_SUPABASE_URL` / `PROD_SUPABASE_PUBLISHABLE_KEY`
-- `PROD_GEMINI_API_KEY`（現状バックは未使用でも可）
 - `VPS_HOST` / `VPS_USER` / `SSH_PRIVATE_KEY`
 
 初回のみ VPS で `~/price-memo` を用意し、GHCR から pull できること（パッケージ公開 or `docker login`）を確認する。
@@ -317,6 +315,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-10 | S1-07: 本番 deploy の `.env` から未使用の `GEMINI_API_KEY` 注入を除去。必須 Secrets 一覧を現行利用に合わせて更新 |
 | 2026-10-08 | 認証済み画面状態と店舗キャッシュをユーザーIDで分離し、切替前の非同期結果を破棄 |
 | 2026-10-07 | 買い物メモの開いたカードから、フォルダタブの品目詳細へ移動できる |
 | 2026-10-07 | Cursor worker 向け `npm run devserver:ensure` / `devserver:stop` を追加。`:8001` / `:5273` の起動・再利用と per-worktree 状態管理 |
