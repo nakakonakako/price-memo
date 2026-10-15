@@ -15,7 +15,6 @@ export function DataManagementPage({ onDataDeleted }: Props) {
   const [confirmationOpen, setConfirmationOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
   const inFlight = useRef(false)
 
   const deleteData = async () => {
@@ -25,7 +24,6 @@ export function DataManagementPage({ onDataDeleted }: Props) {
     const userIdAtStart = session.user.id
     setIsDeleting(true)
     setError(null)
-    setSuccess(false)
 
     try {
       const { error: rpcError } = await supabase.rpc(
@@ -38,7 +36,6 @@ export function DataManagementPage({ onDataDeleted }: Props) {
       invalidateStoresCache()
       resetCatalogSync()
       setConfirmationOpen(false)
-      setSuccess(true)
       onDataDeleted()
     } catch {
       if (getCurrentAuthUserId() === userIdAtStart) {
@@ -89,12 +86,6 @@ export function DataManagementPage({ onDataDeleted }: Props) {
             {error}
           </p>
         )}
-        {success && (
-          <p role="status" className="text-sm text-green-800">
-            price-memoのデータを削除しました。
-          </p>
-        )}
-
         <button
           type="button"
           disabled={isDeleting}

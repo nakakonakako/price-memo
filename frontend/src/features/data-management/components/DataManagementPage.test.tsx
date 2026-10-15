@@ -51,7 +51,7 @@ describe('DataManagementPage', () => {
 
   afterEach(() => cleanup())
 
-  it('requires confirmation and resets caches and screen state after success', async () => {
+  it('requires confirmation, resets caches, and delegates success notification', async () => {
     let resolveRpc: ((value: { error: null }) => void) | undefined
     rpc.mockImplementation(() => new Promise((resolve) => { resolveRpc = resolve }))
     const onDataDeleted = vi.fn()
@@ -71,7 +71,7 @@ describe('DataManagementPage', () => {
     await waitFor(() => expect(onDataDeleted).toHaveBeenCalledTimes(1))
     expect(invalidateStoresCache).toHaveBeenCalledOnce()
     expect(resetCatalogSync).toHaveBeenCalledOnce()
-    expect(screen.getByRole('status').textContent).toContain('削除しました')
+    expect(screen.queryByRole('status')).toBeNull()
   })
 
   it('shows an error without resetting state or reporting success', async () => {
