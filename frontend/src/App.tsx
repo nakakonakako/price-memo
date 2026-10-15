@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { FolderDetailRequest } from '@/features/folders/folderDetailRequest'
 import { ShoppingMemoPage } from '@/features/memo/components/ShoppingMemoPage'
+import { DataManagementPage } from '@/features/data-management/components/DataManagementPage'
 
 const FoldersPage = lazy(() =>
   import('@/features/folders/components/FoldersPage').then((m) => ({
@@ -59,11 +60,14 @@ function AuthenticatedApp({
   logout: () => Promise<void>
 }) {
   const [tab, setTab] = useState<TabId>('memo')
+  const [dataGeneration, setDataGeneration] = useState(0)
+  const [dataDeletionNotice, setDataDeletionNotice] = useState<string | null>(null)
   const [visited, setVisited] = useState<Record<TabId, boolean>>({
     memo: true,
     folders: false,
     trends: false,
     howto: false,
+    data: false,
   })
   const isLargeScreen = useMediaQuery('(min-width: 1024px)')
   const [folderDetailRequest, setFolderDetailRequest] =
@@ -74,6 +78,7 @@ function AuthenticatedApp({
   const changeTab = (nextTab: TabId) => {
     const next = isLargeScreen && nextTab === 'trends' ? 'folders' : nextTab
     setTab(next)
+    setDataDeletionNotice(null)
     setVisited((prev) => (prev[next] ? prev : { ...prev, [next]: true }))
   }
   const requestFolderDetail = (folderId: string) => {
@@ -89,6 +94,13 @@ function AuthenticatedApp({
       current?.id === requestId ? null : current,
     )
   }, [])
+  const handleMyDataDeleted = useCallback(() => {
+    setDataGeneration((generation) => generation + 1)
+    setTab('memo')
+    setFolderDetailRequest(null)
+    setVisited((prev) => ({ ...prev, memo: true }))
+    setDataDeletionNotice('price-memoのデータを削除しました。')
+  }, [])
 
   return (
     <MainLayout
@@ -98,14 +110,22 @@ function AuthenticatedApp({
       onLogout={logout}
       hiddenTabs={isLargeScreen ? ['trends'] : []}
     >
-      <TabPanel active={activeTab === 'memo'}>
+      {dataDeletionNotice && (
+        <p
+          role="status"
+          className="mb-5 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800"
+        >
+          {dataDeletionNotice}
+        </p>
+      )}
+      <TabPanel active={activeTab === 'memo'} key={`memo-${dataGeneration}`}>
         <ShoppingMemoPage
           active={activeTab === 'memo'}
           onOpenFolder={requestFolderDetail}
         />
       </TabPanel>
       {(visited.folders || activeTab === 'folders') && (
-        <TabPanel active={activeTab === 'folders'}>
+        <TabPanel active={activeTab === 'folders'} key={`folders-${dataGeneration}`}>
           <Suspense fallback={<TabFallback />}>
             <FoldersPage
               active={activeTab === 'folders'}
@@ -116,7 +136,7 @@ function AuthenticatedApp({
         </TabPanel>
       )}
       {(visited.trends || activeTab === 'trends') && (
-        <TabPanel active={activeTab === 'trends'}>
+        <TabPanel active={activeTab === 'trends'} key={`trends-${dataGeneration}`}>
           <Suspense fallback={<TabFallback />}>
             <TrendsPage active={activeTab === 'trends'} />
           </Suspense>
@@ -127,6 +147,11 @@ function AuthenticatedApp({
           <Suspense fallback={<TabFallback />}>
             <HowToPage />
           </Suspense>
+        </TabPanel>
+      )}
+      {(visited.data || activeTab === 'data') && (
+        <TabPanel active={activeTab === 'data'}>
+          <DataManagementPage onDataDeleted={handleMyDataDeleted} />
         </TabPanel>
       )}
     </MainLayout>

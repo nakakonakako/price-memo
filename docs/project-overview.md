@@ -7,7 +7,7 @@
 |------|------|
 | リポジトリ名 | `price-memo` |
 | プロダクト名（UI・仮） | 単価メモ / Price Memo |
-| ドキュメント最終更新 | 2026-10-10 |
+| ドキュメント最終更新 | 2026-10-16 |
 | 文書の扱い | **生きた概要**。機能の追加・削除・方針変更のたびに本ファイルを更新する |
 
 ---
@@ -69,6 +69,8 @@
 **入り口が別 ≠ ユーザー DB が別。** 同じ人が A と B にログインすると同じ `user_id` になる。レシート紐付け（一方向参照）に必要で、個人利用でも自然。
 
 B の認証済み画面状態は `session.user.id` 単位で保持し、ユーザーが切り替わるとタブ・keep-alive 画面・入力状態を破棄する。同じユーザーのトークン更新では画面状態を維持する。ユーザー固有の店舗キャッシュも認証ユーザー切替時に破棄し、旧世代の非同期結果はキャッシュや画面へ反映しない。
+
+データ管理画面から、ログイン中の本人がB側の4テーブル（`price_folders`、`price_records`、`price_memo_items`、`price_stores`）を一括削除できる。AuthアカウントとA側レシートデータは削除せず、成功後にBの画面状態・店舗キャッシュを初期化する。詳細は [spec-data-management.md](./spec-data-management.md)。
 
 分離したいのは次だけ:
 
@@ -305,6 +307,7 @@ price-memo/
 | [README.md](./README.md) | docs 索引 |
 | [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md) | A/B 分離方針 |
 | [spec-shopping-memo.md](./spec-shopping-memo.md) | 買い物メモ（店頭リスト・統計・試算） |
+| [spec-data-management.md](./spec-data-management.md) | price-memoデータの本人による一括削除 |
 | [spec-folders-catalog.md](./spec-folders-catalog.md) | フォルダタブ（品目名・店名・記録 UI） |
 | [spec-trends.md](./spec-trends.md) | 値段推移（グラフ・店舗一覧） |
 | [spec-guide.md](./spec-guide.md) | 使い方タブ |
@@ -317,6 +320,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-16 | ヘッダーから開くデータ管理画面で、ログイン中の本人がprice-memoの4テーブルを削除可能に |
 | 2026-10-10 | `main` 向け Pull Request の品質チェック workflow を追加 |
 | 2026-10-10 | S1-03: バックエンドの CORS ミドルウェアを除去。ブラウザ API は同一オリジン `/api`（Vite / nginx）のみ |
 | 2026-10-10 | S1-07: 本番 deploy の `.env` から未使用の `GEMINI_API_KEY` 注入を除去。必須 Secrets 一覧を現行利用に合わせて更新 |

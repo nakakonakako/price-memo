@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 
-export type TabId = 'memo' | 'folders' | 'trends' | 'howto'
+export type TabId = 'memo' | 'folders' | 'trends' | 'howto' | 'data'
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'memo', label: '買い物メモ' },
@@ -52,6 +52,13 @@ export function MainLayout({
               <span className="hidden max-w-[10rem] truncate text-xs text-stone-500 sm:inline">
                 {userLabel}
               </span>
+              <button
+                type="button"
+                onClick={() => onTabChange('data')}
+                className="rounded-md px-2.5 py-1 text-xs text-stone-600 hover:bg-stone-200/70"
+              >
+                データ管理
+              </button>
               <button
                 type="button"
                 onClick={onLogout}

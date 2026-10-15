@@ -11,6 +11,7 @@
 | [project-overview.md](./project-overview.md) | **プロジェクト概要（生きたドキュメント）** — 目的・機能・環境・スタック |
 | [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md) | レシート管理（A）と厳密単価比較（B）の分離方針 |
 | [spec-shopping-memo.md](./spec-shopping-memo.md) | **買い物メモ** — 店頭リスト（`price_memo_items`）・統計・試算 |
+| [spec-data-management.md](./spec-data-management.md) | **データ管理** — ログイン中の本人によるprice-memoデータ削除 |
 | [spec-folders-catalog.md](./spec-folders-catalog.md) | **フォルダタブ** — 品目名・店名カタログ、記録管理 |
 | [spec-trends.md](./spec-trends.md) | **値段推移** — グラフ・店舗一覧・絞り込み |
 | [spec-guide.md](./spec-guide.md) | **使い方タブ** — 操作説明（機能画面に補足を書かない方針） |

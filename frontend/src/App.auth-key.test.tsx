@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 
@@ -15,8 +15,14 @@ vi.mock('@/components/Auth', () => ({
 }))
 
 vi.mock('@/components/MainLayout', () => ({
-  MainLayout: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="main-layout">{children}</div>
+  MainLayout: ({ children, onTabChange }: {
+    children: React.ReactNode
+    onTabChange: (tab: 'data') => void
+  }) => (
+    <div data-testid="main-layout">
+      <button onClick={() => onTabChange('data')}>データ管理</button>
+      {children}
+    </div>
   ),
 }))
 
@@ -41,6 +47,14 @@ vi.mock('@/features/trends/components/TrendsPage', () => ({
 
 vi.mock('@/features/guide/components/HowToPage', () => ({
   HowToPage: () => <div data-testid="howto-page" />,
+}))
+
+vi.mock('@/features/data-management/components/DataManagementPage', () => ({
+  DataManagementPage: ({ onDataDeleted }: { onDataDeleted: () => void }) => (
+    <button data-testid="delete-data" onClick={onDataDeleted}>
+      削除完了
+    </button>
+  ),
 }))
 
 import App from './App'
@@ -133,5 +147,16 @@ describe('App auth-keyed remount', () => {
     rerender(<App />)
 
     expect(getPageMarker()).toBe(markerA)
+  })
+
+  it('returns to a fresh memo screen after successful data deletion', () => {
+    render(<App />)
+    const beforeDeletion = getPageMarker()
+
+    fireEvent.click(screen.getByRole('button', { name: 'データ管理' }))
+    fireEvent.click(screen.getByTestId('delete-data'))
+
+    expect(getPageMarker()).not.toBe(beforeDeletion)
+    expect(screen.getByRole('status').textContent).toContain('削除しました')
   })
 })
