@@ -235,7 +235,7 @@ cd .. && npm run dev
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_API_URL`（本番は `/api`）
 
-**バック**（VPS 上 `.env`。デプロイ時に Actions が書き込み）
+**バック**（VPS 上 `.env`。デプロイ時に Actions が umask 077 の下で0600を確認し、同じディレクトリの一時ファイルから原子的に置換）
 
 - `SUPABASE_URL` / `SUPABASE_KEY`
 
