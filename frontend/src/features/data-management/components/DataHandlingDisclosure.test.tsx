@@ -36,28 +36,39 @@ describe('DataHandlingDisclosure', () => {
     expect(screen.queryByRole('button', { name: '削除を確定する' })).toBeNull()
   })
 
-  it('renders user-facing data-handling copy without browser storage jargon', () => {
+  it('renders the approved user-facing data-handling copy', () => {
     render(<DataHandlingDisclosure />)
     fireEvent.click(screen.getByRole('button', { name: 'データの取り扱い' }))
 
     const disclosure = screen.getByTestId(DATA_HANDLING_DISCLOSURE_TEST_ID)
     const text = disclosure.textContent ?? ''
 
-    expect(text).toMatch(/登録したアプリデータは Supabase のデータベースに保存/)
-    expect(text).toMatch(/利用中のみブラウザ内に一時的に保持/)
-    expect(text).toMatch(/ログイン状態（セッション）の情報は.*ブラウザ側で保持/)
+    expect(screen.getByRole('heading', { name: '1. 取得する情報と利用目的' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '2. データの保存先と外部サービス' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: '3. データの保持と削除' })).toBeTruthy()
+
+    expect(text).toMatch(
+      /利用者が登録した商品フォルダ、店舗情報、価格記録、買い物メモを取得・保存します/,
+    )
+    expect(text).toMatch(/購入日、価格、数量、単位、任意で入力されたメモなどが含まれます/)
+    expect(text).toMatch(/商品の単価比較、価格推移の表示、店舗別の記録管理、買い物メモの提供に使用します/)
+
+    expect(text).toMatch(/Supabaseが提供するデータベースに保存します/)
+    expect(text).toMatch(/Googleの認証サービスおよびSupabase Authを使用します/)
+    expect(text).toMatch(/ログイン状態の維持に必要な情報はブラウザに保存され/)
+    expect(text).toMatch(/アプリの利用中に一時的に保持されます/)
+    expect(text).toMatch(
+      /レシート明細の検索を実行した場合に限り、当該利用者の購入履歴を参照します/,
+    )
+    expect(text).toMatch(/本アプリからGoogle Geminiへのデータ送信は行いません/)
+
+    expect(text).toMatch(/保存期限や定期的な自動削除は設定していません/)
+    expect(text).toMatch(/本アプリに登録したデータを一括削除できます/)
+    expect(text).toMatch(/バックアップやサービス運用上のログについては、削除後も一定期間情報が残る場合があります/)
+
     expect(text).not.toMatch(/localStorage/i)
     expect(text).not.toMatch(/sessionStorage/i)
     expect(text).not.toMatch(/IndexedDB/)
-
-    expect(text).toMatch(
-      /フォルダ・価格記録・買い物メモ・店舗名など、price-memo に登録した主なデータには、自動削除や有効期限の設定はありません/,
-    )
-
-    expect(text).toMatch(/データベース上の削除は、Supabase に保存されている price-memo の登録データを対象/)
-    expect(text).toMatch(/バックアップやサービス提供者側の運用ログに残るコピーは、この削除の対象外/)
-    expect(text).toMatch(/直ちにすべて消えるとは限りません/)
-    expect(text).not.toMatch(/保持期間/)
-    expect(text).not.toMatch(/本アプリのコードからは確認していません/)
+    expect(text).not.toMatch(/price-memo/)
   })
 })

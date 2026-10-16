@@ -40,6 +40,8 @@ describe('Auth', () => {
     fireEvent.click(screen.getByRole('button', { name: 'データの取り扱い' }))
 
     expect(screen.getByTestId(DATA_HANDLING_DISCLOSURE_TEST_ID)).toBeTruthy()
-    expect(screen.getByText(/Google Gemini へあなたのデータを送る処理はありません/)).toBeTruthy()
+    expect(
+      screen.getByText(/本アプリからGoogle Geminiへのデータ送信は行いません/),
+    ).toBeTruthy()
   })
 })
