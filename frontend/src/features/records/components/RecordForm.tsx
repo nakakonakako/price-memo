@@ -43,6 +43,8 @@ type Props = {
   /** create shows receipt draft tools; edit starts from initial */
   mode?: 'create' | 'edit'
   initial?: RecordFormState
+  /** Folder-tab create: on narrow viewports show price before quantity/unit (DOM + tab order). */
+  mobilePriceBeforeQuantity?: boolean
   onSubmit: (input: PriceRecordInput) => void | Promise<void>
   onCancel?: () => void
 }
@@ -58,6 +60,7 @@ export function RecordForm({
   submitLabel,
   mode = 'create',
   initial,
+  mobilePriceBeforeQuantity = false,
   onSubmit,
   onCancel,
 }: Props) {
@@ -105,6 +108,61 @@ export function RecordForm({
 
   const fieldClass =
     'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500'
+
+  const amountUnitFields = (
+    <UnitField
+      value={form.unit}
+      onChange={(unit) => setForm((s) => ({ ...s, unit }))}
+      preferredUnits={preferredUnits}
+      disabled={busy}
+      className={fieldClass}
+    >
+      {({ select, customInput }) => (
+        <>
+          <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-2">
+            <label className="block space-y-1">
+              <span className="text-xs text-stone-500">数量</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="any"
+                className={fieldClass}
+                value={form.amount}
+                onChange={(e) =>
+                  setForm((s) => ({ ...s, amount: e.target.value }))
+                }
+                required
+                disabled={busy}
+              />
+            </label>
+            <label className="block min-w-0 space-y-1">
+              <span className="text-xs text-stone-500">単位</span>
+              {select}
+            </label>
+          </div>
+          {customInput}
+        </>
+      )}
+    </UnitField>
+  )
+
+  const priceField = (
+    <label className="block space-y-1">
+      <span className="text-xs text-stone-500">値段（円）</span>
+      <input
+        type="number"
+        inputMode="numeric"
+        min={0}
+        step={1}
+        className={fieldClass}
+        value={form.price}
+        onChange={(e) => setForm((s) => ({ ...s, price: e.target.value }))}
+        required
+        disabled={busy}
+      />
+    </label>
+  )
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -349,57 +407,18 @@ export function RecordForm({
           ) : (
             <div className="hidden sm:block" aria-hidden />
           )}
-          <UnitField
-            value={form.unit}
-            onChange={(unit) => setForm((s) => ({ ...s, unit }))}
-            preferredUnits={preferredUnits}
-            disabled={busy}
-            className={fieldClass}
-          >
-            {({ select, customInput }) => (
-              <>
-                <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] gap-2">
-                  <label className="block space-y-1">
-                    <span className="text-xs text-stone-500">数量</span>
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step="any"
-                      className={fieldClass}
-                      value={form.amount}
-                      onChange={(e) =>
-                        setForm((s) => ({ ...s, amount: e.target.value }))
-                      }
-                      required
-                      disabled={busy}
-                    />
-                  </label>
-                  <label className="block min-w-0 space-y-1">
-                    <span className="text-xs text-stone-500">単位</span>
-                    {select}
-                  </label>
-                </div>
-                {customInput}
-              </>
-            )}
-          </UnitField>
-          <label className="block space-y-1">
-            <span className="text-xs text-stone-500">値段（円）</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={1}
-              className={fieldClass}
-              value={form.price}
-              onChange={(e) =>
-                setForm((s) => ({ ...s, price: e.target.value }))
-              }
-              required
-              disabled={busy}
-            />
-          </label>
+          {mobilePriceBeforeQuantity ? (
+            <>
+              <div className="contents sm:hidden">{priceField}</div>
+              {amountUnitFields}
+              <div className="hidden sm:contents">{priceField}</div>
+            </>
+          ) : (
+            <>
+              {amountUnitFields}
+              {priceField}
+            </>
+          )}
         </div>
 
         <label className="block space-y-1">
