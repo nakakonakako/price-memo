@@ -20,6 +20,21 @@
 - 成功時は店舗キャッシュを無効化し、買い物メモ・フォルダ・値段推移の画面状態を再生成して買い物メモへ戻る。セッションは維持する。
 - RPC応答前に認証ユーザーが切り替わった場合、完了結果を切替先ユーザーの画面に反映しない。
 
-## 3. migrationの管理
+## 3. データの取り扱い（ユーザー向け説明）
+
+ログイン前（認証画面）とログイン後（データ管理画面）の両方から、同じ「データの取り扱い」ダイアログを開ける。本文は `frontend/src/features/data-management/components/DataHandlingDisclosureContent.tsx` に一元化し、`DataHandlingDisclosure` が `DialogShell` で表示する。
+
+説明の要点（実装と一致させる）:
+
+- 保存対象は B 側4テーブル相当の手動入力データと、その利用目的（単価比較・買い物メモ等）
+- Google OAuth / Supabase Auth と Supabase への保存。任意のレシート明細検索時のみ A 行を読み取り参照
+- 画面状態・入力途中の内容はブラウザメモリ上、認証セッションはSupabase JSクライアントの既定設定でブラウザストレージに保持。price-memoの内容データを永続ブラウザストレージへ保存する処理は現行画面にない
+- 現行 price-memo から Gemini へデータを送らない
+- 自動削除・保持期限なし。個別削除と一括 RPC の範囲
+- ログアウトは DB 削除しない。削除はログアウトしない
+- 一括削除は Auth アカウントと A データを対象外
+- バックアップ・運用ログの即時消去は約束しない
+
+## 4. migrationの管理
 
 共有Supabase DBのmigration正本は `receipt-manager/supabase/migrations/`。price-memo側はmigrationを保持せず、DBへのpushも行わない。

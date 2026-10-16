@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { DialogShell } from '@/components/DialogShell'
+import { DataHandlingDisclosure } from './DataHandlingDisclosure'
 import { useAuth } from '@/contexts/AuthContext'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { invalidateStoresCache } from '@/features/stores/api/storesCache'
@@ -60,6 +61,10 @@ export function DataManagementPage({ onDataDeleted }: Props) {
         >
           データ管理
         </h2>
+      </div>
+
+      <div>
+        <DataHandlingDisclosure />
       </div>
 
       <section className="space-y-4 rounded-xl border border-red-200 bg-white p-4 sm:p-6">

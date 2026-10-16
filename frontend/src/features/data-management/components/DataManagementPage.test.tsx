@@ -38,6 +38,7 @@ vi.mock('@/components/DialogShell', () => ({
   ) : null,
 }))
 
+import { DATA_HANDLING_DISCLOSURE_TEST_ID } from './DataHandlingDisclosureContent'
 import { DataManagementPage } from './DataManagementPage'
 
 describe('DataManagementPage', () => {
@@ -50,6 +51,15 @@ describe('DataManagementPage', () => {
   })
 
   afterEach(() => cleanup())
+
+  it('opens the shared data-handling disclosure without calling delete RPC', () => {
+    render(<DataManagementPage onDataDeleted={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'データの取り扱い' }))
+
+    expect(screen.getByTestId(DATA_HANDLING_DISCLOSURE_TEST_ID)).toBeTruthy()
+    expect(rpc).not.toHaveBeenCalled()
+  })
 
   it('requires confirmation, resets caches, and delegates success notification', async () => {
     let resolveRpc: ((value: { error: null }) => void) | undefined
