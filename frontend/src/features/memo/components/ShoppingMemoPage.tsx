@@ -98,18 +98,25 @@ export function ShoppingMemoPage({
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [mutating, setMutating] = useState(false)
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false)
   const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const cardRefs = useRef(new Map<string, HTMLElement>())
   const loadGenerationRef = useRef(0)
   const reorderGenerationRef = useRef(0)
   const reorderInFlightRef = useRef(false)
+  const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
+    null,
+  )
 
   const load = useCallback(
-    async (opts?: { silent?: boolean; preserveError?: boolean }) => {
+    async (opts?: {
+      silent?: boolean
+      preserveError?: boolean
+    }): Promise<'ok' | 'aborted' | 'error'> => {
       const generation = loadGenerationRef.current
       const userIdAtStart = getCurrentAuthUserId()
-      if (!userIdAtStart) return
+      if (!userIdAtStart) return 'aborted'
       if (!opts?.silent) setIsLoading(true)
       if (!opts?.preserveError) setError(null)
       try {
@@ -124,17 +131,18 @@ export function ShoppingMemoPage({
           loadGenerationRef.current !== generation ||
           getCurrentAuthUserId() !== userIdAtStart
         ) {
-          return
+          return 'aborted'
         }
         setAllFolders(folderList)
         setMemoItems(memoList)
         setRecords(recordList)
+        return 'ok'
       } catch (err) {
         if (
           loadGenerationRef.current !== generation ||
           getCurrentAuthUserId() !== userIdAtStart
         ) {
-          return
+          return 'aborted'
         }
         const message = toUserMessage(err, '読み込みに失敗しました。')
         setError((current) =>
@@ -142,6 +150,7 @@ export function ShoppingMemoPage({
             ? `${current} 最新の一覧を再取得できませんでした。`
             : message,
         )
+        return 'error'
       } finally {
         if (
           loadGenerationRef.current === generation &&
@@ -161,6 +170,7 @@ export function ShoppingMemoPage({
     reorderInFlightRef.current = false
 
     if (!authUserId) {
+      catalogRevSeen.current = null
       const generation = loadGenerationRef.current
       void Promise.resolve().then(() => {
         if (
@@ -174,9 +184,14 @@ export function ShoppingMemoPage({
         setRecords([])
         setError(null)
         setIsLoading(false)
+        setCatalogRefreshing(false)
       })
       return
     }
+
+    void Promise.resolve().then(() => {
+      setCatalogRefreshing(false)
+    })
 
     void (async () => {
       setIsLoading(true)
@@ -184,13 +199,12 @@ export function ShoppingMemoPage({
       setAllFolders([])
       setMemoItems([])
       setRecords([])
-      await load()
+      const result = await load()
+      if (result === 'ok') {
+        catalogRevSeen.current = getCatalogRevisions()
+      }
     })()
   }, [authUserId, load])
-
-  const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
-    null,
-  )
 
   useEffect(() => {
     if (!active) return
@@ -200,14 +214,30 @@ export function ShoppingMemoPage({
       return
     }
     const prev = catalogRevSeen.current
+    const foldersChanged = cur.folders !== prev.folders
+    const recordsChanged = cur.records !== prev.records
     catalogRevSeen.current = cur
 
-    if (cur.folders !== prev.folders) {
-      void listFolders()
-        .then(setAllFolders)
-        .catch(() => {})
+    if (!foldersChanged && !recordsChanged) return
+
+    if (foldersChanged) {
+      loadGenerationRef.current += 1
+      setCatalogRefreshing(true)
+      void (async () => {
+        const result = await load({ silent: true })
+        if (result === 'ok') {
+          catalogRevSeen.current = getCatalogRevisions()
+          setCatalogRefreshing(false)
+        } else if (result === 'error') {
+          catalogRevSeen.current = prev
+        } else {
+          setCatalogRefreshing(false)
+        }
+      })()
+      return
     }
-    if (cur.records !== prev.records) {
+
+    if (recordsChanged) {
       const generation = loadGenerationRef.current
       const userIdAtStart = getCurrentAuthUserId()
       if (!userIdAtStart) return
@@ -234,7 +264,7 @@ export function ShoppingMemoPage({
         })
         .catch(() => {})
     }
-  }, [active])
+  }, [active, load])
 
   const mergeFolderRecords = useCallback(async (folderId: string) => {
     const rows = await listRecords(folderId)
@@ -243,6 +273,8 @@ export function ShoppingMemoPage({
       ...prev.filter((r) => r.folder_id !== folderId),
     ])
   }, [])
+
+  const interactionsLocked = mutating || catalogRefreshing
 
   const byFolder = useMemo(() => recordsByFolderId(records), [records])
   const memoFolderIds = useMemo(
@@ -342,6 +374,7 @@ export function ShoppingMemoPage({
   }
 
   const removeFromMemo = useCallback(async (folderId: string) => {
+    if (interactionsLocked) return
     setMutating(true)
     setError(null)
     try {
@@ -353,10 +386,11 @@ export function ShoppingMemoPage({
     } finally {
       setMutating(false)
     }
-  }, [])
+  }, [interactionsLocked])
 
   const handleDragEnd = useCallback(
     async (result: DragEndResult) => {
+      if (interactionsLocked) return
       if (result.action === 'cancel') return
       if (result.payload.kind !== 'memo-folder') return
 
@@ -415,7 +449,7 @@ export function ShoppingMemoPage({
         }
       }
     },
-    [load, memoItems, removeFromMemo],
+    [interactionsLocked, load, memoItems, removeFromMemo],
   )
 
   const handleSaved = (record: PriceRecord) => {
@@ -453,12 +487,12 @@ export function ShoppingMemoPage({
                 autoCapitalize="off"
                 spellCheck={false}
                 className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-                disabled={mutating}
+                disabled={interactionsLocked}
                 autoFocus
               />
               <button
                 type="submit"
-                disabled={mutating || !newName.trim()}
+                disabled={interactionsLocked || !newName.trim()}
                 className="shrink-0 rounded-md bg-stone-900 px-4 py-2 text-sm text-white hover:bg-stone-800 disabled:opacity-50"
               >
                 追加
@@ -474,7 +508,7 @@ export function ShoppingMemoPage({
                   <li key={f.id}>
                     <button
                       type="button"
-                      disabled={mutating}
+                      disabled={interactionsLocked}
                       onClick={() => void addFolderToMemo(f)}
                       className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-stone-50 disabled:opacity-50"
                     >
@@ -509,7 +543,13 @@ export function ShoppingMemoPage({
             まだメモがありません
           </p>
         ) : (
-          <ul className="space-y-2">
+          <ul
+            className={
+              catalogRefreshing
+                ? 'pointer-events-none space-y-2 opacity-60'
+                : 'space-y-2'
+            }
+          >
               {memoItems.map((item, index) => (
                 <FolderMemoCard
                   key={item.id}
@@ -524,7 +564,7 @@ export function ShoppingMemoPage({
                     else cardRefs.current.delete(item.folder_id)
                   }}
                   onSaved={handleSaved}
-                  dragEnabled={!isMobile}
+                  dragEnabled={!isMobile && !interactionsLocked}
                   onRemoveFromMemo={() => void removeFromMemo(item.folder_id)}
                   onOpenFolder={
                     onOpenFolder
