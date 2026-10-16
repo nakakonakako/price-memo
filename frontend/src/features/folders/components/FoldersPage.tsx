@@ -1777,6 +1777,7 @@ export function FoldersPage({
             key={`add-${addingFolder.id}-${addRecordInitial ? 'copy' : 'new'}`}
             folderId={addingFolder.id}
             folderName={addingFolder.name}
+            mobilePriceBeforeQuantity
             initial={addRecordInitial ?? emptyRecordForm()}
             preferredUnits={[
               ...new Set(
