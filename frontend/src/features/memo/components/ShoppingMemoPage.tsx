@@ -268,6 +268,13 @@ export function ShoppingMemoPage({
     ],
   )
 
+  const refreshAfterMemoMutation = useCallback(() => {
+    loadGenerationRef.current += 1
+    reorderGenerationRef.current += 1
+    reorderInFlightRef.current = false
+    void load({ silent: true })
+  }, [load])
+
   useEffect(() => {
     if (!authUserId) return
     return subscribeFolderDeleted((event) => {
@@ -489,10 +496,11 @@ export function ShoppingMemoPage({
         if (prev.some((m) => m.folder_id === folder.id)) return prev
         return [item, ...prev]
       })
+      refreshAfterMemoMutation()
       await mergeFolderRecords(folder.id)
       return item
     },
-    [mergeFolderRecords],
+    [mergeFolderRecords, refreshAfterMemoMutation],
   )
 
   const addFolderToMemo = async (folder: PriceFolder) => {
@@ -544,6 +552,7 @@ export function ShoppingMemoPage({
     setError(null)
     try {
       await removeMemoItem(folderId)
+      refreshAfterMemoMutation()
       setMemoItems((prev) => prev.filter((m) => m.folder_id !== folderId))
       setRecords((prev) => prev.filter((r) => r.folder_id !== folderId))
     } catch (err) {
@@ -551,7 +560,7 @@ export function ShoppingMemoPage({
     } finally {
       setMutating(false)
     }
-  }, [interactionsLocked])
+  }, [interactionsLocked, refreshAfterMemoMutation])
 
   const handleDragEnd = useCallback(
     async (result: DragEndResult) => {

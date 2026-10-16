@@ -15,7 +15,9 @@ import type { PriceRecord } from '@/features/records/types'
 
 const listFolders = vi.fn()
 const listMemoItems = vi.fn()
+const listRecords = vi.fn()
 const listRecordsForFolders = vi.fn()
+const addMemoItem = vi.fn()
 const removeMemoItem = vi.fn()
 const reorderMemoItems = vi.fn()
 const getSession = vi.fn()
@@ -33,7 +35,7 @@ vi.mock('@/features/folders/api/foldersApi', () => ({
 }))
 
 vi.mock('@/features/records/api/recordsApi', () => ({
-  listRecords: vi.fn(),
+  listRecords: (...args: unknown[]) => listRecords(...args),
   listRecordsForFolders: (ids: string[]) => listRecordsForFolders(ids),
 }))
 
@@ -41,7 +43,7 @@ vi.mock('../api/memoApi', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/memoApi')>()
   return {
     ...actual,
-    addMemoItem: vi.fn(),
+    addMemoItem: (...args: unknown[]) => addMemoItem(...args),
     removeMemoItem: (...args: unknown[]) => removeMemoItem(...args),
     listMemoItems: () => listMemoItems(),
     reorderMemoItems: (...args: unknown[]) => reorderMemoItems(...args),
@@ -203,7 +205,9 @@ describe('ShoppingMemoPage catalog refresh', () => {
     resetCatalogSync()
     listFolders.mockReset()
     listMemoItems.mockReset()
+    listRecords.mockReset()
     listRecordsForFolders.mockReset()
+    addMemoItem.mockReset()
     removeMemoItem.mockReset()
     reorderMemoItems.mockReset()
     getSession.mockReset()
@@ -255,6 +259,10 @@ describe('ShoppingMemoPage catalog refresh', () => {
       recordRow('folder-a', 'rec-a'),
       recordRow('folder-b', 'rec-b'),
     ])
+    listRecords.mockResolvedValue([])
+    addMemoItem.mockImplementation(async (folderId: string) =>
+      memoItem(folderId, 0),
+    )
     removeMemoItem.mockResolvedValue(undefined)
   })
 
@@ -385,6 +393,9 @@ describe('ShoppingMemoPage catalog refresh', () => {
     renderPage(true)
     await waitForInitialLoad()
 
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0)])
+    listRecordsForFolders.mockResolvedValue([recordRow('folder-a', 'rec-a')])
+
     await act(async () => {
       screen.getByTestId('remove-folder-b').click()
     })
@@ -395,8 +406,8 @@ describe('ShoppingMemoPage catalog refresh', () => {
     })
 
     expect(removeMemoItem).toHaveBeenCalledWith('folder-b')
-    expect(listFolders).toHaveBeenCalledTimes(1)
-    expect(listMemoItems).toHaveBeenCalledTimes(1)
+    expect(listFolders).toHaveBeenCalledTimes(2)
+    expect(listMemoItems).toHaveBeenCalledTimes(2)
   })
 
   it('shows an error and retries catalog refresh when returning to the memo tab', async () => {
@@ -551,6 +562,115 @@ describe('ShoppingMemoPage catalog refresh', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
     })
+  })
+
+  it('keeps a newly added unrelated memo after invalidating a stale delete refresh', async () => {
+    let releaseFolders: (folders: PriceFolder[]) => void = () => {}
+    let releaseMemoItems: (items: PriceMemoItem[]) => void = () => {}
+    const foldersGate = new Promise<PriceFolder[]>((resolve) => {
+      releaseFolders = resolve
+    })
+    const memoItemsGate = new Promise<PriceMemoItem[]>((resolve) => {
+      releaseMemoItems = resolve
+    })
+    renderPage(true)
+    await waitForInitialLoad()
+
+    listFolders.mockResolvedValue([folderA, folderC])
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-c', 1)])
+    listRecordsForFolders.mockResolvedValue([recordRow('folder-a', 'rec-a')])
+    listFolders.mockImplementationOnce(() => foldersGate)
+    listMemoItems.mockImplementationOnce(() => memoItemsGate)
+
+    act(() => {
+      publishFolderDeleted({ folderId: 'folder-b', userId: 'user-a' })
+    })
+    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      screen.getByRole('button', { name: /メモを追加/ }).click()
+    })
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: 'C' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /C.*メモに追加/ }))
+
+    await waitFor(() => {
+      expect(addMemoItem).toHaveBeenCalledWith('folder-c')
+      expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
+    })
+
+    await act(async () => {
+      releaseFolders([folderA, folderC])
+      releaseMemoItems([memoItem('folder-a', 0)])
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(listFolders).toHaveBeenCalledTimes(3)
+      expect(listRecordsForFolders).toHaveBeenCalledTimes(3)
+    })
+    expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
+    expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
+  })
+
+  it('keeps an unrelated memo removal after invalidating a stale delete refresh', async () => {
+    let releaseFolders: (folders: PriceFolder[]) => void = () => {}
+    let releaseMemoItems: (items: PriceMemoItem[]) => void = () => {}
+    const foldersGate = new Promise<PriceFolder[]>((resolve) => {
+      releaseFolders = resolve
+    })
+    const memoItemsGate = new Promise<PriceMemoItem[]>((resolve) => {
+      releaseMemoItems = resolve
+    })
+    listMemoItems.mockResolvedValue([
+      memoItem('folder-a', 0),
+      memoItem('folder-b', 1),
+      memoItem('folder-c', 2),
+    ])
+    listRecordsForFolders.mockResolvedValue([
+      recordRow('folder-a', 'rec-a'),
+      recordRow('folder-b', 'rec-b'),
+      recordRow('folder-c', 'rec-c'),
+    ])
+    renderPage(true)
+    await waitForInitialLoad()
+
+    listFolders.mockResolvedValue([folderA, folderC])
+    listMemoItems.mockResolvedValue([memoItem('folder-c', 0)])
+    listRecordsForFolders.mockResolvedValue([recordRow('folder-c', 'rec-c')])
+    listFolders.mockImplementationOnce(() => foldersGate)
+    listMemoItems.mockImplementationOnce(() => memoItemsGate)
+
+    act(() => {
+      publishFolderDeleted({ folderId: 'folder-b', userId: 'user-a' })
+    })
+    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(2))
+    expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('remove-folder-a'))
+
+    await waitFor(() => {
+      expect(removeMemoItem).toHaveBeenCalledWith('folder-a')
+      expect(screen.queryByTestId('memo-card-folder-a')).toBeNull()
+      expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
+    })
+
+    await act(async () => {
+      releaseFolders([folderA, folderC])
+      releaseMemoItems([memoItem('folder-a', 0), memoItem('folder-c', 1)])
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(listFolders).toHaveBeenCalledTimes(3)
+      expect(listRecordsForFolders).toHaveBeenCalledTimes(3)
+    })
+    expect(screen.queryByTestId('memo-card-folder-a')).toBeNull()
+    expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
+    expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
   })
 
   it('ignores folder delete notifications for another user', async () => {
