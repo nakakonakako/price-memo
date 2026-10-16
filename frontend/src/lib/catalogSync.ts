@@ -4,12 +4,19 @@ type CatalogRevisions = {
   stores: number
 }
 
+export type FolderDeletedEvent = {
+  folderId: string
+  userId: string
+}
+
 type Listener = (revs: CatalogRevisions) => void
+type FolderDeletedListener = (event: FolderDeletedEvent) => void
 
 let foldersRev = 0
 let recordsRev = 0
 let storesRev = 0
 const listeners = new Set<Listener>()
+const folderDeletedListeners = new Set<FolderDeletedListener>()
 
 function snapshot(): CatalogRevisions {
   return { folders: foldersRev, records: recordsRev, stores: storesRev }
@@ -44,6 +51,22 @@ export function subscribeCatalogRevisions(listener: Listener): () => void {
   listeners.add(listener)
   return () => {
     listeners.delete(listener)
+  }
+}
+
+/** Publish a successful folder deletion with its revision in one notification. */
+export function publishFolderDeleted(event: FolderDeletedEvent): void {
+  foldersRev += 1
+  for (const listener of folderDeletedListeners) listener(event)
+  notify()
+}
+
+export function subscribeFolderDeleted(
+  listener: FolderDeletedListener,
+): () => void {
+  folderDeletedListeners.add(listener)
+  return () => {
+    folderDeletedListeners.delete(listener)
   }
 }
 

@@ -1,5 +1,6 @@
+import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { supabase } from '@/lib/supabase'
-import { bumpFoldersRevision } from '@/lib/catalogSync'
+import { bumpFoldersRevision, publishFolderDeleted } from '@/lib/catalogSync'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import type { PriceFolder } from '../types'
 import { parseFolderName } from '../utils/folderName'
@@ -67,9 +68,13 @@ export async function renameFolder(
 }
 
 export async function deleteFolder(id: string): Promise<void> {
+  const userIdAtStart = getCurrentAuthUserId()
+  if (!userIdAtStart) throw new Error('ログインが必要です')
   const { error } = await supabase.from('price_folders').delete().eq('id', id)
   if (error) throw error
-  bumpFoldersRevision()
+  if (getCurrentAuthUserId() === userIdAtStart) {
+    publishFolderDeleted({ folderId: id, userId: userIdAtStart })
+  }
 }
 
 /** Persist folder display order (ids in desired order). */
