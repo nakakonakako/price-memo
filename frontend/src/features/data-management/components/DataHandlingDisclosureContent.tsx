@@ -24,7 +24,7 @@ export function DataHandlingDisclosureContent() {
       <section className="space-y-1">
         <h3 className="font-medium text-stone-900">ブラウザ上の一時的な状態</h3>
         <p>
-          画面の表示や入力の途中状態、取得した記録の一覧などは、利用中のブラウザのメモリ上に保持されます。ログイン状態は Supabase のクライアントが管理します。一部の並び順などはブラウザの localStorage に保存する実装がありますが、本アプリの主データは Supabase 側にあります。
+          画面の表示や入力の途中状態、取得した記録の一覧などは、利用中のブラウザのメモリ上に保持されます。ログイン状態は Supabase の JavaScript クライアントが、既定の設定でブラウザのストレージに保持・更新します。price-memo の内容データを localStorage・sessionStorage・IndexedDB に保存する処理は、現行の画面にはありません。フォルダ名・価格記録などの主データは Supabase 側にあります。
         </p>
       </section>
 
