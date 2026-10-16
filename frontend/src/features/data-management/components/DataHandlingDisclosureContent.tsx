@@ -10,7 +10,7 @@ export function DataHandlingDisclosureContent() {
       <section className="space-y-1">
         <h3 className="font-medium text-stone-900">保存するデータと目的</h3>
         <p>
-          単価メモ（price-memo）では、ログイン中のあなたが入力したフォルダ名・店舗名・買い物メモの掲載、価格記録（日付・価格・量・単位、任意のメモ、任意のレシート明細への参照）を Supabase に保存し、厳密な単価比較・値段推移・店舗別の閲覧・買い物メモに利用します。
+          単価メモ（price-memo）では、ログイン中のあなたが入力したフォルダ名・店舗名・買い物メモ、価格記録（日付・価格・量・単位、任意のメモ、任意のレシート明細への参照）を Supabase に保存し、厳密な単価比較・値段推移・店舗別の閲覧・買い物メモに利用します。
         </p>
       </section>
 
@@ -24,7 +24,7 @@ export function DataHandlingDisclosureContent() {
       <section className="space-y-1">
         <h3 className="font-medium text-stone-900">ブラウザ上の一時的な状態</h3>
         <p>
-          画面の表示や入力の途中状態、取得した記録の一覧などは、利用中のブラウザのメモリ上に保持されます。ログイン状態は Supabase の JavaScript クライアントが、既定の設定でブラウザのストレージに保持・更新します。price-memo の内容データを localStorage・sessionStorage・IndexedDB に保存する処理は、現行の画面にはありません。フォルダ名・価格記録などの主データは Supabase 側にあります。
+          画面に表示しているデータや入力途中の内容は、利用中のみブラウザ内に一時的に保持されます。フォルダ名・店舗名・価格記録・買い物メモなど、登録したアプリデータは Supabase のデータベースに保存されます。ログイン状態（セッション）の情報は、Supabase の認証クライアントによりブラウザ側で保持・更新されます。
         </p>
       </section>
 
@@ -38,7 +38,7 @@ export function DataHandlingDisclosureContent() {
       <section className="space-y-1">
         <h3 className="font-medium text-stone-900">保存期間と削除</h3>
         <p>
-          自動的な有効期限や保持期限による削除は行いません。フォルダ・記録・店舗・買い物メモは、画面から個別に削除できます。データ管理画面の「すべてのデータを削除」は、あなたの price-memo 用4テーブル（フォルダ・価格記録・買い物メモ・店舗名）を一括削除する操作です。
+          フォルダ・価格記録・買い物メモ・店舗名など、price-memo に登録した主なデータには、自動削除や有効期限の設定はありません。フォルダ・記録・店舗・買い物メモは、画面から個別に削除できます。データ管理画面の「すべてのデータを削除」は、あなたの price-memo 用4テーブル（フォルダ・価格記録・買い物メモ・店舗名）を一括削除する操作です。
         </p>
       </section>
 
@@ -59,7 +59,7 @@ export function DataHandlingDisclosureContent() {
       <section className="space-y-1">
         <h3 className="font-medium text-stone-900">バックアップ・ログについて</h3>
         <p>
-          データベース上の削除が、直ちにすべてのバックアップやサービス提供者側の運用ログから消えるとは限りません。具体的な保持期間や消去条件は、本アプリのコードからは確認していません。
+          画面上の削除やデータベース上の削除は、Supabase に保存されている price-memo の登録データを対象とします。バックアップやサービス提供者側の運用ログに残るコピーは、この削除の対象外であり、削除後も直ちにすべて消えるとは限りません。
         </p>
       </section>
     </div>
