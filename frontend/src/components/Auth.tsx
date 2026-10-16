@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { DataHandlingDisclosure } from '@/features/data-management/components/DataHandlingDisclosure'
 import { supabase } from '@/lib/supabase'
 
 export function Auth() {
@@ -41,6 +42,7 @@ export function Auth() {
         >
           {isLoading ? '処理中...' : 'Googleでログイン'}
         </button>
+        <DataHandlingDisclosure className="text-sm text-stone-500 underline decoration-stone-300 underline-offset-2 hover:text-stone-800" />
       </div>
     </div>
   )
