@@ -72,12 +72,18 @@ migrations or run `db push` from this repository.
 - Prefer small focused changes.
 - When changing shared A/B behavior, inspect the integration specification first.
 
-## Commit subjects
+## Commit and pull request titles
 
-- Follow Conventional Commits format: `<type>: <変更内容>`.
-- Use lowercase English types and concise Japanese descriptions.
-- Do not include custom task or phase identifiers.
-- Do not rewrite existing commit history.
+Use the same format for new git commit subjects and GitHub pull request titles:
+
+`<type>: <変更内容>`
+
+- **type**: lowercase English; one of `feat`, `fix`, `refactor`, `perf`, `chore`,
+  `docs`, `test`, `ci`, `build`.
+- **変更内容**: a specific description of the change. Japanese is acceptable.
+- Do not put custom task or phase identifiers in commit subjects or PR titles
+  (for example `S1-06`, `PR 1A`).
+- Apply this rule to new commits and PRs only; do not rewrite existing history.
 
 ## UI verification
 
