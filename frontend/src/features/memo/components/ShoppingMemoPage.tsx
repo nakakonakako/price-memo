@@ -22,7 +22,10 @@ import { reorderIds } from '@/lib/listOrder'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import { toUserMessage } from '@/lib/userError'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
-import { getCatalogRevisions } from '@/lib/catalogSync'
+import {
+  getCatalogRevisions,
+  subscribeFolderDeleted,
+} from '@/lib/catalogSync'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   addMemoItem,
@@ -58,6 +61,34 @@ const MEMO_REORDER_STALE_MESSAGE =
 function reorderFailureMessage(err: unknown): string {
   if (isMemoReorderStaleError(err)) return MEMO_REORDER_STALE_MESSAGE
   return toUserMessage(err, '並べ替えの保存に失敗しました。')
+}
+
+function preserveCurrentMemoOrder(
+  serverItems: PriceMemoItem[],
+  currentItems: PriceMemoItem[],
+): PriceMemoItem[] {
+  const serverByFolderId = new Map(
+    serverItems.map((item) => [item.folder_id, item]),
+  )
+  const currentIds = new Set(currentItems.map((item) => item.folder_id))
+  const currentOrder = currentItems
+    .map((item) => serverByFolderId.get(item.folder_id))
+    .filter((item): item is PriceMemoItem => item != null)
+  const newlyAdded = serverItems.filter(
+    (item) => !currentIds.has(item.folder_id),
+  )
+  return [...currentOrder, ...newlyAdded]
+}
+
+function hasDeletedFolder(
+  folderId: string,
+  folderList: PriceFolder[],
+  memoList: PriceMemoItem[],
+): boolean {
+  return (
+    folderList.some((folder) => folder.id === folderId) ||
+    memoList.some((item) => item.folder_id === folderId)
+  )
 }
 
 function findFolderByInput(
@@ -98,7 +129,6 @@ export function ShoppingMemoPage({
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
   const [mutating, setMutating] = useState(false)
-  const [catalogRefreshing, setCatalogRefreshing] = useState(false)
   const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const cardRefs = useRef(new Map<string, HTMLElement>())
@@ -108,6 +138,34 @@ export function ShoppingMemoPage({
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
     null,
   )
+  const deletedFolderTombstonesRef = useRef(new Set<string>())
+
+  const withoutTombstonedFolders = useCallback(
+    <T extends { id: string }>(folders: T[]): T[] => {
+      const tombstones = deletedFolderTombstonesRef.current
+      if (tombstones.size === 0) return folders
+      return folders.filter((f) => !tombstones.has(f.id))
+    },
+    [],
+  )
+
+  const withoutTombstonedMemoItems = useCallback(
+    (items: PriceMemoItem[]): PriceMemoItem[] => {
+      const tombstones = deletedFolderTombstonesRef.current
+      if (tombstones.size === 0) return items
+      return items.filter((m) => !tombstones.has(m.folder_id))
+    },
+    [],
+  )
+
+  const withoutTombstonedRecords = useCallback(
+    (rows: PriceRecord[]): PriceRecord[] => {
+      const tombstones = deletedFolderTombstonesRef.current
+      if (tombstones.size === 0) return rows
+      return rows.filter((r) => !tombstones.has(r.folder_id))
+    },
+    [],
+  )
 
   const load = useCallback(
     async (opts?: {
@@ -115,27 +173,69 @@ export function ShoppingMemoPage({
       preserveError?: boolean
     }): Promise<'ok' | 'aborted' | 'error'> => {
       const generation = loadGenerationRef.current
+      const reorderGeneration = reorderGenerationRef.current
       const userIdAtStart = getCurrentAuthUserId()
       if (!userIdAtStart) return 'aborted'
       if (!opts?.silent) setIsLoading(true)
       if (!opts?.preserveError) setError(null)
       try {
-        const [folderList, memoList] = await Promise.all([
-          listFolders(),
-          listMemoItems(),
-        ])
-        const recordList = await listRecordsForFolders(
-          memoList.map((m) => m.folder_id),
-        )
+        const fetchSnapshot = async () => {
+          const [folderList, memoList] = await Promise.all([
+            listFolders(),
+            listMemoItems(),
+          ])
+          const recordList = await listRecordsForFolders(
+            memoList.map((m) => m.folder_id),
+          )
+          return { folderList, memoList, recordList }
+        }
+        let { folderList, memoList, recordList } = await fetchSnapshot()
         if (
           loadGenerationRef.current !== generation ||
           getCurrentAuthUserId() !== userIdAtStart
         ) {
           return 'aborted'
         }
-        setAllFolders(folderList)
-        setMemoItems(memoList)
-        setRecords(recordList)
+
+        const tombstones = [...deletedFolderTombstonesRef.current]
+        const returnedDeletedFolders = tombstones.filter((folderId) =>
+          hasDeletedFolder(folderId, folderList, memoList),
+        )
+        if (returnedDeletedFolders.length > 0) {
+          const retrySnapshot = await fetchSnapshot()
+          folderList = retrySnapshot.folderList
+          memoList = retrySnapshot.memoList
+          recordList = retrySnapshot.recordList
+          if (
+            loadGenerationRef.current !== generation ||
+            getCurrentAuthUserId() !== userIdAtStart
+          ) {
+            return 'aborted'
+          }
+          const stillPresent = returnedDeletedFolders.filter((folderId) =>
+            hasDeletedFolder(folderId, folderList, memoList),
+          )
+          for (const folderId of stillPresent) {
+            deletedFolderTombstonesRef.current.delete(folderId)
+          }
+          if (stillPresent.length > 0) {
+            setError(
+              '削除したフォルダがサーバーに残っています。状態を確認して再読み込みしてください。',
+            )
+          }
+        }
+        for (const folderId of tombstones) {
+          deletedFolderTombstonesRef.current.delete(folderId)
+        }
+
+        setAllFolders(withoutTombstonedFolders(folderList))
+        setMemoItems((current) => {
+          const visible = withoutTombstonedMemoItems(memoList)
+          return reorderGenerationRef.current !== reorderGeneration
+            ? preserveCurrentMemoOrder(visible, current)
+            : visible
+        })
+        setRecords(withoutTombstonedRecords(recordList))
         return 'ok'
       } catch (err) {
         if (
@@ -161,13 +261,64 @@ export function ShoppingMemoPage({
         }
       }
     },
-    [],
+    [
+      withoutTombstonedFolders,
+      withoutTombstonedMemoItems,
+      withoutTombstonedRecords,
+    ],
   )
+
+  const refreshAfterMemoMutation = useCallback(() => {
+    loadGenerationRef.current += 1
+    reorderGenerationRef.current += 1
+    reorderInFlightRef.current = false
+    void load({ silent: true })
+  }, [load])
+
+  useEffect(() => {
+    if (!authUserId) return
+    return subscribeFolderDeleted((event) => {
+      if (
+        event.userId !== authUserId ||
+        event.userId !== getCurrentAuthUserId()
+      ) {
+        return
+      }
+      const revisionAtDelete = getCatalogRevisions()
+      const revisionBeforeDelete = catalogRevSeen.current
+      deletedFolderTombstonesRef.current.add(event.folderId)
+      loadGenerationRef.current += 1
+      reorderGenerationRef.current += 1
+      reorderInFlightRef.current = false
+      catalogRevSeen.current = revisionAtDelete
+      setAllFolders((prev) => prev.filter((f) => f.id !== event.folderId))
+      setMemoItems((prev) => prev.filter((m) => m.folder_id !== event.folderId))
+      setRecords((prev) => prev.filter((r) => r.folder_id !== event.folderId))
+      setError(null)
+
+      const generation = loadGenerationRef.current
+      void load({ silent: true }).then((result) => {
+        if (
+          result === 'error' &&
+          loadGenerationRef.current === generation &&
+          getCurrentAuthUserId() === authUserId
+        ) {
+          const current = getCatalogRevisions()
+          catalogRevSeen.current = {
+            ...current,
+            folders:
+              (revisionBeforeDelete?.folders ?? revisionAtDelete.folders - 1),
+          }
+        }
+      })
+    })
+  }, [authUserId, load])
 
   useEffect(() => {
     loadGenerationRef.current += 1
     reorderGenerationRef.current += 1
     reorderInFlightRef.current = false
+    deletedFolderTombstonesRef.current = new Set()
 
     if (!authUserId) {
       catalogRevSeen.current = null
@@ -184,14 +335,9 @@ export function ShoppingMemoPage({
         setRecords([])
         setError(null)
         setIsLoading(false)
-        setCatalogRefreshing(false)
       })
       return
     }
-
-    void Promise.resolve().then(() => {
-      setCatalogRefreshing(false)
-    })
 
     void (async () => {
       setIsLoading(true)
@@ -222,16 +368,12 @@ export function ShoppingMemoPage({
 
     if (foldersChanged) {
       loadGenerationRef.current += 1
-      setCatalogRefreshing(true)
       void (async () => {
         const result = await load({ silent: true })
         if (result === 'ok') {
           catalogRevSeen.current = getCatalogRevisions()
-          setCatalogRefreshing(false)
         } else if (result === 'error') {
           catalogRevSeen.current = prev
-        } else {
-          setCatalogRefreshing(false)
         }
       })()
       return
@@ -239,6 +381,7 @@ export function ShoppingMemoPage({
 
     if (recordsChanged) {
       const generation = loadGenerationRef.current
+      const reorderGeneration = reorderGenerationRef.current
       const userIdAtStart = getCurrentAuthUserId()
       if (!userIdAtStart) return
       void listMemoItems()
@@ -249,8 +392,13 @@ export function ShoppingMemoPage({
           ) {
             return null
           }
-          setMemoItems(memoList)
-          return listRecordsForFolders(memoList.map((m) => m.folder_id))
+          const visible = withoutTombstonedMemoItems(memoList)
+          setMemoItems((current) =>
+            reorderGenerationRef.current !== reorderGeneration
+              ? preserveCurrentMemoOrder(visible, current)
+              : visible,
+          )
+          return listRecordsForFolders(visible.map((m) => m.folder_id))
         })
         .then((recordList) => {
           if (
@@ -260,21 +408,44 @@ export function ShoppingMemoPage({
           ) {
             return
           }
-          setRecords(recordList)
+          setRecords(withoutTombstonedRecords(recordList))
         })
-        .catch(() => {})
+        .catch((err: unknown) => {
+          if (
+            loadGenerationRef.current === generation &&
+            getCurrentAuthUserId() === userIdAtStart
+          ) {
+            setError(toUserMessage(err, '読み込みに失敗しました。'))
+          }
+        })
     }
-  }, [active, load])
+  }, [
+    active,
+    load,
+    withoutTombstonedMemoItems,
+    withoutTombstonedRecords,
+  ])
 
   const mergeFolderRecords = useCallback(async (folderId: string) => {
+    const generation = loadGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
     const rows = await listRecords(folderId)
-    setRecords((prev) => [
-      ...rows,
-      ...prev.filter((r) => r.folder_id !== folderId),
-    ])
-  }, [])
+    if (
+      generation !== loadGenerationRef.current ||
+      userIdAtStart !== getCurrentAuthUserId() ||
+      deletedFolderTombstonesRef.current.has(folderId)
+    ) {
+      return
+    }
+    setRecords((prev) =>
+      withoutTombstonedRecords([
+        ...rows,
+        ...prev.filter((r) => r.folder_id !== folderId),
+      ]),
+    )
+  }, [withoutTombstonedRecords])
 
-  const interactionsLocked = mutating || catalogRefreshing
+  const interactionsLocked = mutating
 
   const byFolder = useMemo(() => recordsByFolderId(records), [records])
   const memoFolderIds = useMemo(
@@ -321,13 +492,15 @@ export function ShoppingMemoPage({
     async (folder: PriceFolder) => {
       const item = await addMemoItem(folder.id)
       setMemoItems((prev) => {
+        if (deletedFolderTombstonesRef.current.has(folder.id)) return prev
         if (prev.some((m) => m.folder_id === folder.id)) return prev
         return [item, ...prev]
       })
+      refreshAfterMemoMutation()
       await mergeFolderRecords(folder.id)
       return item
     },
-    [mergeFolderRecords],
+    [mergeFolderRecords, refreshAfterMemoMutation],
   )
 
   const addFolderToMemo = async (folder: PriceFolder) => {
@@ -379,6 +552,7 @@ export function ShoppingMemoPage({
     setError(null)
     try {
       await removeMemoItem(folderId)
+      refreshAfterMemoMutation()
       setMemoItems((prev) => prev.filter((m) => m.folder_id !== folderId))
       setRecords((prev) => prev.filter((r) => r.folder_id !== folderId))
     } catch (err) {
@@ -386,7 +560,7 @@ export function ShoppingMemoPage({
     } finally {
       setMutating(false)
     }
-  }, [interactionsLocked])
+  }, [interactionsLocked, refreshAfterMemoMutation])
 
   const handleDragEnd = useCallback(
     async (result: DragEndResult) => {
@@ -440,6 +614,8 @@ export function ShoppingMemoPage({
             return
           }
           setError(reorderFailureMessage(err))
+          reorderGenerationRef.current += 1
+          reorderInFlightRef.current = false
           loadGenerationRef.current += 1
           await load({ silent: true, preserveError: true })
         } finally {
@@ -453,7 +629,8 @@ export function ShoppingMemoPage({
   )
 
   const handleSaved = (record: PriceRecord) => {
-    setRecords((prev) => [record, ...prev])
+    if (deletedFolderTombstonesRef.current.has(record.folder_id)) return
+    setRecords((prev) => withoutTombstonedRecords([record, ...prev]))
   }
 
   const page = (
@@ -544,11 +721,7 @@ export function ShoppingMemoPage({
           </p>
         ) : (
           <ul
-            className={
-              catalogRefreshing
-                ? 'pointer-events-none space-y-2 opacity-60'
-                : 'space-y-2'
-            }
+            className="space-y-2"
           >
               {memoItems.map((item, index) => (
                 <FolderMemoCard
