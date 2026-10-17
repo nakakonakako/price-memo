@@ -41,6 +41,7 @@ export function SwipeToDeleteRow({
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || isInteractive(e.target)) return
+    e.stopPropagation()
     const width = rootRef.current?.offsetWidth ?? 0
     gesture.current = {
       tracking: true,

@@ -152,8 +152,6 @@ function CatalogRecordRow({
     onToggle()
   }
   const rowShellProps = {
-    onPointerDown: stopBubble,
-    onPointerUp: stopBubble,
     onClick: stopBubble,
     onKeyDown: stopBubble,
   }
@@ -978,8 +976,10 @@ export function FoldersPage({
         )
         setAllRecords((prev) => prev.filter((r) => r.id !== recordId))
         if (editingRecord?.id === recordId) setEditingRecord(null)
-      } catch {
-        /* hook */
+      } catch (err) {
+        setRecordsError(
+          toUserMessage(err, '記録の削除に失敗しました。'),
+        )
       }
     },
     [editingRecord, patchFolderRecords],
@@ -1213,7 +1213,7 @@ export function FoldersPage({
                   <ul className="space-y-2">
                     {previewRows.map((record) =>
                       renderFolderRecordRow(folder.id, record, {
-                        dragEnabled: false,
+                        dragEnabled: !isMobile,
                         compact: true,
                       }),
                     )}
