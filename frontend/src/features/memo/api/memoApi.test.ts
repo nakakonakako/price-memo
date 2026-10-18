@@ -4,20 +4,24 @@ const order = vi.fn()
 const select = vi.fn()
 const from = vi.fn()
 const rpc = vi.fn()
+const getUser = vi.fn()
+const deleteSelect = vi.fn()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: (table: string) => from(table),
     rpc: (...args: unknown[]) => rpc(...args),
     auth: {
-      getUser: vi.fn(),
+      getUser: () => getUser(),
     },
   },
 }))
 
+import { isMissingTargetError } from '@/lib/appError'
 import {
   isMemoReorderStaleError,
   listMemoItems,
+  removeMemoItem,
   reorderMemoItems,
 } from './memoApi'
 
@@ -27,6 +31,13 @@ describe('memoApi', () => {
     select.mockReset()
     from.mockReset()
     rpc.mockReset()
+    getUser.mockReset()
+    deleteSelect.mockReset()
+
+    getUser.mockResolvedValue({
+      data: { user: { id: 'user-a' } },
+      error: null,
+    })
 
     order.mockReturnValue({ order })
     select.mockReturnValue({ order })
@@ -76,6 +87,23 @@ describe('memoApi', () => {
       p_expected_folder_ids: [],
       p_folder_ids: [],
     })
+  })
+
+  it('removeMemoItem rejects when zero rows are deleted', async () => {
+    deleteSelect.mockResolvedValue({ data: [], error: null })
+    from.mockReturnValue({
+      delete: () => ({
+        eq: () => ({
+          eq: () => ({
+            select: () => deleteSelect(),
+          }),
+        }),
+      }),
+    })
+
+    await expect(removeMemoItem('folder-a')).rejects.toSatisfy(
+      (err: unknown) => isMissingTargetError(err),
+    )
   })
 
   it('detects PM001 stale reorder errors', () => {

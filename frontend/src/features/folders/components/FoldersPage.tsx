@@ -50,6 +50,7 @@ import {
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { getResumeSyncGeneration } from '@/lib/resumeSync'
 import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
+import { isMissingTargetError } from '@/lib/appError'
 import { toUserMessage } from '@/lib/userError'
 import {
   getCatalogRevisions,
@@ -398,12 +399,12 @@ export function FoldersPage({
     return rows
   }, [catalogQueryTrimmed, storeSort, stores])
 
-  const refreshStores = useCallback(async () => {
+  const refreshStores = useCallback(async (options?: { force?: boolean }) => {
     const epoch = getStoresCacheEpoch()
     setStoresLoading(true)
     setStoresError(null)
     try {
-      const list = await getStoresCached()
+      const list = await getStoresCached({ force: options?.force })
       if (epoch !== getStoresCacheEpoch()) return
       setStoresCache(list, epoch)
       setStores(list)
@@ -663,6 +664,9 @@ export function FoldersPage({
       }
       cancelEditStore()
     } catch (err) {
+      if (isMissingTargetError(err)) {
+        void refreshStores()
+      }
       setStoresError(toUserMessage(err, '店舗名の変更に失敗しました。'))
     } finally {
       setStoreMutating(false)
@@ -702,6 +706,11 @@ export function FoldersPage({
       finalizeStoreRemoved(storeId, epoch)
       setDeleteConfirmStoreId(null)
     } catch (err) {
+      if (isMissingTargetError(err)) {
+        await refreshStores({ force: true })
+        finalizeStoreRemoved(storeId, epoch)
+        setDeleteConfirmStoreId(null)
+      }
       setStoresError(toUserMessage(err, '店舗の削除に失敗しました。'))
     } finally {
       setDeleteConfirmStoreBusy(false)
@@ -1079,8 +1088,10 @@ export function FoldersPage({
       await remove(folderId)
       finalizeFolderRemoved(folderId)
       setDeleteConfirmFolderId(null)
-    } catch {
-      /* hook */
+    } catch (err) {
+      if (isMissingTargetError(err)) {
+        finalizeFolderRemoved(folderId)
+      }
     } finally {
       setDeleteConfirmBusy(false)
     }
@@ -1095,7 +1106,9 @@ export function FoldersPage({
       } else {
         void remove(folderId)
           .then(() => finalizeFolderRemoved(folderId))
-          .catch(() => {})
+          .catch((err) => {
+            if (isMissingTargetError(err)) finalizeFolderRemoved(folderId)
+          })
       }
     },
     [finalizeFolderRemoved, recordCounts, recordsByFolder, remove],
@@ -1109,10 +1122,18 @@ export function FoldersPage({
       } else {
         void deleteStore(storeId)
           .then(() => finalizeStoreRemoved(storeId))
-          .catch(() => {})
+          .catch(async (err) => {
+            if (isMissingTargetError(err)) {
+              await refreshStores({ force: true })
+              finalizeStoreRemoved(storeId)
+            }
+            setStoresError(
+              toUserMessage(err, '店舗の削除に失敗しました。'),
+            )
+          })
       }
     },
-    [finalizeStoreRemoved, storeRecordCounts],
+    [finalizeStoreRemoved, refreshStores, storeRecordCounts],
   )
 
   const requestDeleteRecord = useCallback(
@@ -1125,12 +1146,20 @@ export function FoldersPage({
         setAllRecords((prev) => prev.filter((r) => r.id !== recordId))
         if (editingRecord?.id === recordId) setEditingRecord(null)
       } catch (err) {
+        if (isMissingTargetError(err)) {
+          patchFolderRecords(folderId, (rows) =>
+            rows.filter((r) => r.id !== recordId),
+          )
+          setAllRecords((prev) => prev.filter((r) => r.id !== recordId))
+          if (editingRecord?.id === recordId) setEditingRecord(null)
+          void refreshAllRecords()
+        }
         setRecordsError(
           toUserMessage(err, '記録の削除に失敗しました。'),
         )
       }
     },
-    [editingRecord, patchFolderRecords],
+    [editingRecord, patchFolderRecords, refreshAllRecords],
   )
 
   const handleDragEnd = useCallback(
@@ -1953,6 +1982,12 @@ export function FoldersPage({
                 }
                 setAddingFolderId(null)
                 setAddRecordInitial(null)
+              } catch (err) {
+                if (isMissingTargetError(err)) {
+                  void refreshFolders({ silent: true })
+                  void refreshAllRecords()
+                }
+                throw err
               } finally {
                 setAddingBusy(false)
               }
@@ -2002,6 +2037,12 @@ export function FoldersPage({
                   setPreviewStoreId(addingForStore.id)
                 }
                 closeAddingForStore()
+              } catch (err) {
+                if (isMissingTargetError(err)) {
+                  void refreshFolders({ silent: true })
+                  void refreshAllRecords()
+                }
+                throw err
               } finally {
                 setAddingBusy(false)
               }
@@ -2054,6 +2095,12 @@ export function FoldersPage({
                   prev.map((r) => (r.id === updated.id ? updated : r)),
                 )
                 setEditingRecord(null)
+              } catch (err) {
+                if (isMissingTargetError(err)) {
+                  void refreshFolders({ silent: true })
+                  void refreshAllRecords()
+                }
+                throw err
               } finally {
                 setEditingBusy(false)
               }

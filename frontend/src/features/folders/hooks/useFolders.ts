@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { createVisibleLoadTracker } from '@/lib/visibleLoad'
+import { isMissingTargetError } from '@/lib/appError'
 import { toUserMessage } from '@/lib/userError'
 import {
   createFolder,
@@ -173,6 +174,9 @@ export function useFolders() {
       refreshGenerationRef.current += 1
       setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)))
     } catch (err) {
+      if (isMissingTargetError(err)) {
+        await refresh({ silent: true })
+      }
       setError(toUserMessage(err, 'フォルダ名の変更に失敗しました。'))
       throw err
     } finally {
@@ -189,6 +193,9 @@ export function useFolders() {
       refreshGenerationRef.current += 1
       setFolders((prev) => prev.filter((f) => f.id !== id))
     } catch (err) {
+      if (isMissingTargetError(err)) {
+        await refresh({ silent: true })
+      }
       setError(toUserMessage(err, 'フォルダの削除に失敗しました。'))
       throw err
     } finally {

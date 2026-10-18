@@ -1,3 +1,7 @@
+import {
+  assertRowsAffected,
+  normalizeMutationError,
+} from '@/lib/appError'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { bumpRecordsRevision, bumpStoresRevision } from '@/lib/catalogSync'
 import { supabase } from '@/lib/supabase'
@@ -143,7 +147,7 @@ export async function renameStore(id: string, name: string): Promise<PriceStore>
   })
   if (error) {
     await reconcileRenameAfterFailure(startEpoch, user.id)
-    throw error
+    throw normalizeMutationError(error)
   }
 
   assertStoresMutationEpoch(startEpoch, user.id)
@@ -161,8 +165,13 @@ export async function renameStore(id: string, name: string): Promise<PriceStore>
 }
 
 export async function deleteStore(id: string): Promise<void> {
-  const { error } = await supabase.from('price_stores').delete().eq('id', id)
-  if (error) throw error
+  const { data, error } = await supabase
+    .from('price_stores')
+    .delete()
+    .eq('id', id)
+    .select('id')
+  if (error) throw normalizeMutationError(error)
+  assertRowsAffected(data)
 }
 
 export function findStoreByName(

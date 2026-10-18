@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MISSING_TARGET_MESSAGE } from '@/lib/appError'
 import { applyAuthIdentity, resetAuthIdentityForTests } from '@/lib/authIdentity'
 
-const deleteEq = vi.fn()
+const deleteSelect = vi.fn()
 const from = vi.fn()
 const publishFolderDeleted = vi.fn()
 const bumpFoldersRevision = vi.fn()
@@ -28,7 +29,7 @@ describe('deleteFolder', () => {
   beforeEach(() => {
     resetAuthIdentityForTests()
     from.mockReset()
-    deleteEq.mockReset()
+    deleteSelect.mockReset()
     publishFolderDeleted.mockReset()
     bumpFoldersRevision.mockReset()
 
@@ -48,10 +49,12 @@ describe('deleteFolder', () => {
       },
     })
 
-    deleteEq.mockResolvedValue({ error: null })
+    deleteSelect.mockResolvedValue({ data: [{ id: 'folder-1' }], error: null })
     from.mockReturnValue({
       delete: () => ({
-        eq: (...args: unknown[]) => deleteEq(...args),
+        eq: () => ({
+          select: (...args: unknown[]) => deleteSelect(...args),
+        }),
       }),
     })
   })
@@ -64,7 +67,7 @@ describe('deleteFolder', () => {
     await deleteFolder('folder-1')
 
     expect(from).toHaveBeenCalledWith('price_folders')
-    expect(deleteEq).toHaveBeenCalledWith('id', 'folder-1')
+    expect(deleteSelect).toHaveBeenCalledWith('id')
     expect(publishFolderDeleted).toHaveBeenCalledWith({
       folderId: 'folder-1',
       userId: 'user-a',
@@ -72,8 +75,16 @@ describe('deleteFolder', () => {
     expect(bumpFoldersRevision).not.toHaveBeenCalled()
   })
 
+  it('does not notify when zero rows are deleted', async () => {
+    deleteSelect.mockResolvedValueOnce({ data: [], error: null })
+
+    await expect(deleteFolder('folder-1')).rejects.toThrow(MISSING_TARGET_MESSAGE)
+    expect(publishFolderDeleted).not.toHaveBeenCalled()
+    expect(bumpFoldersRevision).not.toHaveBeenCalled()
+  })
+
   it('does not notify or bump revision when DB delete fails', async () => {
-    deleteEq.mockResolvedValueOnce({ error: { message: 'db down' } })
+    deleteSelect.mockResolvedValueOnce({ error: { message: 'db down' } })
 
     await expect(deleteFolder('folder-1')).rejects.toEqual({ message: 'db down' })
     expect(publishFolderDeleted).not.toHaveBeenCalled()
@@ -81,7 +92,7 @@ describe('deleteFolder', () => {
   })
 
   it('does not notify when auth user changed before delete completes', async () => {
-    deleteEq.mockImplementationOnce(async () => {
+    deleteSelect.mockImplementationOnce(async () => {
       applyAuthIdentity({
         access_token: 'token-b',
         refresh_token: 'refresh',
@@ -97,7 +108,7 @@ describe('deleteFolder', () => {
           created_at: '2026-01-01T00:00:00Z',
         },
       })
-      return { error: null }
+      return { data: [{ id: 'folder-1' }], error: null }
     })
 
     await deleteFolder('folder-1')

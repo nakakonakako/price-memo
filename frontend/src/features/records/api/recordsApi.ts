@@ -1,3 +1,8 @@
+import {
+  assertRowsAffected,
+  normalizeCreateRecordError,
+  normalizeMutationError,
+} from '@/lib/appError'
 import { supabase } from '@/lib/supabase'
 import { bumpRecordsRevision } from '@/lib/catalogSync'
 import { ensureStore } from '@/features/stores/api/storesCache'
@@ -98,7 +103,7 @@ export async function createRecord(
     .select()
     .single()
 
-  if (error) throw error
+  if (error) throw normalizeCreateRecordError(error)
   bumpRecordsRevision()
   return normalize(data as PriceRecord)
 }
@@ -132,14 +137,19 @@ export async function updateRecord(
     .select()
     .single()
 
-  if (error) throw error
+  if (error) throw normalizeMutationError(error)
   bumpRecordsRevision()
   return normalize(data as PriceRecord)
 }
 
 export async function deleteRecord(id: string): Promise<void> {
-  const { error } = await supabase.from('price_records').delete().eq('id', id)
-  if (error) throw error
+  const { data, error } = await supabase
+    .from('price_records')
+    .delete()
+    .eq('id', id)
+    .select('id')
+  if (error) throw normalizeMutationError(error)
+  assertRowsAffected(data)
   bumpRecordsRevision()
 }
 
