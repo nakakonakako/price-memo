@@ -2,6 +2,7 @@ import {
   lazy,
   Suspense,
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -14,6 +15,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery'
 import type { FolderDetailRequest } from '@/features/folders/folderDetailRequest'
 import { ShoppingMemoPage } from '@/features/memo/components/ShoppingMemoPage'
 import { DataManagementPage } from '@/features/data-management/components/DataManagementPage'
+import { installResumeSyncListeners } from '@/lib/resumeSync'
 
 const FoldersPage = lazy(() =>
   import('@/features/folders/components/FoldersPage').then((m) => ({
@@ -101,6 +103,8 @@ function AuthenticatedApp({
     setVisited((prev) => ({ ...prev, memo: true }))
     setDataDeletionNotice('price-memoのデータを削除しました。')
   }, [])
+
+  useEffect(() => installResumeSyncListeners(), [])
 
   return (
     <MainLayout

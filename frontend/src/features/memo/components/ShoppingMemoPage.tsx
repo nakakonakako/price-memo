@@ -22,11 +22,13 @@ import { reorderIds } from '@/lib/listOrder'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import { toUserMessage } from '@/lib/userError'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
+import { createVisibleLoadTracker } from '@/lib/visibleLoad'
 import {
   getCatalogRevisions,
   subscribeFolderDeleted,
 } from '@/lib/catalogSync'
 import { useAuth } from '@/contexts/AuthContext'
+import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
 import {
   addMemoItem,
   isMemoReorderStaleError,
@@ -133,6 +135,7 @@ export function ShoppingMemoPage({
   const [addOpen, setAddOpen] = useState(false)
   const cardRefs = useRef(new Map<string, HTMLElement>())
   const loadGenerationRef = useRef(0)
+  const visibleLoadRef = useRef(createVisibleLoadTracker())
   const reorderGenerationRef = useRef(0)
   const reorderInFlightRef = useRef(false)
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
@@ -176,7 +179,11 @@ export function ShoppingMemoPage({
       const reorderGeneration = reorderGenerationRef.current
       const userIdAtStart = getCurrentAuthUserId()
       if (!userIdAtStart) return 'aborted'
-      if (!opts?.silent) setIsLoading(true)
+      const startedVisibleLoad = !opts?.silent
+      if (startedVisibleLoad) {
+        visibleLoadRef.current.begin()
+        setIsLoading(true)
+      }
       if (!opts?.preserveError) setError(null)
       try {
         const fetchSnapshot = async () => {
@@ -252,10 +259,14 @@ export function ShoppingMemoPage({
         )
         return 'error'
       } finally {
+        if (opts?.silent) {
+          visibleLoadRef.current.settle()
+          if (getCurrentAuthUserId() === userIdAtStart) setIsLoading(false)
+        }
         if (
-          loadGenerationRef.current === generation &&
-          getCurrentAuthUserId() === userIdAtStart &&
-          !opts?.silent
+          startedVisibleLoad &&
+          visibleLoadRef.current.end() &&
+          getCurrentAuthUserId() === userIdAtStart
         ) {
           setIsLoading(false)
         }
@@ -322,6 +333,7 @@ export function ShoppingMemoPage({
 
     if (!authUserId) {
       catalogRevSeen.current = null
+      visibleLoadRef.current.reset()
       const generation = loadGenerationRef.current
       void Promise.resolve().then(() => {
         if (
@@ -340,7 +352,6 @@ export function ShoppingMemoPage({
     }
 
     void (async () => {
-      setIsLoading(true)
       setError(null)
       setAllFolders([])
       setMemoItems([])
@@ -351,6 +362,24 @@ export function ShoppingMemoPage({
       }
     })()
   }, [authUserId, load])
+
+  const invalidateResumeLoads = useCallback(() => {
+    loadGenerationRef.current += 1
+  }, [])
+
+  const refreshFromServerResume = useCallback(async () => {
+    const result = await load({ silent: true })
+    if (result === 'ok') {
+      catalogRevSeen.current = getCatalogRevisions()
+    }
+  }, [load])
+
+  useResumeCatalogRefresh({
+    active,
+    enabled: authUserId != null,
+    onResumeSignal: invalidateResumeLoads,
+    onRefresh: refreshFromServerResume,
+  })
 
   useEffect(() => {
     if (!active) return

@@ -47,6 +47,9 @@ import {
   unitLabel,
   unitPrice,
 } from '@/features/records/utils/unitPrice'
+import { getCurrentAuthUserId } from '@/lib/authIdentity'
+import { getResumeSyncGeneration } from '@/lib/resumeSync'
+import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
 import { toUserMessage } from '@/lib/userError'
 import {
   getCatalogRevisions,
@@ -289,6 +292,8 @@ export function FoldersPage({
   const [storeAddFolderId, setStoreAddFolderId] = useState('')
   const [addingBusy, setAddingBusy] = useState(false)
   const [editingBusy, setEditingBusy] = useState(false)
+  const allRecordsRequestRef = useRef(0)
+  const folderListRecordsRequestRef = useRef(0)
   const [catalogQuery, setCatalogQuery] = useState('')
   const [catalogSearchOpen, setCatalogSearchOpen] = useState(false)
   const catalogSearchRef = useRef<HTMLInputElement>(null)
@@ -411,9 +416,19 @@ export function FoldersPage({
   }, [])
 
   const refreshAllRecords = useCallback(async () => {
+    const requestId = ++allRecordsRequestRef.current
+    const resumeGeneration = getResumeSyncGeneration()
+    const userIdAtStart = getCurrentAuthUserId()
     setAllRecordsLoading(true)
     try {
       const records = await listAllRecords()
+      if (
+        requestId !== allRecordsRequestRef.current ||
+        resumeGeneration !== getResumeSyncGeneration() ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
       setAllRecords(records)
       setAllRecordsLoaded(true)
       const folderCounts: Record<string, number> = {}
@@ -424,7 +439,9 @@ export function FoldersPage({
     } catch {
       /* optional */
     } finally {
-      setAllRecordsLoading(false)
+      if (requestId === allRecordsRequestRef.current) {
+        setAllRecordsLoading(false)
+      }
     }
   }, [])
 
@@ -457,6 +474,78 @@ export function FoldersPage({
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
     null,
   )
+  const resumeRefreshGenerationRef = useRef(0)
+
+  const invalidateResumeLoads = useCallback(() => {
+    resumeRefreshGenerationRef.current += 1
+    allRecordsRequestRef.current += 1
+    folderListRecordsRequestRef.current += 1
+  }, [])
+
+  const refreshFromServerResume = useCallback(async () => {
+    const generation = resumeRefreshGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
+    if (!userIdAtStart) return
+
+    await refreshFolders({ silent: true })
+
+    try {
+      const records = await listAllRecords()
+      if (
+        resumeRefreshGenerationRef.current !== generation ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
+      setAllRecords(records)
+      setAllRecordsLoaded(true)
+      const folderCounts: Record<string, number> = {}
+      for (const r of records) {
+        folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
+      }
+      setRecordCounts(folderCounts)
+      setRecordsByFolder((current) => {
+        const refreshed: Record<string, PriceRecord[]> = {}
+        for (const folderId of Object.keys(current)) {
+          refreshed[folderId] = sortRecordsByDateDesc(
+            records.filter((record) => record.folder_id === folderId),
+          )
+        }
+        return refreshed
+      })
+    } catch {
+      /* keep existing records */
+    } finally {
+      if (
+        resumeRefreshGenerationRef.current === generation &&
+        getCurrentAuthUserId() === userIdAtStart
+      ) {
+        setAllRecordsLoading(false)
+      }
+    }
+
+    const storesEpoch = getStoresCacheEpoch()
+    try {
+      const list = await getStoresCached({ force: true })
+      if (
+        resumeRefreshGenerationRef.current !== generation ||
+        getCurrentAuthUserId() !== userIdAtStart ||
+        storesEpoch !== getStoresCacheEpoch()
+      ) {
+        return
+      }
+      setStoresCache(list, storesEpoch)
+      setStores(list)
+    } catch {
+      /* keep existing stores */
+    }
+  }, [refreshFolders])
+
+  useResumeCatalogRefresh({
+    active,
+    onResumeSignal: invalidateResumeLoads,
+    onRefresh: refreshFromServerResume,
+  })
 
   useEffect(() => {
     if (!active) return
@@ -716,19 +805,37 @@ export function FoldersPage({
       return
     }
 
+    const requestId = ++folderListRecordsRequestRef.current
+    const resumeGeneration = getResumeSyncGeneration()
+    const userIdAtStart = getCurrentAuthUserId()
     try {
       setOpenFolderLoadingId(folderId)
       const records = await listRecords(folderId)
+      if (
+        requestId !== folderListRecordsRequestRef.current ||
+        resumeGeneration !== getResumeSyncGeneration() ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
       setRecordsByFolder((prev) => ({ ...prev, [folderId]: records }))
       setRecordCounts((prev) => ({ ...prev, [folderId]: records.length }))
     } catch (err) {
+      if (
+        requestId !== folderListRecordsRequestRef.current ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
       const msg = toUserMessage(
         err,
         'フォルダ中身の読み込みに失敗しました。',
       )
       setRecordsError(msg)
     } finally {
-      setOpenFolderLoadingId(null)
+      if (requestId === folderListRecordsRequestRef.current) {
+        setOpenFolderLoadingId(null)
+      }
     }
   }, [allRecordsLoaded, hydrateFolderFromAll, recordsByFolder])
 
@@ -797,17 +904,35 @@ export function FoldersPage({
         return
       }
 
+      const requestId = ++folderListRecordsRequestRef.current
+      const resumeGeneration = getResumeSyncGeneration()
+      const userIdAtStart = getCurrentAuthUserId()
       try {
         setOpenFolderLoadingId(folderId)
         const records = await listRecords(folderId)
+        if (
+          requestId !== folderListRecordsRequestRef.current ||
+          resumeGeneration !== getResumeSyncGeneration() ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          return
+        }
         setRecordsByFolder((prev) => ({ ...prev, [folderId]: records }))
         setRecordCounts((prev) => ({ ...prev, [folderId]: records.length }))
       } catch (err) {
+        if (
+          requestId !== folderListRecordsRequestRef.current ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          return
+        }
         setRecordsError(
           toUserMessage(err, 'フォルダ中身の読み込みに失敗しました。'),
         )
       } finally {
-        setOpenFolderLoadingId(null)
+        if (requestId === folderListRecordsRequestRef.current) {
+          setOpenFolderLoadingId(null)
+        }
       }
     },
     [
