@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { listFolders } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
+import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { getCatalogRevisions } from '@/lib/catalogSync'
+import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
 import { toUserMessage } from '@/lib/userError'
 import { FolderTrendPanel } from './FolderTrendPanel'
 
@@ -13,22 +15,73 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
     null,
   )
+  const resumeRefreshGenerationRef = useRef(0)
+
+  const invalidateResumeLoads = useCallback(() => {
+    resumeRefreshGenerationRef.current += 1
+  }, [])
+
+  const refreshFromServerResume = useCallback(async () => {
+    const generation = resumeRefreshGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
+    if (!userIdAtStart) return
+    try {
+      const list = await listFolders()
+      if (
+        resumeRefreshGenerationRef.current !== generation ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
+      setFolders(list)
+      setFolderId((id) =>
+        id && list.some((f) => f.id === id) ? id : (list[0]?.id ?? null),
+      )
+      setError(null)
+    } catch {
+      /* keep existing folders */
+    }
+  }, [])
+
+  useResumeCatalogRefresh({
+    active,
+    onResumeSignal: invalidateResumeLoads,
+    onRefresh: refreshFromServerResume,
+  })
 
   useEffect(() => {
+    const generation = resumeRefreshGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
     let cancelled = false
     ;(async () => {
       setFoldersLoading(true)
       try {
         const list = await listFolders()
-        if (cancelled) return
+        if (
+          cancelled ||
+          generation !== resumeRefreshGenerationRef.current ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          return
+        }
         setFolders(list)
         setFolderId((prev) => prev ?? list[0]?.id ?? null)
       } catch (err) {
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          generation === resumeRefreshGenerationRef.current &&
+          getCurrentAuthUserId() === userIdAtStart
+        ) {
           setError(toUserMessage(err, 'フォルダの取得に失敗しました。'))
         }
       } finally {
-        if (!cancelled) setFoldersLoading(false)
+        if (
+          !cancelled &&
+          generation === resumeRefreshGenerationRef.current &&
+          getCurrentAuthUserId() === userIdAtStart
+        ) {
+          setFoldersLoading(false)
+        }
       }
     })()
     return () => {
@@ -46,8 +99,16 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
     const prev = catalogRevSeen.current
     catalogRevSeen.current = cur
     if (cur.folders === prev.folders) return
+    const generation = ++resumeRefreshGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
     void listFolders()
       .then((list) => {
+        if (
+          generation !== resumeRefreshGenerationRef.current ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          return
+        }
         setFolders(list)
         setFolderId((id) =>
           id && list.some((f) => f.id === id) ? id : (list[0]?.id ?? null),

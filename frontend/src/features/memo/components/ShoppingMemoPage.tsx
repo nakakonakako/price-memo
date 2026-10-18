@@ -27,6 +27,7 @@ import {
   subscribeFolderDeleted,
 } from '@/lib/catalogSync'
 import { useAuth } from '@/contexts/AuthContext'
+import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
 import {
   addMemoItem,
   isMemoReorderStaleError,
@@ -351,6 +352,24 @@ export function ShoppingMemoPage({
       }
     })()
   }, [authUserId, load])
+
+  const invalidateResumeLoads = useCallback(() => {
+    loadGenerationRef.current += 1
+  }, [])
+
+  const refreshFromServerResume = useCallback(async () => {
+    const result = await load({ silent: true })
+    if (result === 'ok') {
+      catalogRevSeen.current = getCatalogRevisions()
+    }
+  }, [load])
+
+  useResumeCatalogRefresh({
+    active,
+    enabled: authUserId != null,
+    onResumeSignal: invalidateResumeLoads,
+    onRefresh: refreshFromServerResume,
+  })
 
   useEffect(() => {
     if (!active) return

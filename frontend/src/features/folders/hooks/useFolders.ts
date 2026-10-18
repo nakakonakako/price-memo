@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { toUserMessage } from '@/lib/userError'
 import {
   createFolder,
@@ -20,6 +21,7 @@ export function useFolders() {
   const [isMutating, setIsMutating] = useState(false)
   const createInFlightRef = useRef(false)
   const mountedRef = useRef(true)
+  const refreshGenerationRef = useRef(0)
 
   useEffect(() => {
     mountedRef.current = true
@@ -29,36 +31,76 @@ export function useFolders() {
   }, [])
 
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
+    const generation = ++refreshGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
     if (!opts?.silent) setIsLoading(true)
     setError(null)
     try {
       const next = await listFolders()
-      if (!mountedRef.current) return
+      if (
+        !mountedRef.current ||
+        generation !== refreshGenerationRef.current ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
       setFolders(next)
     } catch (err) {
-      if (!mountedRef.current) return
+      if (
+        !mountedRef.current ||
+        generation !== refreshGenerationRef.current ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
       setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
     } finally {
-      if (!opts?.silent) setIsLoading(false)
+      if (
+        !opts?.silent &&
+        mountedRef.current &&
+        generation === refreshGenerationRef.current &&
+        getCurrentAuthUserId() === userIdAtStart
+      ) {
+        setIsLoading(false)
+      }
     }
   }, [])
 
   useEffect(() => {
     let cancelled = false
+    const generation = ++refreshGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
     listFolders()
       .then((next) => {
-        if (!cancelled) setFolders(next)
+        if (
+          !cancelled &&
+          generation === refreshGenerationRef.current &&
+          getCurrentAuthUserId() === userIdAtStart
+        ) {
+          setFolders(next)
+        }
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
+        if (
+          !cancelled &&
+          generation === refreshGenerationRef.current &&
+          getCurrentAuthUserId() === userIdAtStart
+        ) {
           setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
         }
       })
       .finally(() => {
-        if (!cancelled) setIsLoading(false)
+        if (
+          !cancelled &&
+          generation === refreshGenerationRef.current &&
+          getCurrentAuthUserId() === userIdAtStart
+        ) {
+          setIsLoading(false)
+        }
       })
     return () => {
       cancelled = true
+      refreshGenerationRef.current += 1
     }
   }, [])
 
