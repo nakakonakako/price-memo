@@ -5,6 +5,7 @@ import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { createVisibleLoadTracker } from '@/lib/visibleLoad'
 import { getCatalogRevisions } from '@/lib/catalogSync'
 import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
+import { useExternalCatalogRefresh } from '@/hooks/useExternalCatalogRefresh'
 import { toUserMessage } from '@/lib/userError'
 import { FolderTrendPanel } from './FolderTrendPanel'
 
@@ -51,6 +52,13 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
   useResumeCatalogRefresh({
     active,
     onResumeSignal: invalidateResumeLoads,
+    onRefresh: refreshFromServerResume,
+  })
+
+  useExternalCatalogRefresh({
+    active,
+    tables: ['price_folders'],
+    onSignal: invalidateResumeLoads,
     onRefresh: refreshFromServerResume,
   })
 

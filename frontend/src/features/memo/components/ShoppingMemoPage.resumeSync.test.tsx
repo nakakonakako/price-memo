@@ -9,6 +9,10 @@ import {
   resetResumeSyncForTests,
   triggerResumeSyncForTests,
 } from '@/lib/resumeSync'
+import {
+  requestExternalSync,
+  resetExternalSyncForTests,
+} from '@/lib/externalSync'
 import { AuthProvider } from '@/contexts/AuthContext'
 import type { PriceRecord } from '@/features/records/types'
 
@@ -165,6 +169,7 @@ describe('ShoppingMemoPage resume sync', () => {
     resetAuthIdentityForTests()
     resetCatalogSync()
     resetResumeSyncForTests()
+    resetExternalSyncForTests()
     teardownResume = installResumeSyncListeners()
     setVisibility('visible')
 
@@ -224,6 +229,7 @@ describe('ShoppingMemoPage resume sync', () => {
     resetAuthIdentityForTests()
     resetCatalogSync()
     resetResumeSyncForTests()
+    resetExternalSyncForTests()
     vi.useRealTimers()
   })
 
@@ -349,6 +355,62 @@ describe('ShoppingMemoPage resume sync', () => {
       '下書き',
     )
     expect(screen.getByTestId('memo-card-folder-a').getAttribute('data-expanded')).toBe('true')
+  })
+
+  it('keeps card drafts and expansion after an external Broadcast refresh', async () => {
+    renderPage(true)
+    await waitForInitialLoad()
+
+    fireEvent.click(screen.getByRole('button', { name: 'expand-folder-a' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'draft-folder-a' }), {
+      target: { value: '編集中の下書き' },
+    })
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+
+    await act(async () => {
+      requestExternalSync(['price_memo_items'])
+      await vi.advanceTimersByTimeAsync(50)
+    })
+
+    await waitFor(() => expect(listMemoItems).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('textbox', { name: 'draft-folder-a' })).toHaveProperty(
+      'value',
+      '編集中の下書き',
+    )
+    expect(screen.getByTestId('memo-card-folder-a').getAttribute('data-expanded')).toBe('true')
+  })
+
+  it('queues a newer external snapshot and discards the older in-flight response', async () => {
+    let releaseStale: (items: ReturnType<typeof memoItem>[]) => void = () => {}
+    renderPage(true)
+    await waitForInitialLoad()
+    listMemoItems.mockImplementationOnce(
+      () =>
+        new Promise<ReturnType<typeof memoItem>[]>((resolve) => {
+          releaseStale = resolve
+        }),
+    )
+
+    await act(async () => {
+      requestExternalSync(['price_records'])
+      await vi.advanceTimersByTimeAsync(50)
+    })
+    await waitFor(() => expect(listMemoItems).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      requestExternalSync(['price_records'])
+      await vi.advanceTimersByTimeAsync(50)
+    })
+    await act(async () => {
+      releaseStale([memoItem('folder-a', 0)])
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => {
+      expect(listMemoItems).toHaveBeenCalledTimes(3)
+      expect(screen.getByTestId('memo-card-folder-b')).toBeTruthy()
+    })
   })
 
   it('does not apply a stale resume response after a newer refresh', async () => {

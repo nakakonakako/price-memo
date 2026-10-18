@@ -30,6 +30,7 @@ import {
 } from '@/lib/catalogSync'
 import { useAuth } from '@/contexts/AuthContext'
 import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
+import { useExternalCatalogRefresh } from '@/hooks/useExternalCatalogRefresh'
 import {
   addMemoItem,
   isMemoReorderStaleError,
@@ -382,6 +383,13 @@ export function ShoppingMemoPage({
     active,
     enabled: authUserId != null,
     onResumeSignal: invalidateResumeLoads,
+    onRefresh: refreshFromServerResume,
+  })
+
+  useExternalCatalogRefresh({
+    active,
+    tables: ['price_folders', 'price_records', 'price_memo_items'],
+    onSignal: invalidateResumeLoads,
     onRefresh: refreshFromServerResume,
   })
 

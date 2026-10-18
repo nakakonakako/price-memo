@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PriceStore } from '../types'
+import { getCatalogRevisions, resetCatalogSync } from '@/lib/catalogSync'
 
 const listStores = vi.fn<() => Promise<PriceStore[]>>()
 const createStore = vi.fn<(name: string) => Promise<PriceStore>>()
@@ -20,6 +21,8 @@ import {
   StoresCacheStaleError,
   removeFromStoresCache,
   upsertStoresCache,
+  refreshStoresCacheFromRealtime,
+  subscribeStoresCacheRefresh,
 } from './storesCache'
 
 function store(id: string, name: string): PriceStore {
@@ -35,6 +38,7 @@ function store(id: string, name: string): PriceStore {
 describe('storesCache', () => {
   beforeEach(() => {
     resetStoresCacheForTests()
+    resetCatalogSync()
     listStores.mockReset()
     createStore.mockReset()
   })
@@ -214,5 +218,77 @@ describe('storesCache', () => {
 
     expect(result).toEqual([store('1', 'Alpha')])
     expect(peekStoresCache()).toEqual([store('1', 'Alpha')])
+  })
+
+  it('refreshes the shared store cache once without changing local revisions', async () => {
+    resetStoresCacheForUser('user-a')
+    setStoresCache([store('1', 'Old')])
+    const fresh = [store('1', 'Renamed'), store('2', 'New')]
+    listStores.mockResolvedValueOnce(fresh)
+    const listener = vi.fn()
+    const unsubscribe = subscribeStoresCacheRefresh(listener)
+    const before = getCatalogRevisions()
+
+    const [first, second] = await Promise.all([
+      refreshStoresCacheFromRealtime(),
+      refreshStoresCacheFromRealtime(),
+    ])
+
+    expect(first).toEqual(fresh)
+    expect(second).toEqual(fresh)
+    expect(listStores).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith(fresh)
+    expect(getCatalogRevisions()).toEqual(before)
+    expect(peekStoresCache()).toEqual(fresh)
+    unsubscribe()
+  })
+
+  it('preserves the store cache when a Realtime-triggered refresh fails', async () => {
+    resetStoresCacheForUser('user-a')
+    const existing = [store('1', 'Existing')]
+    setStoresCache(existing)
+    listStores.mockRejectedValueOnce(new Error('network'))
+    const listener = vi.fn()
+    const unsubscribe = subscribeStoresCacheRefresh(listener)
+
+    await expect(refreshStoresCacheFromRealtime()).rejects.toThrow('network')
+
+    expect(peekStoresCache()).toEqual(existing)
+    expect(listener).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
+  it('retries a Realtime refresh when a local cache write races the request', async () => {
+    resetStoresCacheForUser('user-a')
+    setStoresCache([store('1', 'Seed')])
+    let resolveFirst: (stores: PriceStore[]) => void = () => {}
+    listStores
+      .mockImplementationOnce(
+        () =>
+          new Promise<PriceStore[]>((resolve) => {
+            resolveFirst = resolve
+          }),
+      )
+      .mockResolvedValueOnce([
+        store('3', 'Local'),
+        store('2', 'Remote'),
+        store('1', 'Seed'),
+      ])
+
+    const refresh = refreshStoresCacheFromRealtime()
+    upsertStoresCache(store('3', 'Local'))
+    resolveFirst([store('1', 'Stale')])
+
+    await expect(refresh).resolves.toEqual([
+      store('3', 'Local'),
+      store('2', 'Remote'),
+      store('1', 'Seed'),
+    ])
+    expect(listStores).toHaveBeenCalledTimes(2)
+    expect(peekStoresCache()).toEqual([
+      store('3', 'Local'),
+      store('2', 'Remote'),
+      store('1', 'Seed'),
+    ])
   })
 })

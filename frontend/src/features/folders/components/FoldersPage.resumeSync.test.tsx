@@ -7,6 +7,10 @@ import {
   resetResumeSyncForTests,
   triggerResumeSyncForTests,
 } from '@/lib/resumeSync'
+import {
+  requestExternalSync,
+  resetExternalSyncForTests,
+} from '@/lib/externalSync'
 import type { PriceRecord } from '@/features/records/types'
 
 vi.mock('@/hooks/useMediaQuery', () => ({
@@ -92,6 +96,7 @@ describe('FoldersPage resume sync', () => {
     vi.stubGlobal('scrollTo', vi.fn())
     resetAuthIdentityForTests()
     resetResumeSyncForTests()
+    resetExternalSyncForTests()
     teardownResume = installResumeSyncListeners()
     applyAuthIdentity({
       access_token: 'token-a',
@@ -115,6 +120,7 @@ describe('FoldersPage resume sync', () => {
     getStoresCached.mockReset()
 
     listFolders.mockResolvedValue([folderA])
+    listAllRecords.mockResolvedValue([])
     getStoresCached.mockResolvedValue([])
   })
 
@@ -123,6 +129,7 @@ describe('FoldersPage resume sync', () => {
     cleanup()
     resetAuthIdentityForTests()
     resetResumeSyncForTests()
+    resetExternalSyncForTests()
     vi.unstubAllGlobals()
     vi.useRealTimers()
   })
@@ -165,6 +172,27 @@ describe('FoldersPage resume sync', () => {
 
     expect(screen.queryByText('stale-marker')).toBeNull()
     expect(screen.getByText('fresh-marker')).toBeTruthy()
+  })
+
+  it('refreshes the visible folder record snapshot on an external record change', async () => {
+    listAllRecords.mockResolvedValue([recordRow('initial', 'before')])
+    render(<FoldersPage active />)
+    await waitFor(() => expect(listAllRecords).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'すべての記録（1）' }))
+    await waitFor(() => expect(screen.getByText('before')).toBeTruthy())
+    listAllRecords.mockResolvedValue([recordRow('fresh', 'after')])
+
+    await act(async () => {
+      requestExternalSync(['price_records'])
+      await vi.advanceTimersByTimeAsync(50)
+    })
+
+    await waitFor(() => {
+      expect(listAllRecords).toHaveBeenCalledTimes(2)
+      expect(screen.getByText('after')).toBeTruthy()
+    })
+    expect(screen.queryByText('before')).toBeNull()
   })
 
   it('clears all-records loading when resume listAllRecords fails after invalidating the initial fetch', async () => {

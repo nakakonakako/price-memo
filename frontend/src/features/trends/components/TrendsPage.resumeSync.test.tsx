@@ -8,6 +8,10 @@ import {
   resetResumeSyncForTests,
   triggerResumeSyncForTests,
 } from '@/lib/resumeSync'
+import {
+  requestExternalSync,
+  resetExternalSyncForTests,
+} from '@/lib/externalSync'
 import type { PriceRecord } from '@/features/records/types'
 
 vi.mock('recharts', () => ({
@@ -81,6 +85,7 @@ describe('TrendsPage resume sync', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     resetAuthIdentityForTests()
     resetResumeSyncForTests()
+    resetExternalSyncForTests()
     teardownResume = installResumeSyncListeners()
     applyAuthIdentity({
       access_token: 'token-a',
@@ -111,6 +116,7 @@ describe('TrendsPage resume sync', () => {
     cleanup()
     resetAuthIdentityForTests()
     resetResumeSyncForTests()
+    resetExternalSyncForTests()
     vi.useRealTimers()
   })
 
@@ -137,6 +143,36 @@ describe('TrendsPage resume sync', () => {
     await waitFor(() => expect(listRecords).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(screen.getByText('store-c')).toBeTruthy())
     expect((basisSelect as HTMLSelectElement).value).toBe('per_unit')
+  })
+
+  it('refreshes the same trend folder from Broadcast while preserving graph and store settings', async () => {
+    render(<TrendsPage active />)
+    await waitFor(() => expect(listRecords).toHaveBeenCalledTimes(1))
+
+    const comboboxes = screen.getAllByRole('combobox')
+    const basisSelect = comboboxes[2]
+    fireEvent.change(basisSelect, { target: { value: 'per_unit' } })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20)
+    })
+    const storeRow = screen.getByText('store-a').closest('tr')
+    if (!storeRow) throw new Error('store row missing')
+    fireEvent.click(storeRow)
+
+    listRecords.mockResolvedValue([
+      recordRow('rec-1', 'store-a', 'g'),
+      recordRow('rec-3', 'store-c', 'g'),
+    ])
+    await act(async () => {
+      requestExternalSync(['price_records'])
+      await vi.advanceTimersByTimeAsync(50)
+    })
+
+    await waitFor(() => expect(listRecords).toHaveBeenCalledTimes(2))
+    expect((basisSelect as HTMLSelectElement).value).toBe('per_unit')
+    expect(screen.getByText('store-a').closest('tr')?.className).toContain(
+      'bg-stone-100',
+    )
   })
 
   it('clears loading after resume during the initial folder fetch', async () => {

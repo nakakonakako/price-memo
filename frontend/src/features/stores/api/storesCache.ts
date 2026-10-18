@@ -12,6 +12,8 @@ let cacheAdoptionGeneration = 0
 /** Latest force-refresh listStores id; only that response may adopt into cache. */
 let forceListStoresRequestId = 0
 let ownerUserId: string | null = null
+let realtimeRefresh: Promise<PriceStore[]> | null = null
+const realtimeRefreshListeners = new Set<(stores: PriceStore[]) => void>()
 
 export class StoresCacheStaleError extends Error {
   constructor() {
@@ -53,6 +55,7 @@ export function resetStoresCacheForUser(userId: string | null): void {
   cacheEpoch += 1
   cacheAdoptionGeneration = 0
   forceListStoresRequestId = 0
+  realtimeRefresh = null
 }
 
 /** @internal test helper */
@@ -63,7 +66,9 @@ export function resetStoresCacheForTests(): void {
   cacheEpoch = 0
   cacheAdoptionGeneration = 0
   forceListStoresRequestId = 0
+  realtimeRefresh = null
   ownerUserId = null
+  realtimeRefreshListeners.clear()
 }
 
 /** Shared in-memory store list. Dedupes concurrent fetches. */
@@ -133,6 +138,46 @@ export async function getStoresCached(
 
 export function peekStoresCache(): PriceStore[] | null {
   return cache
+}
+
+/** Subscribe to fresh server snapshots without changing local catalog revisions. */
+export function subscribeStoresCacheRefresh(
+  listener: (stores: PriceStore[]) => void,
+): () => void {
+  realtimeRefreshListeners.add(listener)
+  return () => realtimeRefreshListeners.delete(listener)
+}
+
+/** Share the Realtime-triggered force read across forms and keep-alive pages. */
+export function refreshStoresCacheFromRealtime(): Promise<PriceStore[]> {
+  if (realtimeRefresh !== null) return realtimeRefresh
+  const requestEpoch = cacheEpoch
+  const requestOwner = ownerUserId
+  const request = (async () => {
+    let stores: PriceStore[] = []
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const adoptionAtStart = cacheAdoptionGeneration
+      stores = await getStoresCached({ force: true })
+      if (requestEpoch !== cacheEpoch || requestOwner !== ownerUserId) {
+        throw new StoresCacheStaleError()
+      }
+      if (
+        attempt === 0 &&
+        adoptionAtStart !== cacheAdoptionGeneration
+      ) {
+        continue
+      }
+      break
+    }
+    const current = cache ?? stores
+    for (const listener of realtimeRefreshListeners) listener(current)
+    return current
+  })()
+    .finally(() => {
+      if (realtimeRefresh === request) realtimeRefresh = null
+    })
+  realtimeRefresh = request
+  return request
 }
 
 export function setStoresCache(stores: PriceStore[], epoch?: number) {

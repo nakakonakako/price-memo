@@ -16,6 +16,13 @@ import type { FolderDetailRequest } from '@/features/folders/folderDetailRequest
 import { ShoppingMemoPage } from '@/features/memo/components/ShoppingMemoPage'
 import { DataManagementPage } from '@/features/data-management/components/DataManagementPage'
 import { installResumeSyncListeners } from '@/lib/resumeSync'
+import {
+  clearPendingExternalSync,
+  requestExternalSync,
+  subscribeExternalSync,
+} from '@/lib/externalSync'
+import { subscribePriceMemoRealtime } from '@/lib/priceMemoRealtime'
+import { refreshStoresCacheFromRealtime } from '@/features/stores/api/storesCache'
 
 const FoldersPage = lazy(() =>
   import('@/features/folders/components/FoldersPage').then((m) => ({
@@ -105,6 +112,30 @@ function AuthenticatedApp({
   }, [])
 
   useEffect(() => installResumeSyncListeners(), [])
+
+  useEffect(
+    () =>
+      subscribeExternalSync((tables) => {
+        if (!tables.has('price_stores')) return
+        void refreshStoresCacheFromRealtime().catch(() => {
+          // A failed catalog refresh keeps the current cache and is retried on the next event/resume.
+        })
+      }),
+    [],
+  )
+
+  useEffect(
+    () => {
+      const unsubscribe = subscribePriceMemoRealtime(session.user.id, (table) => {
+        requestExternalSync([table])
+      })
+      return () => {
+        unsubscribe()
+        clearPendingExternalSync()
+      }
+    },
+    [session.user.id],
+  )
 
   return (
     <MainLayout
