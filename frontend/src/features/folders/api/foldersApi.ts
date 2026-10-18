@@ -1,3 +1,7 @@
+import {
+  assertRowsAffected,
+  normalizeMutationError,
+} from '@/lib/appError'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { supabase } from '@/lib/supabase'
 import { bumpFoldersRevision, publishFolderDeleted } from '@/lib/catalogSync'
@@ -62,7 +66,7 @@ export async function renameFolder(
     .select()
     .single()
 
-  if (error) throw error
+  if (error) throw normalizeMutationError(error)
   bumpFoldersRevision()
   return data as PriceFolder
 }
@@ -70,8 +74,13 @@ export async function renameFolder(
 export async function deleteFolder(id: string): Promise<void> {
   const userIdAtStart = getCurrentAuthUserId()
   if (!userIdAtStart) throw new Error('ログインが必要です')
-  const { error } = await supabase.from('price_folders').delete().eq('id', id)
-  if (error) throw error
+  const { data, error } = await supabase
+    .from('price_folders')
+    .delete()
+    .eq('id', id)
+    .select('id')
+  if (error) throw normalizeMutationError(error)
+  assertRowsAffected(data)
   if (getCurrentAuthUserId() === userIdAtStart) {
     publishFolderDeleted({ folderId: id, userId: userIdAtStart })
   }

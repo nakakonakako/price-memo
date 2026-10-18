@@ -20,6 +20,7 @@ import { listRecords, listRecordsForFolders } from '@/features/records/api/recor
 import type { PriceRecord } from '@/features/records/types'
 import { reorderIds } from '@/lib/listOrder'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
+import { isMissingTargetError } from '@/lib/appError'
 import { toUserMessage } from '@/lib/userError'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import { createVisibleLoadTracker } from '@/lib/visibleLoad'
@@ -595,11 +596,16 @@ export function ShoppingMemoPage({
       setMemoItems((prev) => prev.filter((m) => m.folder_id !== folderId))
       setRecords((prev) => prev.filter((r) => r.folder_id !== folderId))
     } catch (err) {
+      if (isMissingTargetError(err)) {
+        setMemoItems((prev) => prev.filter((m) => m.folder_id !== folderId))
+        setRecords((prev) => prev.filter((r) => r.folder_id !== folderId))
+        void load({ silent: true, preserveError: true })
+      }
       setError(toUserMessage(err, 'メモからの削除に失敗しました。'))
     } finally {
       setMutating(false)
     }
-  }, [interactionsLocked, refreshAfterMemoMutation])
+  }, [interactionsLocked, load, refreshAfterMemoMutation])
 
   const handleDragEnd = useCallback(
     async (result: DragEndResult) => {

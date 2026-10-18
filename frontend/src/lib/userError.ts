@@ -1,3 +1,5 @@
+import { isMissingTargetError } from './appError'
+
 function readField(err: unknown, key: string): string {
   if (err && typeof err === 'object' && key in err) {
     const v = (err as Record<string, unknown>)[key]
@@ -29,6 +31,8 @@ export function toUserMessage(
   err: unknown,
   fallback = '操作に失敗しました。しばらくしてからもう一度お試しください。',
 ): string {
+  if (isMissingTargetError(err)) return err.message
+
   const code = readField(err, 'code')
   const msg = rawMessage(err)
   const details = readField(err, 'details')

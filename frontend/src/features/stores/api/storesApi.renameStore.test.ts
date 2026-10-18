@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { isMissingTargetError } from '@/lib/appError'
 import type { PriceStore } from '../types'
 import { applyAuthIdentity, resetAuthIdentityForTests } from '@/lib/authIdentity'
 import {
@@ -162,9 +163,9 @@ describe('renameStore RPC', () => {
       error: { message: 'store not found', code: 'P0002' },
     })
 
-    await expect(renameStore('store-1', 'Renamed')).rejects.toMatchObject({
-      code: 'P0002',
-    })
+    await expect(renameStore('store-1', 'Renamed')).rejects.toSatisfy(
+      (err: unknown) => isMissingTargetError(err),
+    )
     expect(from).toHaveBeenCalledWith('price_stores')
     expect(peekStoresCache()).toEqual([store('store-1', 'Old')])
     expect(bumpStoresRevision).toHaveBeenCalledTimes(1)
@@ -193,7 +194,9 @@ describe('renameStore RPC', () => {
 
     resolveRead({ data: [store('store-1', 'Old')], error: null })
 
-    await expect(pending).rejects.toMatchObject({ code: 'P0002' })
+    await expect(pending).rejects.toSatisfy((err: unknown) =>
+      isMissingTargetError(err),
+    )
     expect(peekStoresCache()).toEqual([
       store('store-2', 'Local'),
       store('store-1', 'Old'),

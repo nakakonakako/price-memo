@@ -1,3 +1,4 @@
+import { assertRowsAffected, normalizeMutationError } from '@/lib/appError'
 import { supabase } from '@/lib/supabase'
 import type { PriceFolder } from '@/features/folders/types'
 
@@ -100,13 +101,15 @@ export async function removeMemoItem(folderId: string): Promise<void> {
   if (userError) throw userError
   if (!user) throw new Error('ログインが必要です')
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('price_memo_items')
     .delete()
     .eq('user_id', user.id)
     .eq('folder_id', folderId)
+    .select('id')
 
-  if (error) throw error
+  if (error) throw normalizeMutationError(error)
+  assertRowsAffected(data)
 }
 
 /** Persist memo display order using the atomic reorder RPC. */

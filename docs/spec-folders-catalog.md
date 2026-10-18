@@ -1,6 +1,6 @@
 # 仕様: フォルダタブ（品目名・店名カタログ）
 
-最終更新: 2026-10-08
+最終更新: 2026-10-18
 
 関連: [project-overview.md](./project-overview.md) / [spec-shopping-memo.md](./spec-shopping-memo.md)
 
@@ -67,7 +67,8 @@ PC でゴミ箱ドラッグ中は重ならないよう非表示。
 - 認証済み画面と店舗キャッシュは `session.user.id` ごとに分離する。ユーザー切替時は keep-alive 画面と店舗キャッシュを破棄し、同じユーザーのトークン更新では維持する。切替前に始まった店舗取得結果は新しいユーザーへ渡さない
 - フォルダ／記録の変更は `lib/catalogSync.ts` の revision。他タブを再表示したとき差分があれば静かに再取得
 - 別デバイスなど外部からの更新は `lib/resumeSync.ts`（`visibilitychange` / `window.focus` / `pageshow`）でフォルダ・全記録・店舗を再取得。表示中タブは復帰直後、非表示の keep-alive タブは次に表示時。`catalogSync` revision とは別経路
-- 品目（フォルダ）の **DB 削除** 成功時は、呼び出し開始時の認証 `user_id` と `folder_id` を含む folder-delete 通知を同期的に送り、続けて folders revision も上げる。DB 削除失敗時は通知も revision も上げない。認証ユーザーが切り替わったあとに完了した古い削除は通知しない
+- 品目（フォルダ）の **DB 削除** 成功時は、呼び出し開始時の認証 `user_id` と `folder_id` を含む folder-delete 通知を同期的に送り、続けて folders revision も上げる。DB 削除失敗時・**0 件削除**（既に消えている／RLS で見えない）時は通知も revision も上げない。削除 API は **非冪等**（0 件を成功扱いしない）。認証ユーザーが切り替わったあとに完了した古い削除は通知しない
+- **同時編集の排他（CAS）** は `updated_at` だけでは保証できない（`price_records` に更新 trigger がなく、書き込み経路・時刻表現が混在する）。完全な編集排他は receipt-manager 側の revision／trigger／RPC 等が必要で、現段階の price-memo では未実装。フロントは 0 件更新・削除の誤成功防止と、対象なし時の安全な再取得・メッセージに限定する
 - 店舗一覧は `storesCache`（`StoreField` / `ensureStore` で共有）。店舗の作成・改名・削除は stores revision で通知し、マウント済み StoreField と keep-alive の店舗カタログをキャッシュから同期
 - 値段推移パネル（recharts）は lazy 分割。開いたときだけ読み込み
 
@@ -171,6 +172,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-18 | 削除 API の非冪等（0 件は MissingTarget）と、同時編集 CAS 未実装の境界を追記 |
 | 2026-10-16 | フォルダ DB 削除成功時の folder-delete 通知と folders revision の併用を追記 |
 | 2026-10-10 | 店舗改名を `rename_price_store` RPC に統合し、価格記録との原子的な更新とキャッシュ再照合を追記 |
 | 2026-10-08 | 店名起点の記録追加を `FolderField` に統合（select＋別作成 UI 廃止）。店名固定・品目 1 操作 1 回作成。プレビュー記録行の操作が親カード開閉に伝播しないよう修正 |
