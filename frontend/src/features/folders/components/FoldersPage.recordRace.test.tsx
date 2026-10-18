@@ -212,6 +212,7 @@ describe('FoldersPage record mutation races', () => {
 
     const view = render(<FoldersPage active />)
     await waitFor(() => expect(listFolders).toHaveBeenCalled())
+    await waitFor(() => expect(listAllRecords).toHaveBeenCalledTimes(1))
 
     await act(async () => {
       bumpFoldersRevision()
