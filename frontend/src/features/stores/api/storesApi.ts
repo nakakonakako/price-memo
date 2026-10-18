@@ -5,6 +5,7 @@ import type { PriceStore } from '../types'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import {
   getStoresCacheEpoch,
+  getStoresCacheAdoptionGeneration,
   setStoresCache,
   StoresCacheStaleError,
 } from './storesCache'
@@ -68,18 +69,23 @@ async function reconcileRenameAfterFailure(
   startEpoch: number,
   userId: string,
 ): Promise<void> {
+  const adoptionGeneration = getStoresCacheAdoptionGeneration()
+  let latestAdoptionGeneration = adoptionGeneration
   try {
     assertStoresMutationEpoch(startEpoch, userId)
     const stores = await listStores()
     assertStoresMutationEpoch(startEpoch, userId)
+    if (getStoresCacheAdoptionGeneration() !== adoptionGeneration) return
     setStoresCache(stores, startEpoch)
+    latestAdoptionGeneration = getStoresCacheAdoptionGeneration()
   } catch {
     // The original RPC error remains authoritative; a failed read must not
     // turn it into a success or apply data from a different account.
   }
   if (
     getStoresCacheEpoch() !== startEpoch ||
-    getCurrentAuthUserId() !== userId
+    getCurrentAuthUserId() !== userId ||
+    getStoresCacheAdoptionGeneration() !== latestAdoptionGeneration
   ) {
     return
   }

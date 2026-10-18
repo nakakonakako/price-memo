@@ -415,9 +415,30 @@ export function FoldersPage({
     }
   }, [])
 
+  const applyAllRecordsSnapshot = useCallback((records: PriceRecord[]) => {
+    setAllRecords(records)
+    setAllRecordsLoaded(true)
+    const folderCounts: Record<string, number> = {}
+    for (const r of records) {
+      folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
+    }
+    setRecordCounts(folderCounts)
+    setRecordsByFolder((current) => {
+      const refreshed: Record<string, PriceRecord[]> = {}
+      for (const folderId of Object.keys(current)) {
+        refreshed[folderId] = sortRecordsByDateDesc(
+          records.filter((record) => record.folder_id === folderId),
+        )
+      }
+      return refreshed
+    })
+  }, [])
+
   const refreshAllRecords = useCallback(async () => {
     const requestId = ++allRecordsRequestRef.current
     const resumeGeneration = getResumeSyncGeneration()
+    const { folders: foldersRevAtStart, records: recordsRevAtStart } =
+      getCatalogRevisions()
     const userIdAtStart = getCurrentAuthUserId()
     setAllRecordsLoading(true)
     try {
@@ -425,17 +446,13 @@ export function FoldersPage({
       if (
         requestId !== allRecordsRequestRef.current ||
         resumeGeneration !== getResumeSyncGeneration() ||
+        getCatalogRevisions().folders !== foldersRevAtStart ||
+        getCatalogRevisions().records !== recordsRevAtStart ||
         getCurrentAuthUserId() !== userIdAtStart
       ) {
         return
       }
-      setAllRecords(records)
-      setAllRecordsLoaded(true)
-      const folderCounts: Record<string, number> = {}
-      for (const r of records) {
-        folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
-      }
-      setRecordCounts(folderCounts)
+      applyAllRecordsSnapshot(records)
     } catch {
       /* optional */
     } finally {
@@ -443,7 +460,7 @@ export function FoldersPage({
         setAllRecordsLoading(false)
       }
     }
-  }, [])
+  }, [applyAllRecordsSnapshot])
 
   useEffect(() => {
     let cancelled = false
@@ -484,6 +501,9 @@ export function FoldersPage({
 
   const refreshFromServerResume = useCallback(async () => {
     const generation = resumeRefreshGenerationRef.current
+    const requestId = ++allRecordsRequestRef.current
+    const { folders: foldersRevAtStart, records: recordsRevAtStart } =
+      getCatalogRevisions()
     const userIdAtStart = getCurrentAuthUserId()
     if (!userIdAtStart) return
 
@@ -492,31 +512,20 @@ export function FoldersPage({
     try {
       const records = await listAllRecords()
       if (
+        requestId !== allRecordsRequestRef.current ||
         resumeRefreshGenerationRef.current !== generation ||
+        getCatalogRevisions().folders !== foldersRevAtStart ||
+        getCatalogRevisions().records !== recordsRevAtStart ||
         getCurrentAuthUserId() !== userIdAtStart
       ) {
         return
       }
-      setAllRecords(records)
-      setAllRecordsLoaded(true)
-      const folderCounts: Record<string, number> = {}
-      for (const r of records) {
-        folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
-      }
-      setRecordCounts(folderCounts)
-      setRecordsByFolder((current) => {
-        const refreshed: Record<string, PriceRecord[]> = {}
-        for (const folderId of Object.keys(current)) {
-          refreshed[folderId] = sortRecordsByDateDesc(
-            records.filter((record) => record.folder_id === folderId),
-          )
-        }
-        return refreshed
-      })
+      applyAllRecordsSnapshot(records)
     } catch {
       /* keep existing records */
     } finally {
       if (
+        requestId === allRecordsRequestRef.current &&
         resumeRefreshGenerationRef.current === generation &&
         getCurrentAuthUserId() === userIdAtStart
       ) {
@@ -539,7 +548,7 @@ export function FoldersPage({
     } catch {
       /* keep existing stores */
     }
-  }, [refreshFolders])
+  }, [applyAllRecordsSnapshot, refreshFolders])
 
   useResumeCatalogRefresh({
     active,
@@ -560,6 +569,7 @@ export function FoldersPage({
       void refreshFolders({ silent: true })
     }
     if (cur.records !== prev.records) {
+      folderListRecordsRequestRef.current += 1
       setRecordsByFolder({})
       void refreshAllRecords()
     }
@@ -807,6 +817,8 @@ export function FoldersPage({
 
     const requestId = ++folderListRecordsRequestRef.current
     const resumeGeneration = getResumeSyncGeneration()
+    const { folders: foldersRevAtStart, records: recordsRevAtStart } =
+      getCatalogRevisions()
     const userIdAtStart = getCurrentAuthUserId()
     try {
       setOpenFolderLoadingId(folderId)
@@ -814,6 +826,8 @@ export function FoldersPage({
       if (
         requestId !== folderListRecordsRequestRef.current ||
         resumeGeneration !== getResumeSyncGeneration() ||
+        getCatalogRevisions().folders !== foldersRevAtStart ||
+        getCatalogRevisions().records !== recordsRevAtStart ||
         getCurrentAuthUserId() !== userIdAtStart
       ) {
         return
@@ -823,6 +837,8 @@ export function FoldersPage({
     } catch (err) {
       if (
         requestId !== folderListRecordsRequestRef.current ||
+        getCatalogRevisions().folders !== foldersRevAtStart ||
+        getCatalogRevisions().records !== recordsRevAtStart ||
         getCurrentAuthUserId() !== userIdAtStart
       ) {
         return
@@ -906,6 +922,8 @@ export function FoldersPage({
 
       const requestId = ++folderListRecordsRequestRef.current
       const resumeGeneration = getResumeSyncGeneration()
+      const { folders: foldersRevAtStart, records: recordsRevAtStart } =
+        getCatalogRevisions()
       const userIdAtStart = getCurrentAuthUserId()
       try {
         setOpenFolderLoadingId(folderId)
@@ -913,6 +931,8 @@ export function FoldersPage({
         if (
           requestId !== folderListRecordsRequestRef.current ||
           resumeGeneration !== getResumeSyncGeneration() ||
+          getCatalogRevisions().folders !== foldersRevAtStart ||
+          getCatalogRevisions().records !== recordsRevAtStart ||
           getCurrentAuthUserId() !== userIdAtStart
         ) {
           return
@@ -922,6 +942,8 @@ export function FoldersPage({
       } catch (err) {
         if (
           requestId !== folderListRecordsRequestRef.current ||
+          getCatalogRevisions().folders !== foldersRevAtStart ||
+          getCatalogRevisions().records !== recordsRevAtStart ||
           getCurrentAuthUserId() !== userIdAtStart
         ) {
           return
