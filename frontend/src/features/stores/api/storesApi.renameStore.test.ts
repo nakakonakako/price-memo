@@ -5,6 +5,8 @@ import {
   resetStoresCacheForTests,
   resetStoresCacheForUser,
   peekStoresCache,
+  setStoresCache,
+  upsertStoresCache,
   StoresCacheStaleError,
 } from './storesCache'
 
@@ -167,6 +169,35 @@ describe('renameStore RPC', () => {
     expect(peekStoresCache()).toEqual([store('store-1', 'Old')])
     expect(bumpStoresRevision).toHaveBeenCalledTimes(1)
     expect(bumpRecordsRevision).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not let failure reconciliation overwrite a newer local cache write', async () => {
+    getUser.mockResolvedValue({
+      data: { user: { id: 'user-a' } },
+      error: null,
+    })
+    rpc.mockResolvedValue({
+      data: null,
+      error: { message: 'rename failed', code: 'P0002' },
+    })
+    setStoresCache([store('store-1', 'Old')])
+
+    let resolveRead: (value: { data: PriceStore[]; error: null }) => void = () => {}
+    readStores.mockImplementationOnce(
+      () => new Promise((resolve) => { resolveRead = resolve }),
+    )
+
+    const pending = renameStore('store-1', 'Renamed')
+    await vi.waitFor(() => expect(readStores).toHaveBeenCalledTimes(1))
+    upsertStoresCache(store('store-2', 'Local'))
+
+    resolveRead({ data: [store('store-1', 'Old')], error: null })
+
+    await expect(pending).rejects.toMatchObject({ code: 'P0002' })
+    expect(peekStoresCache()).toEqual([
+      store('store-2', 'Local'),
+      store('store-1', 'Old'),
+    ])
   })
 
   it('rejects when auth identity changes before RPC completes', async () => {

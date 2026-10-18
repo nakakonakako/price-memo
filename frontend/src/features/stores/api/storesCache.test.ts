@@ -18,6 +18,7 @@ import {
   resetStoresCacheForUser,
   setStoresCache,
   StoresCacheStaleError,
+  removeFromStoresCache,
   upsertStoresCache,
 } from './storesCache'
 
@@ -137,5 +138,81 @@ describe('storesCache', () => {
 
     resetStoresCacheForUser(null)
     expect(peekStoresCache()).toBeNull()
+  })
+
+  it('does not let a stale listStores response overwrite a local upsert', async () => {
+    resetStoresCacheForUser('user-a')
+    let resolveSlow: (stores: PriceStore[]) => void = () => {}
+    listStores.mockImplementationOnce(
+      () =>
+        new Promise<PriceStore[]>((resolve) => {
+          resolveSlow = resolve
+        }),
+    )
+
+    const pending = getStoresCached()
+    upsertStoresCache(store('2', 'Local'))
+
+    resolveSlow([store('9', 'Stale')])
+    const result = await pending
+
+    expect(result).toEqual([store('2', 'Local')])
+    expect(peekStoresCache()).toEqual([store('2', 'Local')])
+  })
+
+  it('does not let an older force refresh overwrite a newer force refresh result', async () => {
+    resetStoresCacheForUser('user-a')
+    setStoresCache([store('1', 'Seed')])
+
+    let resolveFirst: (stores: PriceStore[]) => void = () => {}
+    let resolveSecond: (stores: PriceStore[]) => void = () => {}
+    listStores
+      .mockImplementationOnce(
+        () =>
+          new Promise<PriceStore[]>((resolve) => {
+            resolveFirst = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<PriceStore[]>((resolve) => {
+            resolveSecond = resolve
+          }),
+      )
+
+    const first = getStoresCached({ force: true })
+    const second = getStoresCached({ force: true })
+
+    resolveSecond([store('2', 'Fresh')])
+    const fresh = await second
+    expect(fresh).toEqual([store('2', 'Fresh')])
+    expect(peekStoresCache()).toEqual([store('2', 'Fresh')])
+
+    resolveFirst([store('9', 'Stale')])
+    const stale = await first
+    expect(stale).toEqual([store('2', 'Fresh')])
+    expect(peekStoresCache()).toEqual([store('2', 'Fresh')])
+    expect(listStores).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not let a stale listStores response restore a locally removed store', async () => {
+    resetStoresCacheForUser('user-a')
+    setStoresCache([store('1', 'Alpha'), store('2', 'Beta')])
+    let resolveSlow: (stores: PriceStore[]) => void = () => {}
+    listStores.mockImplementationOnce(
+      () =>
+        new Promise<PriceStore[]>((resolve) => {
+          resolveSlow = resolve
+        }),
+    )
+
+    const pending = getStoresCached({ force: true })
+    removeFromStoresCache('2')
+
+    resolveSlow([store('1', 'Alpha'), store('2', 'Beta')])
+    const result = await pending
+
+    expect(result).toEqual([store('1', 'Alpha')])
+    expect(peekStoresCache()).toEqual([store('1', 'Alpha')])
   })
 })

@@ -86,11 +86,13 @@ vi.mock('./FolderMemoCard', () => ({
     records,
     forceOpen,
     onRemoveFromMemo,
+    onSaved,
   }: {
     folderId: string
     records: PriceRecord[]
     forceOpen?: boolean
     onRemoveFromMemo?: () => void
+    onSaved?: (record: PriceRecord) => void
   }) => {
     const [expanded, setExpanded] = useState(false)
     const [draft, setDraft] = useState('')
@@ -114,6 +116,15 @@ vi.mock('./FolderMemoCard', () => ({
         {onRemoveFromMemo ? (
           <button type="button" data-testid={`remove-${folderId}`} onClick={onRemoveFromMemo}>
             remove
+          </button>
+        ) : null}
+        {onSaved ? (
+          <button
+            type="button"
+            data-testid={`save-${folderId}`}
+            onClick={() => onSaved(recordRow(folderId, 'saved-local'))}
+          >
+            save
           </button>
         ) : null}
       </li>
@@ -1185,5 +1196,130 @@ describe('ShoppingMemoPage catalog refresh', () => {
 
     expect(screen.queryByTestId('memo-card-folder-a')).toBeNull()
     expect(screen.getByTestId('memo-card-folder-b')).toBeTruthy()
+  })
+
+  it('does not drop a locally saved record when a stale full load completes', async () => {
+    let releaseLoad: () => void = () => {}
+    const loadGate = new Promise<void>((resolve) => {
+      releaseLoad = () => resolve()
+    })
+
+    const view = renderPage(true)
+    await waitForInitialLoad()
+
+    view.rerender(
+      <AuthProvider>
+        <ShoppingMemoPage active={false} />
+      </AuthProvider>,
+    )
+
+    listFolders.mockImplementationOnce(() => loadGate.then(() => [folderA, folderB]))
+    listMemoItems.mockImplementationOnce(() =>
+      loadGate.then(() => [memoItem('folder-a', 0), memoItem('folder-b', 1)]),
+    )
+    listRecordsForFolders.mockImplementationOnce(() =>
+      loadGate.then(() => [recordRow('folder-a', 'rec-a')]),
+    )
+
+    act(() => {
+      bumpFoldersRevision()
+    })
+
+    view.rerender(
+      <AuthProvider>
+        <ShoppingMemoPage active={true} />
+      </AuthProvider>,
+    )
+
+    await waitFor(() => {
+      expect(listFolders).toHaveBeenCalledTimes(2)
+    })
+
+    fireEvent.click(screen.getByTestId('save-folder-a'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('memo-card-folder-a').getAttribute('data-record-count')).toBe(
+        '2',
+      )
+    })
+
+    await act(async () => {
+      releaseLoad()
+      await loadGate
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId('memo-card-folder-a').getAttribute('data-record-count')).toBe(
+      '2',
+    )
+  })
+
+  it('does not revert optimistic reorder when a full load started during reorder completes', async () => {
+    let releaseLoad: () => void = () => {}
+    const loadGate = new Promise<void>((resolve) => {
+      releaseLoad = () => resolve()
+    })
+    let resolveReorder: () => void = () => {}
+
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+    const view = renderPage(true)
+    await waitForInitialLoad()
+
+    reorderMemoItems.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveReorder = resolve
+        }),
+    )
+
+    await act(async () => {
+      memoDragEnd?.({
+        action: 'reorder',
+        payload: { kind: 'memo-folder', id: 'folder-b' },
+        beforeId: 'folder-a',
+      })
+    })
+
+    expect(
+      Array.from(screen.getByTestId('memo-card-folder-a').closest('ul')?.children ?? []).map(
+        (row) => row.getAttribute('data-testid'),
+      ),
+    ).toEqual(['memo-card-folder-b', 'memo-card-folder-a'])
+
+    view.rerender(
+      <AuthProvider>
+        <ShoppingMemoPage active={false} />
+      </AuthProvider>,
+    )
+    listFolders.mockImplementationOnce(() => loadGate.then(() => [folderA, folderB]))
+    listMemoItems.mockImplementationOnce(() =>
+      loadGate.then(() => [memoItem('folder-a', 0), memoItem('folder-b', 1)]),
+    )
+    listRecordsForFolders.mockImplementationOnce(() => loadGate.then(() => []))
+    bumpFoldersRevision()
+    view.rerender(
+      <AuthProvider>
+        <ShoppingMemoPage active={true} />
+      </AuthProvider>,
+    )
+
+    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      resolveReorder()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      releaseLoad()
+      await loadGate
+      await Promise.resolve()
+    })
+
+    expect(
+      Array.from(screen.getByTestId('memo-card-folder-a').closest('ul')?.children ?? []).map(
+        (row) => row.getAttribute('data-testid'),
+      ),
+    ).toEqual(['memo-card-folder-b', 'memo-card-folder-a'])
   })
 })

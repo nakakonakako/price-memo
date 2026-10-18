@@ -7,6 +7,10 @@ let cache: PriceStore[] | null = null
 let inflight: Promise<PriceStore[]> | null = null
 let inflightEpoch = 0
 let cacheEpoch = 0
+/** Bumped on local cache writes; fences stale listStores adoption without changing cacheEpoch. */
+let cacheAdoptionGeneration = 0
+/** Latest force-refresh listStores id; only that response may adopt into cache. */
+let forceListStoresRequestId = 0
 let ownerUserId: string | null = null
 
 export class StoresCacheStaleError extends Error {
@@ -20,8 +24,20 @@ function isCurrentEpoch(epoch: number): boolean {
   return epoch === cacheEpoch
 }
 
+function isCurrentAdoptionGeneration(generation: number): boolean {
+  return generation === cacheAdoptionGeneration
+}
+
+function bumpCacheAdoptionGeneration(): void {
+  cacheAdoptionGeneration += 1
+}
+
 export function getStoresCacheEpoch(): number {
   return cacheEpoch
+}
+
+export function getStoresCacheAdoptionGeneration(): number {
+  return cacheAdoptionGeneration
 }
 
 export function getStoresCacheOwnerUserId(): string | null {
@@ -35,6 +51,8 @@ export function resetStoresCacheForUser(userId: string | null): void {
   inflight = null
   inflightEpoch = 0
   cacheEpoch += 1
+  cacheAdoptionGeneration = 0
+  forceListStoresRequestId = 0
 }
 
 /** @internal test helper */
@@ -43,6 +61,8 @@ export function resetStoresCacheForTests(): void {
   inflight = null
   inflightEpoch = 0
   cacheEpoch = 0
+  cacheAdoptionGeneration = 0
+  forceListStoresRequestId = 0
   ownerUserId = null
 }
 
@@ -69,9 +89,26 @@ export async function getStoresCached(
   }
 
   const requestEpoch = cacheEpoch
+  const adoptionAtRequest = cacheAdoptionGeneration
+  const forceRequestId = options?.force ? ++forceListStoresRequestId : null
   const request = listStores()
     .then((stores) => {
       if (!isCurrentEpoch(requestEpoch)) {
+        throw new StoresCacheStaleError()
+      }
+      if (
+        forceRequestId !== null &&
+        forceRequestId !== forceListStoresRequestId
+      ) {
+        if (cache !== null && isCurrentEpoch(requestEpoch)) {
+          return cache
+        }
+        throw new StoresCacheStaleError()
+      }
+      if (!isCurrentAdoptionGeneration(adoptionAtRequest)) {
+        if (cache !== null && isCurrentEpoch(requestEpoch)) {
+          return cache
+        }
         throw new StoresCacheStaleError()
       }
       cache = stores
@@ -101,6 +138,7 @@ export function peekStoresCache(): PriceStore[] | null {
 export function setStoresCache(stores: PriceStore[], epoch?: number) {
   if (epoch !== undefined && !isCurrentEpoch(epoch)) return
   cache = stores
+  bumpCacheAdoptionGeneration()
 }
 
 export function invalidateStoresCache() {
@@ -108,6 +146,8 @@ export function invalidateStoresCache() {
   inflight = null
   inflightEpoch = 0
   cacheEpoch += 1
+  forceListStoresRequestId = 0
+  bumpCacheAdoptionGeneration()
 }
 
 export function upsertStoresCache(store: PriceStore, epoch?: number) {
@@ -118,6 +158,7 @@ export function upsertStoresCache(store: PriceStore, epoch?: number) {
     a.name.localeCompare(b.name, 'ja'),
   )
   cache = next
+  bumpCacheAdoptionGeneration()
   bumpStoresRevision()
 }
 
@@ -126,6 +167,7 @@ export function removeFromStoresCache(id: string, epoch?: number) {
   if (!cache) return
   if (!cache.some((store) => store.id === id)) return
   cache = cache.filter((s) => s.id !== id)
+  bumpCacheAdoptionGeneration()
   bumpStoresRevision()
 }
 

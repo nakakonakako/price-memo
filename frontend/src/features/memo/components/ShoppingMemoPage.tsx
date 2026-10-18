@@ -235,10 +235,13 @@ export function ShoppingMemoPage({
           deletedFolderTombstonesRef.current.delete(folderId)
         }
 
+        const preserveMemoOrder =
+          reorderGenerationRef.current !== reorderGeneration ||
+          reorderInFlightRef.current
         setAllFolders(withoutTombstonedFolders(folderList))
         setMemoItems((current) => {
           const visible = withoutTombstonedMemoItems(memoList)
-          return reorderGenerationRef.current !== reorderGeneration
+          return preserveMemoOrder
             ? preserveCurrentMemoOrder(visible, current)
             : visible
         })
@@ -409,21 +412,27 @@ export function ShoppingMemoPage({
     }
 
     if (recordsChanged) {
+      loadGenerationRef.current += 1
       const generation = loadGenerationRef.current
       const reorderGeneration = reorderGenerationRef.current
+      const recordsRevAtStart = cur.records
       const userIdAtStart = getCurrentAuthUserId()
       if (!userIdAtStart) return
       void listMemoItems()
         .then((memoList) => {
           if (
             loadGenerationRef.current !== generation ||
+            getCatalogRevisions().records !== recordsRevAtStart ||
             getCurrentAuthUserId() !== userIdAtStart
           ) {
             return null
           }
+          const preserveMemoOrder =
+            reorderGenerationRef.current !== reorderGeneration ||
+            reorderInFlightRef.current
           const visible = withoutTombstonedMemoItems(memoList)
           setMemoItems((current) =>
-            reorderGenerationRef.current !== reorderGeneration
+            preserveMemoOrder
               ? preserveCurrentMemoOrder(visible, current)
               : visible,
           )
@@ -433,6 +442,7 @@ export function ShoppingMemoPage({
           if (
             recordList == null ||
             loadGenerationRef.current !== generation ||
+            getCatalogRevisions().records !== recordsRevAtStart ||
             getCurrentAuthUserId() !== userIdAtStart
           ) {
             return
@@ -617,6 +627,7 @@ export function ShoppingMemoPage({
         }
         const reorderGeneration = reorderGenerationRef.current + 1
         reorderGenerationRef.current = reorderGeneration
+        loadGenerationRef.current += 1
         reorderInFlightRef.current = true
 
         const map = new Map(prev.map((m) => [m.folder_id, m]))
@@ -650,6 +661,7 @@ export function ShoppingMemoPage({
         } finally {
           if (reorderGenerationRef.current === reorderGeneration) {
             reorderInFlightRef.current = false
+            reorderGenerationRef.current += 1
           }
         }
       }
@@ -659,6 +671,7 @@ export function ShoppingMemoPage({
 
   const handleSaved = (record: PriceRecord) => {
     if (deletedFolderTombstonesRef.current.has(record.folder_id)) return
+    loadGenerationRef.current += 1
     setRecords((prev) => withoutTombstonedRecords([record, ...prev]))
   }
 

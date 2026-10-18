@@ -21,6 +21,7 @@ export function useFolders() {
   const [error, setError] = useState<string | null>(null)
   const [isMutating, setIsMutating] = useState(false)
   const createInFlightRef = useRef(false)
+  const reorderInFlightRef = useRef(false)
   const mountedRef = useRef(true)
   const refreshGenerationRef = useRef(0)
   const visibleLoadRef = useRef(createVisibleLoadTracker())
@@ -46,7 +47,9 @@ export function useFolders() {
       if (
         !mountedRef.current ||
         generation !== refreshGenerationRef.current ||
-        getCurrentAuthUserId() !== userIdAtStart
+        getCurrentAuthUserId() !== userIdAtStart ||
+        createInFlightRef.current ||
+        reorderInFlightRef.current
       ) {
         return
       }
@@ -130,6 +133,7 @@ export function useFolders() {
     try {
       const created = await createFolder(name)
       if (!mountedRef.current) return created
+      refreshGenerationRef.current += 1
       if (options?.atStart) {
         const prevWithoutDup = folders.filter((f) => f.id !== created.id)
         const next = [created, ...prevWithoutDup].map((f, sort_order) => ({
@@ -139,8 +143,11 @@ export function useFolders() {
         setFolders(next)
         try {
           await reorderFolders(next.map((f) => f.id))
+          if (!mountedRef.current) return created
+          refreshGenerationRef.current += 1
         } catch (err) {
           setError(toUserMessage(err, '並べ替えの保存に失敗しました。'))
+          createInFlightRef.current = false
           await refresh()
           throw err
         }
@@ -162,6 +169,8 @@ export function useFolders() {
     setError(null)
     try {
       const updated = await renameFolder(id, name)
+      if (!mountedRef.current) return
+      refreshGenerationRef.current += 1
       setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)))
     } catch (err) {
       setError(toUserMessage(err, 'フォルダ名の変更に失敗しました。'))
@@ -176,6 +185,8 @@ export function useFolders() {
     setError(null)
     try {
       await deleteFolder(id)
+      if (!mountedRef.current) return
+      refreshGenerationRef.current += 1
       setFolders((prev) => prev.filter((f) => f.id !== id))
     } catch (err) {
       setError(toUserMessage(err, 'フォルダの削除に失敗しました。'))
@@ -186,6 +197,8 @@ export function useFolders() {
   }
 
   const reorder = async (ids: string[]) => {
+    refreshGenerationRef.current += 1
+    reorderInFlightRef.current = true
     const map = new Map(folders.map((f) => [f.id, f]))
     const next = ids
       .map((id, sort_order) => {
@@ -196,10 +209,15 @@ export function useFolders() {
     setFolders(next)
     try {
       await reorderFolders(ids)
+      if (!mountedRef.current) return
+      refreshGenerationRef.current += 1
     } catch (err) {
       setError(toUserMessage(err, '並べ替えの保存に失敗しました。'))
+      reorderInFlightRef.current = false
       await refresh()
       throw err
+    } finally {
+      reorderInFlightRef.current = false
     }
   }
 
