@@ -166,4 +166,54 @@ describe('FoldersPage resume sync', () => {
     expect(screen.queryByText('stale-marker')).toBeNull()
     expect(screen.getByText('fresh-marker')).toBeTruthy()
   })
+
+  it('clears all-records loading when resume listAllRecords fails after invalidating the initial fetch', async () => {
+    let releaseInitialAll: () => void = () => {}
+    const initialAllGate = new Promise<PriceRecord[]>((resolve) => {
+      releaseInitialAll = () =>
+        resolve([recordRow('stale-initial', 'stale-initial-marker')])
+    })
+    listAllRecords.mockImplementation(() => initialAllGate)
+
+    render(<FoldersPage active />)
+    await waitFor(() => expect(listFolders).toHaveBeenCalled())
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'name' } })
+    expect(screen.getByRole('combobox').value).toBe('name')
+
+    fireEvent.click(screen.getByText('A'))
+    await waitFor(() =>
+      expect(screen.getByText('中身を読み込み中...')).toBeTruthy(),
+    )
+    expect(listRecords).not.toHaveBeenCalled()
+
+    listAllRecords.mockRejectedValueOnce(new Error('resume list failed'))
+    act(() => {
+      triggerResumeSyncForTests()
+      vi.runAllTimers()
+    })
+
+    await waitFor(() => expect(listAllRecords).toHaveBeenCalledTimes(2))
+
+    listRecords.mockResolvedValueOnce([
+      { ...recordRow('fresh-folder', 'note'), store_name: 'fresh-folder-marker' },
+    ])
+    fireEvent.click(screen.getByText('A'))
+    fireEvent.click(screen.getByText('A'))
+    await waitFor(() => expect(listRecords).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(screen.getByText(/fresh-folder-marker/)).toBeTruthy(),
+    )
+    expect(screen.getByRole('combobox').value).toBe('name')
+
+    await act(async () => {
+      releaseInitialAll()
+      await initialAllGate
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByText('stale-initial-marker')).toBeNull()
+    expect(screen.getByText(/fresh-folder-marker/)).toBeTruthy()
+    expect(screen.getByRole('combobox').value).toBe('name')
+  })
 })

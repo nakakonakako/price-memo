@@ -501,7 +501,6 @@ export function FoldersPage({
       }
       setAllRecords(records)
       setAllRecordsLoaded(true)
-      setAllRecordsLoading(false)
       const folderCounts: Record<string, number> = {}
       for (const r of records) {
         folderCounts[r.folder_id] = (folderCounts[r.folder_id] ?? 0) + 1
@@ -518,6 +517,13 @@ export function FoldersPage({
       })
     } catch {
       /* keep existing records */
+    } finally {
+      if (
+        resumeRefreshGenerationRef.current === generation &&
+        getCurrentAuthUserId() === userIdAtStart
+      ) {
+        setAllRecordsLoading(false)
+      }
     }
 
     const storesEpoch = getStoresCacheEpoch()
