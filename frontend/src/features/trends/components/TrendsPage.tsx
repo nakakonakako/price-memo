@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { listFolders } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
+import { createVisibleLoadTracker } from '@/lib/visibleLoad'
 import { getCatalogRevisions } from '@/lib/catalogSync'
 import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
 import { toUserMessage } from '@/lib/userError'
@@ -16,6 +17,7 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
     null,
   )
   const resumeRefreshGenerationRef = useRef(0)
+  const visibleLoadRef = useRef(createVisibleLoadTracker())
 
   const invalidateResumeLoads = useCallback(() => {
     resumeRefreshGenerationRef.current += 1
@@ -40,6 +42,9 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
       setError(null)
     } catch {
       /* keep existing folders */
+    } finally {
+      visibleLoadRef.current.settle()
+      if (getCurrentAuthUserId() === userIdAtStart) setFoldersLoading(false)
     }
   }, [])
 
@@ -54,6 +59,7 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
     const userIdAtStart = getCurrentAuthUserId()
     let cancelled = false
     ;(async () => {
+      visibleLoadRef.current.begin()
       setFoldersLoading(true)
       try {
         const list = await listFolders()
@@ -77,7 +83,7 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
       } finally {
         if (
           !cancelled &&
-          generation === resumeRefreshGenerationRef.current &&
+          visibleLoadRef.current.end() &&
           getCurrentAuthUserId() === userIdAtStart
         ) {
           setFoldersLoading(false)
@@ -152,7 +158,7 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
           )}
 
           {folderId && (
-            <FolderTrendPanel folderId={folderId} />
+            <FolderTrendPanel folderId={folderId} resumeSyncActive={active} />
           )}
         </>
       )}

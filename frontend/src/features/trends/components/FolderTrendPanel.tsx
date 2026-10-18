@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
+import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import {
   CartesianGrid,
   Line,
@@ -33,6 +35,8 @@ type Props = {
   records?: PriceRecord[]
   recordsLoading?: boolean
   compact?: boolean
+  /** Trends tab keep-alive: refetch records on app resume without remounting. */
+  resumeSyncActive?: boolean
 }
 
 export function FolderTrendPanel({
@@ -40,6 +44,7 @@ export function FolderTrendPanel({
   records: recordsProp,
   recordsLoading: recordsLoadingProp,
   compact = false,
+  resumeSyncActive = false,
 }: Props) {
   const isMobile = useMediaQuery('(max-width: 1023px)')
   const [fetchedRecords, setFetchedRecords] = useState<PriceRecord[]>([])
@@ -59,29 +64,59 @@ export function FolderTrendPanel({
   const CHART_MARGIN_RIGHT = 8
 
   const usesExternalRecords = recordsProp !== undefined
+  const fetchGenerationRef = useRef(0)
+
+  const fetchRecordsFromServer = useCallback(async () => {
+    if (usesExternalRecords) return
+    const generation = ++fetchGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
+    if (!userIdAtStart) return
+    setFetchLoading(true)
+    setFetchError(null)
+    try {
+      const list = await listRecords(folderId)
+      if (
+        generation !== fetchGenerationRef.current ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
+      setFetchedRecords(list)
+    } catch (err) {
+      if (
+        generation !== fetchGenerationRef.current ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
+      setFetchError(toUserMessage(err, 'レコードの取得に失敗しました。'))
+    } finally {
+      if (generation === fetchGenerationRef.current) {
+        setFetchLoading(false)
+      }
+    }
+  }, [folderId, usesExternalRecords])
+
+  const invalidateResumeFetch = useCallback(() => {
+    fetchGenerationRef.current += 1
+  }, [])
 
   useEffect(() => {
     if (usesExternalRecords) return
-    let cancelled = false
-    ;(async () => {
-      setFetchLoading(true)
-      setFetchError(null)
-      try {
-        const list = await listRecords(folderId)
-        if (cancelled) return
-        setFetchedRecords(list)
-      } catch (err) {
-        if (!cancelled) {
-          setFetchError(toUserMessage(err, 'レコードの取得に失敗しました。'))
-        }
-      } finally {
-        if (!cancelled) setFetchLoading(false)
-      }
-    })()
+    const frame = requestAnimationFrame(() => {
+      void fetchRecordsFromServer()
+    })
     return () => {
-      cancelled = true
+      cancelAnimationFrame(frame)
+      fetchGenerationRef.current += 1
     }
-  }, [folderId, usesExternalRecords])
+  }, [fetchRecordsFromServer, usesExternalRecords])
+
+  useResumeCatalogRefresh({
+    active: resumeSyncActive && !usesExternalRecords,
+    onResumeSignal: invalidateResumeFetch,
+    onRefresh: fetchRecordsFromServer,
+  })
 
   const records = recordsProp ?? fetchedRecords
   const recordsLoading = recordsLoadingProp ?? fetchLoading
@@ -135,17 +170,24 @@ export function FolderTrendPanel({
     [records, unit, effectiveBasis],
   )
 
+  const storeSummaries = useMemo(() => summarizeByStore(allPoints), [allPoints])
+
+  const activeStoreFilter = useMemo(() => {
+    if (!selectedStore) return null
+    return storeSummaries.some((s) => s.store === selectedStore)
+      ? selectedStore
+      : null
+  }, [selectedStore, storeSummaries])
+
   const points = useMemo(() => {
-    if (!selectedStore) return allPoints
-    return allPoints.filter((p) => p.store === selectedStore)
-  }, [allPoints, selectedStore])
+    if (!activeStoreFilter) return allPoints
+    return allPoints.filter((p) => p.store === activeStoreFilter)
+  }, [allPoints, activeStoreFilter])
 
   const chartRows = useMemo(
     () => toChronologicalChartData(points),
     [points],
   )
-
-  const storeSummaries = useMemo(() => summarizeByStore(allPoints), [allPoints])
 
   const selectedPoint: TrendPoint | null =
     selectedIndex != null ? (points[selectedIndex] ?? null) : null
@@ -271,9 +313,9 @@ export function FolderTrendPanel({
             </p>
           )}
 
-          {selectedStore && (
+          {activeStoreFilter && (
             <p className="text-sm text-stone-600">
-              <span className="font-medium text-stone-900">「{selectedStore}」</span>
+              <span className="font-medium text-stone-900">「{activeStoreFilter}」</span>
               の記録を表示中
               <button
                 type="button"
@@ -377,7 +419,7 @@ export function FolderTrendPanel({
 
           <StoreList
             summaries={storeSummaries}
-            selectedStore={selectedStore}
+            selectedStore={activeStoreFilter}
             onSelectStore={setSelectedStore}
             compact={compact}
             useCards={useStoreCards}

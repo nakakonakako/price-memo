@@ -431,6 +431,62 @@ describe('ShoppingMemoPage resume sync', () => {
     expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
   })
 
+  it('clears loading when resume arrives during the initial fetch', async () => {
+    let releaseInitial: () => void = () => {}
+    const initialGate = new Promise<void>((resolve) => {
+      releaseInitial = () => resolve()
+    })
+
+    listMemoItems.mockImplementation(() =>
+      initialGate.then(() => [memoItem('folder-a', 0), memoItem('folder-b', 1)]),
+    )
+
+    renderPage(true)
+    expect(screen.getByText('読み込み中...')).toBeTruthy()
+
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0)])
+    act(() => {
+      triggerResumeSyncForTests()
+      vi.runAllTimers()
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('読み込み中...')).toBeNull()
+      expect(screen.getByTestId('memo-card-folder-a')).toBeTruthy()
+    })
+    await act(async () => {
+      releaseInitial()
+      await initialGate
+    })
+  })
+
+  it('clears loading after a failed resume fetch that interrupted the initial load', async () => {
+    let releaseInitial: () => void = () => {}
+    const initialGate = new Promise<void>((resolve) => {
+      releaseInitial = () => resolve()
+    })
+
+    listMemoItems.mockImplementation(() =>
+      initialGate.then(() => [memoItem('folder-a', 0), memoItem('folder-b', 1)]),
+    )
+
+    renderPage(true)
+
+    listMemoItems.mockRejectedValueOnce(new Error('network down'))
+    act(() => {
+      triggerResumeSyncForTests()
+      vi.runAllTimers()
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByText('読み込み中...')).toBeNull()
+    })
+    await act(async () => {
+      releaseInitial()
+      await initialGate
+    })
+  })
+
   it('keeps existing data on resume fetch failure and retries on the next resume', async () => {
     renderPage(true)
     await waitForInitialLoad()

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
+import { createVisibleLoadTracker } from '@/lib/visibleLoad'
 import { toUserMessage } from '@/lib/userError'
 import {
   createFolder,
@@ -22,6 +23,7 @@ export function useFolders() {
   const createInFlightRef = useRef(false)
   const mountedRef = useRef(true)
   const refreshGenerationRef = useRef(0)
+  const visibleLoadRef = useRef(createVisibleLoadTracker())
 
   useEffect(() => {
     mountedRef.current = true
@@ -33,7 +35,11 @@ export function useFolders() {
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     const generation = ++refreshGenerationRef.current
     const userIdAtStart = getCurrentAuthUserId()
-    if (!opts?.silent) setIsLoading(true)
+    const startedVisibleLoad = !opts?.silent
+    if (startedVisibleLoad) {
+      visibleLoadRef.current.begin()
+      setIsLoading(true)
+    }
     setError(null)
     try {
       const next = await listFolders()
@@ -55,10 +61,16 @@ export function useFolders() {
       }
       setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
     } finally {
+      if (opts?.silent) {
+        visibleLoadRef.current.settle()
+        if (mountedRef.current && getCurrentAuthUserId() === userIdAtStart) {
+          setIsLoading(false)
+        }
+      }
       if (
-        !opts?.silent &&
+        startedVisibleLoad &&
         mountedRef.current &&
-        generation === refreshGenerationRef.current &&
+        visibleLoadRef.current.end() &&
         getCurrentAuthUserId() === userIdAtStart
       ) {
         setIsLoading(false)
@@ -70,6 +82,7 @@ export function useFolders() {
     let cancelled = false
     const generation = ++refreshGenerationRef.current
     const userIdAtStart = getCurrentAuthUserId()
+    visibleLoadRef.current.begin()
     listFolders()
       .then((next) => {
         if (
@@ -92,7 +105,7 @@ export function useFolders() {
       .finally(() => {
         if (
           !cancelled &&
-          generation === refreshGenerationRef.current &&
+          visibleLoadRef.current.end() &&
           getCurrentAuthUserId() === userIdAtStart
         ) {
           setIsLoading(false)

@@ -295,6 +295,7 @@ export function FoldersPage({
   const [addingBusy, setAddingBusy] = useState(false)
   const [editingBusy, setEditingBusy] = useState(false)
   const allRecordsRequestRef = useRef(0)
+  const folderListRecordsRequestRef = useRef(0)
   const [catalogQuery, setCatalogQuery] = useState('')
   const [catalogSearchOpen, setCatalogSearchOpen] = useState(false)
   const catalogSearchRef = useRef<HTMLInputElement>(null)
@@ -479,6 +480,8 @@ export function FoldersPage({
 
   const invalidateResumeLoads = useCallback(() => {
     resumeRefreshGenerationRef.current += 1
+    allRecordsRequestRef.current += 1
+    folderListRecordsRequestRef.current += 1
   }, [])
 
   const refreshFromServerResume = useCallback(async () => {
@@ -798,19 +801,37 @@ export function FoldersPage({
       return
     }
 
+    const requestId = ++folderListRecordsRequestRef.current
+    const resumeGeneration = getResumeSyncGeneration()
+    const userIdAtStart = getCurrentAuthUserId()
     try {
       setOpenFolderLoadingId(folderId)
       const records = await listRecords(folderId)
+      if (
+        requestId !== folderListRecordsRequestRef.current ||
+        resumeGeneration !== getResumeSyncGeneration() ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
       setRecordsByFolder((prev) => ({ ...prev, [folderId]: records }))
       setRecordCounts((prev) => ({ ...prev, [folderId]: records.length }))
     } catch (err) {
+      if (
+        requestId !== folderListRecordsRequestRef.current ||
+        getCurrentAuthUserId() !== userIdAtStart
+      ) {
+        return
+      }
       const msg = toUserMessage(
         err,
         'フォルダ中身の読み込みに失敗しました。',
       )
       setRecordsError(msg)
     } finally {
-      setOpenFolderLoadingId(null)
+      if (requestId === folderListRecordsRequestRef.current) {
+        setOpenFolderLoadingId(null)
+      }
     }
   }, [allRecordsLoaded, hydrateFolderFromAll, recordsByFolder])
 
@@ -879,17 +900,35 @@ export function FoldersPage({
         return
       }
 
+      const requestId = ++folderListRecordsRequestRef.current
+      const resumeGeneration = getResumeSyncGeneration()
+      const userIdAtStart = getCurrentAuthUserId()
       try {
         setOpenFolderLoadingId(folderId)
         const records = await listRecords(folderId)
+        if (
+          requestId !== folderListRecordsRequestRef.current ||
+          resumeGeneration !== getResumeSyncGeneration() ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          return
+        }
         setRecordsByFolder((prev) => ({ ...prev, [folderId]: records }))
         setRecordCounts((prev) => ({ ...prev, [folderId]: records.length }))
       } catch (err) {
+        if (
+          requestId !== folderListRecordsRequestRef.current ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          return
+        }
         setRecordsError(
           toUserMessage(err, 'フォルダ中身の読み込みに失敗しました。'),
         )
       } finally {
-        setOpenFolderLoadingId(null)
+        if (requestId === folderListRecordsRequestRef.current) {
+          setOpenFolderLoadingId(null)
+        }
       }
     },
     [
