@@ -399,22 +399,27 @@ export function FoldersPage({
     return rows
   }, [catalogQueryTrimmed, storeSort, stores])
 
-  const refreshStores = useCallback(async (options?: { force?: boolean }) => {
-    const epoch = getStoresCacheEpoch()
-    setStoresLoading(true)
-    setStoresError(null)
-    try {
-      const list = await getStoresCached({ force: options?.force })
-      if (epoch !== getStoresCacheEpoch()) return
-      setStoresCache(list, epoch)
-      setStores(list)
-    } catch (err) {
-      if (epoch !== getStoresCacheEpoch()) return
-      setStoresError(toUserMessage(err, '店舗の読み込みに失敗しました。'))
-    } finally {
-      if (epoch === getStoresCacheEpoch()) setStoresLoading(false)
-    }
-  }, [])
+  const refreshStores = useCallback(
+    async (options?: { force?: boolean }): Promise<PriceStore[] | null> => {
+      const epoch = getStoresCacheEpoch()
+      setStoresLoading(true)
+      setStoresError(null)
+      try {
+        const list = await getStoresCached({ force: options?.force })
+        if (epoch !== getStoresCacheEpoch()) return null
+        setStoresCache(list, epoch)
+        setStores(list)
+        return list
+      } catch (err) {
+        if (epoch !== getStoresCacheEpoch()) return null
+        setStoresError(toUserMessage(err, '店舗の読み込みに失敗しました。'))
+        return null
+      } finally {
+        if (epoch === getStoresCacheEpoch()) setStoresLoading(false)
+      }
+    },
+    [],
+  )
 
   const applyAllRecordsSnapshot = useCallback((records: PriceRecord[]) => {
     folderListRecordsRequestRef.current += 1
@@ -707,11 +712,19 @@ export function FoldersPage({
       setDeleteConfirmStoreId(null)
     } catch (err) {
       if (isMissingTargetError(err)) {
-        await refreshStores({ force: true })
-        finalizeStoreRemoved(storeId, epoch)
-        setDeleteConfirmStoreId(null)
+        const refreshedStores = await refreshStores({ force: true })
+        if (
+          refreshedStores &&
+          epoch === getStoresCacheEpoch() &&
+          !refreshedStores.some((store) => store.id === storeId)
+        ) {
+          finalizeStoreRemoved(storeId, epoch)
+          setDeleteConfirmStoreId(null)
+        }
       }
-      setStoresError(toUserMessage(err, '店舗の削除に失敗しました。'))
+      if (epoch === getStoresCacheEpoch()) {
+        setStoresError(toUserMessage(err, '店舗の削除に失敗しました。'))
+      }
     } finally {
       setDeleteConfirmStoreBusy(false)
     }
@@ -1116,17 +1129,28 @@ export function FoldersPage({
 
   const requestDeleteStore = useCallback(
     (storeId: string) => {
+      const epoch = getStoresCacheEpoch()
       const count = storeRecordCounts[storeId] ?? 0
       if (count > 0) {
         setDeleteConfirmStoreId(storeId)
       } else {
         void deleteStore(storeId)
-          .then(() => finalizeStoreRemoved(storeId))
+          .then(() => {
+            if (epoch !== getStoresCacheEpoch()) return
+            finalizeStoreRemoved(storeId, epoch)
+          })
           .catch(async (err) => {
             if (isMissingTargetError(err)) {
-              await refreshStores({ force: true })
-              finalizeStoreRemoved(storeId)
+              const refreshedStores = await refreshStores({ force: true })
+              if (
+                refreshedStores &&
+                epoch === getStoresCacheEpoch() &&
+                !refreshedStores.some((store) => store.id === storeId)
+              ) {
+                finalizeStoreRemoved(storeId, epoch)
+              }
             }
+            if (epoch !== getStoresCacheEpoch()) return
             setStoresError(
               toUserMessage(err, '店舗の削除に失敗しました。'),
             )
