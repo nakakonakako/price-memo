@@ -243,6 +243,123 @@ describe('useFolders mutation races', () => {
     expect(reorderFolders).toHaveBeenCalledWith(['folder-b', 'folder-a'])
   })
 
+  it('does not keep stale folder order when refresh resolves before reorder RPC succeeds', async () => {
+    listFolders.mockResolvedValue([folderA, folderB])
+    const apiRef = { current: null as ReturnType<typeof useFolders> | null }
+    render(<Probe apiRef={apiRef} />)
+    await waitFor(() => expect(apiRef.current?.folders).toHaveLength(2))
+
+    let releaseStale: () => void = () => {}
+    const staleGate = new Promise<typeof folderA[]>((resolve) => {
+      releaseStale = () => resolve([folderA, folderB])
+    })
+    listFolders.mockImplementationOnce(() => staleGate)
+
+    let releaseReorder: () => void = () => {}
+    const reorderGate = new Promise<void>((resolve) => {
+      releaseReorder = () => resolve()
+    })
+    reorderFolders.mockImplementation(() => reorderGate)
+
+    await act(async () => {
+      void apiRef.current?.reorder(['folder-b', 'folder-a'])
+    })
+
+    const refreshPromise = apiRef.current?.refresh({ silent: true })
+    expect(apiRef.current?.folders.map((folder) => folder.id)).toEqual([
+      'folder-b',
+      'folder-a',
+    ])
+
+    await act(async () => {
+      releaseStale()
+      await staleGate
+      await refreshPromise
+    })
+
+    expect(apiRef.current?.folders.map((folder) => folder.id)).toEqual([
+      'folder-b',
+      'folder-a',
+    ])
+
+    await act(async () => {
+      releaseReorder()
+      await reorderGate
+      await Promise.resolve()
+    })
+
+    expect(apiRef.current?.folders.map((folder) => folder.id)).toEqual([
+      'folder-b',
+      'folder-a',
+    ])
+    expect(reorderFolders).toHaveBeenCalledWith(['folder-b', 'folder-a'])
+  })
+
+  it('does not overwrite an atStart create while its reorder RPC is pending', async () => {
+    listFolders.mockResolvedValue([folderA, folderB])
+    const apiRef = { current: null as ReturnType<typeof useFolders> | null }
+    render(<Probe apiRef={apiRef} />)
+    await waitFor(() => expect(apiRef.current?.folders).toHaveLength(2))
+
+    createFolder.mockResolvedValue(folderCreated)
+    let releaseReorder: () => void = () => {}
+    const reorderGate = new Promise<void>((resolve) => {
+      releaseReorder = () => resolve()
+    })
+    reorderFolders.mockImplementation(() => reorderGate)
+
+    let createPromise: Promise<typeof folderCreated> | undefined
+    await act(async () => {
+      createPromise = apiRef.current?.create('New', { atStart: true })
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(reorderFolders).toHaveBeenCalledTimes(1))
+
+    let releaseStale: () => void = () => {}
+    const staleGate = new Promise<typeof folderA[]>((resolve) => {
+      releaseStale = () => resolve([folderA, folderB])
+    })
+    listFolders.mockImplementationOnce(() => staleGate)
+    const refreshPromise = apiRef.current?.refresh({ silent: true })
+
+    await act(async () => {
+      releaseStale()
+      await staleGate
+      await refreshPromise
+    })
+
+    await act(async () => {
+      releaseReorder()
+      await reorderGate
+      await createPromise
+    })
+
+    expect(apiRef.current?.folders.map((folder) => folder.id)).toEqual([
+      'folder-new',
+      'folder-a',
+      'folder-b',
+    ])
+  })
+
+  it('refreshes server order after a reorder RPC fails', async () => {
+    listFolders.mockResolvedValue([folderA, folderB])
+    const apiRef = { current: null as ReturnType<typeof useFolders> | null }
+    render(<Probe apiRef={apiRef} />)
+    await waitFor(() => expect(apiRef.current?.folders).toHaveLength(2))
+
+    reorderFolders.mockRejectedValue(new Error('reorder failed'))
+    await act(async () => {
+      await expect(
+        apiRef.current?.reorder(['folder-b', 'folder-a']),
+      ).rejects.toThrow('reorder failed')
+    })
+
+    expect(apiRef.current?.folders.map((folder) => folder.id)).toEqual([
+      'folder-a',
+      'folder-b',
+    ])
+  })
+
   it('does not apply a listFolders request started during reorder after the RPC succeeds', async () => {
     listFolders.mockResolvedValue([folderA, folderB])
     const apiRef = { current: null as ReturnType<typeof useFolders> | null }

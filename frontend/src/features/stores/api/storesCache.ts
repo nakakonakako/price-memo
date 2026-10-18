@@ -9,6 +9,8 @@ let inflightEpoch = 0
 let cacheEpoch = 0
 /** Bumped on local cache writes; fences stale listStores adoption without changing cacheEpoch. */
 let cacheAdoptionGeneration = 0
+/** Latest force-refresh listStores id; only that response may adopt into cache. */
+let forceListStoresRequestId = 0
 let ownerUserId: string | null = null
 
 export class StoresCacheStaleError extends Error {
@@ -50,6 +52,7 @@ export function resetStoresCacheForUser(userId: string | null): void {
   inflightEpoch = 0
   cacheEpoch += 1
   cacheAdoptionGeneration = 0
+  forceListStoresRequestId = 0
 }
 
 /** @internal test helper */
@@ -59,6 +62,7 @@ export function resetStoresCacheForTests(): void {
   inflightEpoch = 0
   cacheEpoch = 0
   cacheAdoptionGeneration = 0
+  forceListStoresRequestId = 0
   ownerUserId = null
 }
 
@@ -86,9 +90,19 @@ export async function getStoresCached(
 
   const requestEpoch = cacheEpoch
   const adoptionAtRequest = cacheAdoptionGeneration
+  const forceRequestId = options?.force ? ++forceListStoresRequestId : null
   const request = listStores()
     .then((stores) => {
       if (!isCurrentEpoch(requestEpoch)) {
+        throw new StoresCacheStaleError()
+      }
+      if (
+        forceRequestId !== null &&
+        forceRequestId !== forceListStoresRequestId
+      ) {
+        if (cache !== null && isCurrentEpoch(requestEpoch)) {
+          return cache
+        }
         throw new StoresCacheStaleError()
       }
       if (!isCurrentAdoptionGeneration(adoptionAtRequest)) {
@@ -132,6 +146,7 @@ export function invalidateStoresCache() {
   inflight = null
   inflightEpoch = 0
   cacheEpoch += 1
+  forceListStoresRequestId = 0
   bumpCacheAdoptionGeneration()
 }
 

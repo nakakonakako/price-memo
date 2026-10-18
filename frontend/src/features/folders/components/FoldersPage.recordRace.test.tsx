@@ -201,6 +201,10 @@ describe('FoldersPage record mutation races', () => {
 
     expect(screen.queryByText('stale-folder-marker')).toBeNull()
     expect(screen.getByText('fresh-marker')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '← 一覧へ' }))
+    expect(
+      screen.getByRole('button', { name: 'すべての記録（1）' }),
+    ).toBeTruthy()
   })
 
   it('does not apply listAllRecords when folders revision changes during fetch', async () => {
@@ -236,6 +240,45 @@ describe('FoldersPage record mutation races', () => {
     fireEvent.click(screen.getByRole('button', { name: /すべての記録/ }))
     await waitFor(() => expect(screen.getByText('fresh-folders-marker')).toBeTruthy())
     expect(screen.queryByText('stale-folders-marker')).toBeNull()
+  })
+
+  it('does not apply stale listRecords after listAllRecords snapshot is adopted first', async () => {
+    let releaseInitialAll: () => void = () => {}
+    const initialAllGate = new Promise<PriceRecord[]>((resolve) => {
+      releaseInitialAll = () =>
+        resolve([recordRow('fresh', 'fresh-marker')])
+    })
+    listAllRecords.mockImplementationOnce(() => initialAllGate)
+
+    let releaseStaleFolder: () => void = () => {}
+    const staleFolderGate = new Promise<PriceRecord[]>((resolve) => {
+      releaseStaleFolder = () =>
+        resolve([recordRow('stale-folder', 'stale-folder-marker')])
+    })
+    listRecords.mockImplementation(() => staleFolderGate)
+
+    render(<FoldersPage active />)
+    await waitFor(() => expect(screen.getByText('A')).toBeTruthy())
+
+    fireEvent.click(screen.getByRole('button', { name: 'すべての記録（0）' }))
+    await waitFor(() => expect(listRecords).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      releaseInitialAll()
+      await initialAllGate
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(screen.getByText('fresh-marker')).toBeTruthy())
+
+    await act(async () => {
+      releaseStaleFolder()
+      await staleFolderGate
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByText('stale-folder-marker')).toBeNull()
+    expect(screen.getByText('fresh-marker')).toBeTruthy()
   })
 
   it('does not apply stale resume listAllRecords after refreshAllRecords supersedes the request id', async () => {

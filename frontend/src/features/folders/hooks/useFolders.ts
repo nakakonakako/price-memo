@@ -21,6 +21,7 @@ export function useFolders() {
   const [error, setError] = useState<string | null>(null)
   const [isMutating, setIsMutating] = useState(false)
   const createInFlightRef = useRef(false)
+  const reorderInFlightRef = useRef(false)
   const mountedRef = useRef(true)
   const refreshGenerationRef = useRef(0)
   const visibleLoadRef = useRef(createVisibleLoadTracker())
@@ -46,7 +47,9 @@ export function useFolders() {
       if (
         !mountedRef.current ||
         generation !== refreshGenerationRef.current ||
-        getCurrentAuthUserId() !== userIdAtStart
+        getCurrentAuthUserId() !== userIdAtStart ||
+        createInFlightRef.current ||
+        reorderInFlightRef.current
       ) {
         return
       }
@@ -144,6 +147,7 @@ export function useFolders() {
           refreshGenerationRef.current += 1
         } catch (err) {
           setError(toUserMessage(err, '並べ替えの保存に失敗しました。'))
+          createInFlightRef.current = false
           await refresh()
           throw err
         }
@@ -194,6 +198,7 @@ export function useFolders() {
 
   const reorder = async (ids: string[]) => {
     refreshGenerationRef.current += 1
+    reorderInFlightRef.current = true
     const map = new Map(folders.map((f) => [f.id, f]))
     const next = ids
       .map((id, sort_order) => {
@@ -208,8 +213,11 @@ export function useFolders() {
       refreshGenerationRef.current += 1
     } catch (err) {
       setError(toUserMessage(err, '並べ替えの保存に失敗しました。'))
+      reorderInFlightRef.current = false
       await refresh()
       throw err
+    } finally {
+      reorderInFlightRef.current = false
     }
   }
 

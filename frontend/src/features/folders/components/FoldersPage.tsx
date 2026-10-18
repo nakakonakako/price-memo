@@ -416,6 +416,7 @@ export function FoldersPage({
   }, [])
 
   const applyAllRecordsSnapshot = useCallback((records: PriceRecord[]) => {
+    folderListRecordsRequestRef.current += 1
     setAllRecords(records)
     setAllRecordsLoaded(true)
     const folderCounts: Record<string, number> = {}
