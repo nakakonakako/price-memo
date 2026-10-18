@@ -259,6 +259,8 @@ describe('FoldersPage record mutation races', () => {
         vi.runAllTimers()
       })
 
+      await waitFor(() => expect(listAllRecords).toHaveBeenCalledTimes(2))
+
       listAllRecords.mockResolvedValue([
         recordRow('fresh-regular', 'fresh-regular-marker'),
       ])
