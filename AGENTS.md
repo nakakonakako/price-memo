@@ -86,6 +86,8 @@ migrations or run `db push` from this repository.
   Daily `npm run dev` validates the required Supabase settings, checks the
   managed `backend/.venv` runtime without `npm ci` or `uv sync`, and prepares
   missing links without installing dependencies or replacing local files.
+  It checks the configured Vite/API ports before launch and supervises only
+  the process groups it starts; occupied ports are never reassigned or killed.
   `scripts/worktree.sh setup` may run `uv sync --reinstall` only for a confirmed
   stale managed venv inside the worktree; unsafe virtualenvs are never deleted
   automatically.

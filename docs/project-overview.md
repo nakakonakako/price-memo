@@ -224,7 +224,8 @@ cd .. && npm run dev
 ```
 
 - Vite が `/api` を `http://localhost:8001` へプロキシ（A の 8000 と併走可能）
-- Cursor / Playwright MCP のローカル UI 確認は `npm run devserver:ensure` で `:8001` / `:5273` を起動または再利用し、`http://localhost:5273` を固定利用する（Vite `strictPort`）。完了後は `npm run devserver:stop` で当該 ensure が起動したプロセスのみ停止。通常の `npm run dev` / `npm run dev:playwright` は従来どおり
+- `npm run dev` は起動前にVite `:5173` とFastAPI `:8001` を検査し、競合時は所有プロセス情報を表示できる範囲で表示して停止する。別ポートへの自動切替や既存プロセスの終了は行わず、Ctrl+C・SIGTERM・片側起動失敗時はこの起動が作成したサーバープロセス群だけを終了
+- Cursor / Playwright MCP のローカル UI 確認は `npm run devserver:ensure` で `:8001` / `:5273` を起動または再利用し、`http://localhost:5273` を固定利用する（Vite `strictPort`）。完了後は `npm run devserver:stop` で当該 ensure が起動したプロセスのみ停止。通常の `npm run dev:playwright` は `:5273` / `:8001` を使い、同じ競合検査・プロセス終了管理を行う
 - Playwright MCP はユーザー home 配下の共通 persistent profile を利用する。初回 Google OAuth はブラウザー上で手動実施し、main checkout と worktree からの確認は逐次実行する。詳細は [cursor-delegation.md](./cursor-delegation.md)
 - Playwright MCP / Playwright / Chromium revision は `.cursor/playwright-mcp.sh` で固定し、browser binary はユーザー共通 cache を利用する。更新手順は [cursor-delegation.md](./cursor-delegation.md)
 - DB: A と同じ Supabase プロジェクトを利用。schema migration は receipt-manager 側で管理・push する

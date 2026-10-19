@@ -67,7 +67,13 @@ symlinks, validates the frontend Supabase settings, validates the managed
 `uv sync`, refuses conflicting local files, and prints exact recovery steps
 when automatic backend repair would be unsafe. The ordinary Vite server is
 fixed to `5173` with `strictPort`; the official Playwright server remains on
-`5273` with `strictPort`.
+`5273` with `strictPort`. Before launch, a supervisor checks both selected
+ports and reports listener PID, command, and working directory when available;
+occupied ports stop startup without choosing another port or stopping their
+owners. The supervisor runs each server in its own session and cleans up only
+groups it started on Ctrl+C, SIGTERM, or startup failure. After shutdown, the
+ports can be reused. The normal development ports remain `5173` and `8001`;
+Playwright uses `5273` and `8001`.
 
 A symlink does not hide its target from a trusted Cursor workspace. Configure
 only development credentials required by the task. Do not link production
@@ -89,6 +95,7 @@ Use `--workspace <path>` to continue work in a listed worktree. Cursor's own
 `--worktree` option is not used because it controls a separate storage root.
 The retained `--continue-worktree` option is an alias for `--workspace`.
 
-`npm run dev`, `npm run devserver:ensure`, Playwright MCP, the shared browser
-profile, and Tailscale Serve keep their existing behavior. Worktree setup does
+`npm run devserver:ensure`, Playwright MCP, the shared browser profile, and
+Tailscale Serve keep their existing behavior. `npm run dev` and
+`npm run dev:playwright` use the owned-process supervisor; worktree setup does
 not start or stop development servers.
