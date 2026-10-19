@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { StrictMode } from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { applyAuthIdentity, resetAuthIdentityForTests } from '@/lib/authIdentity'
 import {
@@ -132,6 +133,18 @@ describe('FoldersPage resume sync', () => {
     resetExternalSyncForTests()
     vi.unstubAllGlobals()
     vi.useRealTimers()
+  })
+
+  it('shows folders on the first tab mount under StrictMode without a focus change', async () => {
+    render(
+      <StrictMode>
+        <FoldersPage active />
+      </StrictMode>,
+    )
+
+    await waitFor(() => expect(screen.getByText('A')).toBeTruthy())
+    expect(listFolders).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('読み込み中...')).toBeNull()
   })
 
   it('does not apply a stale per-folder fetch after resume refresh', async () => {
