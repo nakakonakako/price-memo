@@ -14,6 +14,8 @@ command_log="$test_root/setup-commands.log"
 mkdir -p "$fixture_repo/scripts" "$fixture_config/frontend" "$fixture_config/backend" "$fixture_bin"
 mkdir -p "$fixture_config/secrets/ai-quota-ca"
 cp "$source_root/scripts/worktree.sh" "$fixture_repo/scripts/worktree.sh"
+cp "$source_root/scripts/backend-venv.sh" "$fixture_repo/scripts/backend-venv.sh"
+chmod +x "$fixture_repo/scripts/backend-venv.sh"
 
 git -C "$fixture_repo" init -b main >/dev/null
 git -C "$fixture_repo" config user.name "Worktree Test"
@@ -51,8 +53,66 @@ cat > "$fixture_bin/uv" <<'EOF'
 printf 'uv' >> "$WORKTREE_TEST_LOG"
 printf ' %s' "$@" >> "$WORKTREE_TEST_LOG"
 printf '\n' >> "$WORKTREE_TEST_LOG"
+
+if [[ "${1:-}" != sync ]]; then
+  exit 0
+fi
+
+backend_dir=''
+reinstall=0
+args=("$@")
+for index in "${!args[@]}"; do
+  if [[ "${args[$index]}" == --directory && -n "${args[$index + 1]:-}" ]]; then
+    backend_dir="${args[$index + 1]}"
+  fi
+  if [[ "${args[$index]}" == --reinstall ]]; then
+    reinstall=1
+  fi
+done
+
+write_managed_venv() {
+  local target_backend="$1"
+  local bin_dir="$target_backend/.venv/bin"
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/python" <<'PY'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-c" ]]; then
+  printf '%s\n' "$(cd "$(dirname "$0")/.." && pwd -P)"
+  exit 0
+fi
+exit 0
+PY
+  chmod +x "$bin_dir/python"
+  local python_path
+  python_path="$(cd "$bin_dir" && pwd -P)/python"
+  printf '#!%s\n' "$python_path" > "$bin_dir/uvicorn"
+  chmod +x "$bin_dir/uvicorn"
+}
+
+if [[ -n "$backend_dir" ]]; then
+  if [[ "$reinstall" -eq 1 || ! -x "$backend_dir/.venv/bin/python" ]]; then
+    write_managed_venv "$backend_dir"
+  fi
+fi
 EOF
 chmod +x "$fixture_bin/npm" "$fixture_bin/uv"
+
+write_stale_managed_venv() {
+  local target_backend="$1"
+  local bin_dir="$target_backend/.venv/bin"
+  mkdir -p "$bin_dir"
+  cat > "$bin_dir/python" <<'PY'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-c" ]]; then
+  printf '%s\n' '/stale/old-worktree/backend/.venv'
+  exit 0
+fi
+exit 0
+PY
+  chmod +x "$bin_dir/python"
+  printf '#!/stale/old-worktree/backend/.venv/bin/python\n' > "$bin_dir/uvicorn"
+  chmod +x "$bin_dir/uvicorn"
+}
 
 export HOME="$fixture_home"
 export PATH="$fixture_bin:$PATH"
@@ -99,6 +159,8 @@ if "$fixture_repo/scripts/worktree.sh" create another-task --branch feature/revi
   exit 1
 fi
 
+rm -rf "$worktree_path/backend/.venv"
+
 printf 'dirty\n' > "$worktree_path/untracked-test-file"
 if printf 'remove\n' | "$fixture_repo/scripts/worktree.sh" remove "$worktree_path" >/dev/null 2>&1; then
   echo "Expected a dirty worktree removal to be rejected." >&2
@@ -109,5 +171,72 @@ fi
 rm "$worktree_path/untracked-test-file"
 printf 'remove\n' | "$fixture_repo/scripts/worktree.sh" remove "$worktree_path" >/dev/null
 git -C "$fixture_repo" show-ref --verify --quiet refs/heads/feature/review-task
+
+"$fixture_repo/scripts/worktree.sh" create venv-task --branch feature/venv-task --no-setup >/dev/null
+venv_worktree="$fixture_home/worktrees/$repository_name/venv-task"
+: > "$command_log"
+if ! "$fixture_repo/scripts/worktree.sh" setup "$venv_worktree" >"$test_root/venv-setup.log" 2>&1; then
+  echo "Expected managed backend setup to succeed." >&2
+  cat "$test_root/venv-setup.log" >&2
+  exit 1
+fi
+if [[ ! -d "$venv_worktree/backend/.venv" || -L "$venv_worktree/backend/.venv" ]]; then
+  echo "Expected backend/.venv to be an ordinary directory." >&2
+  exit 1
+fi
+if ! "$venv_worktree/scripts/backend-venv.sh" preflight "$venv_worktree" >"$test_root/venv-preflight.log" 2>&1; then
+  echo "Expected healthy backend preflight after setup." >&2
+  cat "$test_root/venv-preflight.log" >&2
+  exit 1
+fi
+: > "$command_log"
+"$fixture_repo/scripts/worktree.sh" reuse "$venv_worktree" >/dev/null
+if grep -Fq 'uv sync' "$command_log"; then
+  echo "Expected a healthy reuse setup to avoid syncing the backend virtualenv." >&2
+  cat "$command_log" >&2
+  exit 1
+fi
+
+write_stale_managed_venv "$venv_worktree/backend"
+if "$venv_worktree/scripts/backend-venv.sh" preflight "$venv_worktree" >"$test_root/stale-preflight.log" 2>&1; then
+  echo "Expected stale backend/.venv to block dev preflight." >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/stale-preflight.log")" == *'bash scripts/worktree.sh setup'* ]]
+: > "$command_log"
+if ! "$fixture_repo/scripts/worktree.sh" setup "$venv_worktree" >"$test_root/stale-repair.log" 2>&1; then
+  echo "Expected stale managed backend/.venv repair to succeed." >&2
+  cat "$test_root/stale-repair.log" >&2
+  exit 1
+fi
+if ! grep -Fq 'uv sync --reinstall' "$command_log"; then
+  echo "Expected stale repair to run uv sync --reinstall." >&2
+  cat "$command_log" >&2
+  exit 1
+fi
+if ! "$venv_worktree/scripts/backend-venv.sh" preflight "$venv_worktree" >"$test_root/repaired-preflight.log" 2>&1; then
+  echo "Expected backend preflight to pass after stale repair." >&2
+  cat "$test_root/repaired-preflight.log" >&2
+  exit 1
+fi
+
+rm -rf "$venv_worktree/backend/.venv"
+ln -s "$test_root/external-venv" "$venv_worktree/backend/.venv"
+mkdir -p "$test_root/external-venv"
+if "$fixture_repo/scripts/worktree.sh" setup "$venv_worktree" >"$test_root/symlink-setup.log" 2>&1; then
+  echo "Expected a symlinked backend/.venv to block automatic repair." >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/symlink-setup.log")" == *'symlink'* ]]
+[[ -L "$venv_worktree/backend/.venv" ]]
+
+rm "$venv_worktree/backend/.venv"
+ln -s "$test_root/missing-venv" "$venv_worktree/backend/.venv"
+if "$fixture_repo/scripts/worktree.sh" setup "$venv_worktree" >"$test_root/broken-symlink-setup.log" 2>&1; then
+  echo "Expected a broken symlinked backend/.venv to block setup." >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/broken-symlink-setup.log")" == *'symlink'* ]]
+[[ -L "$venv_worktree/backend/.venv" ]]
 
 echo "Worktree workflow tests passed."

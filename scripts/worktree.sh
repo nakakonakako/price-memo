@@ -112,8 +112,8 @@ setup_dependencies() {
     npm --prefix "$target_path/frontend" ci
   fi
   if [[ -f "$target_path/backend/pyproject.toml" ]]; then
-    printf '[worktree-setup] Syncing backend dependencies\n'
-    uv sync --directory "$target_path/backend"
+    printf '[worktree-setup] Checking backend virtualenv\n'
+    bash "$script_directory/backend-venv.sh" ensure "$target_path"
   fi
 }
 

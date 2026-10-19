@@ -83,8 +83,14 @@ migrations or run `db push` from this repository.
   Migration copies into new mode-0600 files under mode-0700 directories,
   retains every source, and never prints values or replaces a destination.
   Existing `.env.local` files and Vite key overlaps are reported by name only.
-  Daily `npm run dev` validates the required Supabase settings and prepares
+  Daily `npm run dev` validates the required Supabase settings, checks the
+  managed `backend/.venv` runtime without `npm ci` or `uv sync`, and prepares
   missing links without installing dependencies or replacing local files.
+  It checks the configured Vite/API ports before launch and supervises only
+  the process groups it starts; occupied ports are never reassigned or killed.
+  `scripts/worktree.sh setup` may run `uv sync --reinstall` only for a confirmed
+  stale managed venv inside the worktree; unsafe virtualenvs are never deleted
+  automatically.
   A symlink makes its target readable to any worker trusted with that workspace,
   so provide only development credentials needed for the task.
 - `scripts/worktree.sh remove <path>` is an explicit, interactive operation for

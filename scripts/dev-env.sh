@@ -163,6 +163,7 @@ prepare() {
       exit 2
     fi
   done
+  bash "$script_dir/backend-venv.sh" preflight "$repo_root"
 }
 
 case "${1:-}" in

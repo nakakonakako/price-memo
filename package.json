@@ -2,14 +2,14 @@
   "name": "price-memo",
   "private": true,
   "scripts": {
-    "dev": "bash scripts/dev-env.sh prepare && concurrently -n \"FRONT,BACK\" -c \"cyan,magenta\" \"npm run dev --prefix frontend\" \"cd backend && uv run uvicorn app.main:app --reload --port 8001\"",
-    "dev:playwright": "bash scripts/dev-env.sh prepare && concurrently -n \"FRONT,BACK\" -c \"cyan,magenta\" \"npm run dev:playwright --prefix frontend\" \"cd backend && uv run uvicorn app.main:app --reload --port 8001\"",
+    "dev": "bash scripts/dev-env.sh prepare && python3 scripts/dev-supervisor.py --frontend-port 5173 --backend-port 8001 --frontend-command 'npm run dev --prefix frontend' --backend-command '.venv/bin/python -m uvicorn app.main:app --reload --port 8001' --backend-cwd backend",
+    "dev:playwright": "bash scripts/dev-env.sh prepare && python3 scripts/dev-supervisor.py --frontend-port 5273 --backend-port 8001 --frontend-command 'npm run dev:playwright --prefix frontend' --backend-command '.venv/bin/python -m uvicorn app.main:app --reload --port 8001' --backend-cwd backend",
     "devserver:ensure": "bash scripts/dev-env.sh prepare && bash scripts/cursor-devserver.sh ensure",
     "devserver:stop": "bash scripts/cursor-devserver.sh stop",
     "devserver:status": "bash scripts/cursor-devserver.sh status",
     "worktree": "bash scripts/worktree.sh",
     "check": "npm run check:worktree && npm run check:frontend && npm run check:backend",
-    "check:worktree": "bash scripts/test-worktree.sh && bash scripts/test-dev-env.sh",
+    "check:worktree": "bash scripts/test-worktree.sh && bash scripts/test-dev-env.sh && python3 scripts/test-dev-supervisor.py",
     "check:frontend": "npm run lint --prefix frontend && npm run test --prefix frontend && npm run build --prefix frontend",
     "check:backend": "uv run --directory backend ruff check . && uv run --directory backend ruff format --check . && uv run --directory backend python -m unittest discover -s tests -v",
     "format": "npm run format --prefix frontend && uv run --directory backend ruff format ."
