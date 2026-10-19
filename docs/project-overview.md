@@ -330,7 +330,7 @@ price-memo/
 | 2026-10-10 | `main` 向け Pull Request の品質チェック workflow を追加 |
 | 2026-10-10 | S1-03: バックエンドの CORS ミドルウェアを除去。ブラウザ API は同一オリジン `/api`（Vite / nginx）のみ |
 | 2026-10-10 | S1-07: 本番 deploy の `.env` から未使用の `GEMINI_API_KEY` 注入を除去。必須 Secrets 一覧を現行利用に合わせて更新 |
-| 2026-10-19 | 追加Git worktreeを `~/worktrees/price-memo/` に統一し、設定symlinkとCursor workspace利用を追加 |
+| 2026-10-19 | Git worktree環境設定の明示移行、起動前検証、`origin/main`基準のCursor worktree作成を追加 |
 | 2026-10-08 | 認証済み画面状態と店舗キャッシュをユーザーIDで分離し、切替前の非同期結果を破棄 |
 | 2026-10-07 | 買い物メモの開いたカードから、フォルダタブの品目詳細へ移動できる |
 | 2026-10-07 | Cursor worker 向け `npm run devserver:ensure` / `devserver:stop` を追加。`:8001` / `:5273` の起動・再利用と per-worktree 状態管理 |

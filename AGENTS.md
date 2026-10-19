@@ -77,8 +77,14 @@ migrations or run `db push` from this repository.
   Reuse an existing path with `scripts/worktree.sh reuse <path>`.
 - Environment files stay outside Git under
   `~/.config/price-memo/<environment>/` and are linked into worktrees by the
-  setup command. Files are never copied or printed. The setup refuses to
-  replace an existing destination; inspect it manually if a link conflicts.
+  setup command. For initial migration from `~/web/price-memo`, first run
+  `bash scripts/dev-env.sh migrate --preview`, then explicitly select only
+  reviewed development files with `migrate --apply <relative-file> [...]`.
+  Migration copies into new mode-0600 files under mode-0700 directories,
+  retains every source, and never prints values or replaces a destination.
+  Existing `.env.local` files and Vite key overlaps are reported by name only.
+  Daily `npm run dev` validates the required Supabase settings and prepares
+  missing links without installing dependencies or replacing local files.
   A symlink makes its target readable to any worker trusted with that workspace,
   so provide only development credentials needed for the task.
 - `scripts/worktree.sh remove <path>` is an explicit, interactive operation for
@@ -89,6 +95,9 @@ migrations or run `db push` from this repository.
 - Use `scripts/delegate-cursor.sh --worktree <task>` to create/reuse the
   standard worktree, or `--workspace <path>` to reuse an existing one. Cursor
   receives `--workspace`; do not use Cursor's own `--worktree` location.
+  New delegate worktrees fetch and use `origin/main`; failed fetches stop
+  creation instead of falling back to the current branch. Existing worktrees
+  are reused without fetching or changing their branch.
 
 ## Implementation rules
 
