@@ -64,6 +64,41 @@ Shared Supabase DB migrations are managed only in `receipt-manager/supabase/migr
 When a schema change is needed, add the migration in `receipt-manager`; do not keep
 migrations or run `db push` from this repository.
 
+## Git worktree and environment files
+
+- The normal checkout is `~/web/price-memo`; additional worktrees belong under
+  `~/worktrees/price-memo/<task-name>`.
+- Create, list, inspect/reuse, and remove worktrees with `scripts/worktree.sh`.
+  Run `scripts/worktree.sh list` before creating a worktree for an existing
+  branch. If that branch is already checked out, inspect the listed worktree
+  and reuse it; never force a second checkout.
+- Create new worktrees with an explicit branch and base, for example
+  `scripts/worktree.sh create <task> --branch <branch> --base origin/main`.
+  Reuse an existing path with `scripts/worktree.sh reuse <path>`.
+- Environment files stay outside Git under
+  `~/.config/price-memo/<environment>/` and are linked into worktrees by the
+  setup command. For initial migration from `~/web/price-memo`, first run
+  `bash scripts/dev-env.sh migrate --preview`, then explicitly select only
+  reviewed development files with `migrate --apply <relative-file> [...]`.
+  Migration copies into new mode-0600 files under mode-0700 directories,
+  retains every source, and never prints values or replaces a destination.
+  Existing `.env.local` files and Vite key overlaps are reported by name only.
+  Daily `npm run dev` validates the required Supabase settings and prepares
+  missing links without installing dependencies or replacing local files.
+  A symlink makes its target readable to any worker trusted with that workspace,
+  so provide only development credentials needed for the task.
+- `scripts/worktree.sh remove <path>` is an explicit, interactive operation for
+  clean worktrees under `~/worktrees/price-memo/`. It never forces removal or
+  deletes the branch. Check for active workers and dev servers first. Worktrees
+  under `/tmp`, `~/.cursor/worktrees`, or `~/web` are not migrated or removed
+  automatically.
+- Use `scripts/delegate-cursor.sh --worktree <task>` to create/reuse the
+  standard worktree, or `--workspace <path>` to reuse an existing one. Cursor
+  receives `--workspace`; do not use Cursor's own `--worktree` location.
+  New delegate worktrees fetch and use `origin/main`; failed fetches stop
+  creation instead of falling back to the current branch. Existing worktrees
+  are reused without fetching or changing their branch.
+
 ## Implementation rules
 
 - Never introduce TypeScript `any`.
@@ -215,8 +250,10 @@ Select the Cursor tier through the script, using `light` by default:
 
 When using Cursor, use a direct checkout only when it is clean and there is no
 concurrent work. If it is dirty, shared with concurrent edits, or needs
-isolation, use `--worktree <name>`. A dirty checkout alone does not select Luna
-as implementer; apply the direct-implementation criteria above.
+isolation, use `scripts/delegate-cursor.sh --worktree <task>` or first create a
+worktree with `scripts/worktree.sh` and pass its path using `--workspace`.
+A dirty checkout alone does not select Luna as implementer; apply the
+direct-implementation criteria above.
 
 Cursor CLI connects to Cursor's external API. Every Codex Supervisor invocation
 of `scripts/delegate-cursor.sh` must use network-enabled execution from the
@@ -275,10 +312,11 @@ Explicit routes are `--fallback-tier light` → `gemini-3.8-flash-low` and
 `--fallback-tier normal` → `claude-sonnet-5-5-medium`. The reserve
 `--model-override gpt-5.6-luna-medium` is available only by explicit
 Supervisor choice. These options cannot be combined with `--tier`. To resume a
-partial task, use `--continue-worktree <path>` with an explicit Other Models
-route. The worker must inspect staged/unstaged diffs and relevant untracked
-files before editing and preserve all existing work. Regular tier retries
-remain Composer → Grok medium → Grok high for implementation difficulty only.
+partial task, use `--workspace <path>` (or the compatibility alias
+`--continue-worktree <path>`). The worker must inspect staged/unstaged diffs
+and relevant untracked files before editing and preserve all existing work.
+Regular tier retries remain Composer → Grok medium → Grok high for
+implementation difficulty only.
 
 For the escalation areas above, Sol advises early and Luna makes the
 final design decision before implementation. After that decision, Luna chooses
@@ -286,10 +324,10 @@ Cursor or direct implementation under the ownership rules above; preserve the
 required review and verification either way.
 
 When using Cursor, use a direct checkout for one worker only when the checkout
-is clean and there is no concurrent work. Use `--worktree` for parallel
-workers, a dirty checkout, concurrent edits, or a large/risky change that
-needs isolation. A dirty checkout is not by itself a reason for Luna to take
-over; apply the direct-implementation criteria above.
+is clean and there is no concurrent work. Use the standard Git worktree flow
+for parallel workers, a dirty checkout, concurrent edits, or a large/risky
+change that needs isolation. A dirty checkout is not by itself a reason for
+Luna to take over; apply the direct-implementation criteria above.
 
 If Cursor encounters a tooling/environment failure, report it and repair the
 environment rather than escalating the model. Do not repeat unproductive waits

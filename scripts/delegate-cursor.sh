@@ -4,10 +4,9 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --task-file <path> [--worktree <name>]
-  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --prompt <text> [--worktree <name>]
-  scripts/delegate-cursor.sh --fallback-tier <light|normal> --task-file <path> [--worktree <name>]
-  scripts/delegate-cursor.sh --fallback-tier <light|normal> --task-file <path> --continue-worktree <path>
+  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --task-file <path> [--worktree <task-name> | --workspace <path>]
+  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --prompt <text> [--worktree <task-name> | --workspace <path>]
+  scripts/delegate-cursor.sh --fallback-tier <light|normal> --task-file <path> [--worktree <task-name> | --workspace <path>]
   scripts/delegate-cursor.sh --model-override gpt-5.6-luna-medium --task-file <path>
 
 Options:
@@ -16,8 +15,9 @@ Options:
   --model-override Explicit reserve model; currently gpt-5.6-luna-medium only.
   --task-file   Read the work order from a file.
   --prompt      Pass the work order directly.
-  --worktree    Create and run in an isolated Git worktree.
-  --continue-worktree  Continue in an existing worktree after reviewing its diff.
+  --worktree    Create or reuse ~/worktrees/<repository>/<task> with Git, then pass it through --workspace.
+  --workspace   Reuse an existing worktree after showing its changes and running setup.
+  --continue-worktree  Compatibility alias for --workspace.
   --allow-dirty Allow direct execution in a dirty current checkout.
   -h, --help    Show this help.
 
@@ -39,7 +39,7 @@ model_override=""
 task_file=""
 prompt=""
 worktree=""
-continue_worktree=""
+workspace=""
 allow_dirty=0
 tier_was_set=0
 
@@ -51,7 +51,7 @@ while [[ $# -gt 0 ]]; do
     --task-file) task_file="${2:?missing value for --task-file}"; shift 2 ;;
     --prompt) prompt="${2:?missing value for --prompt}"; shift 2 ;;
     --worktree) worktree="${2:?missing value for --worktree}"; shift 2 ;;
-    --continue-worktree) continue_worktree="${2:?missing value for --continue-worktree}"; shift 2 ;;
+    --workspace|--continue-worktree) workspace="${2:?missing value for --workspace}"; shift 2 ;;
     --allow-dirty) allow_dirty=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
@@ -91,12 +91,8 @@ else
   esac
 fi
 
-if [[ -n "$worktree" && -n "$continue_worktree" ]]; then
-  echo "Use either --worktree or --continue-worktree, not both." >&2
-  exit 2
-fi
-if [[ -n "$continue_worktree" && "$route" == "cursor" ]]; then
-  echo "--continue-worktree is reserved for an explicitly selected Other Models route." >&2
+if [[ -n "$worktree" && -n "$workspace" ]]; then
+  echo "Use either --worktree or --workspace, not both." >&2
   exit 2
 fi
 
@@ -115,23 +111,38 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   exit 2
 }
 origin_root="$repo_root"
-if [[ -n "$continue_worktree" ]]; then
-  if [[ ! -d "$continue_worktree" ]]; then
-    echo "Existing worktree not found: $continue_worktree" >&2
+if [[ -n "$worktree" ]]; then
+  repo_name="$(basename "$(dirname "$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)")")"
+  workspace="$HOME/worktrees/$repo_name/$worktree"
+  if [[ ! -e "$workspace" ]]; then
+    if ! git -C "$repo_root" fetch --quiet --no-tags origin refs/heads/main:refs/remotes/origin/main >/dev/null 2>&1; then
+      echo "Could not refresh origin/main. No new worktree was created; check the origin connection and retry." >&2
+      exit 2
+    fi
+    if ! git -C "$repo_root" rev-parse --verify 'origin/main^{commit}' >/dev/null 2>&1; then
+      echo "origin/main is unavailable after fetch. No new worktree was created." >&2
+      exit 2
+    fi
+    "$repo_root/scripts/worktree.sh" create "$worktree" --branch "codex/$worktree" --base origin/main
+  else
+    "$repo_root/scripts/worktree.sh" create "$worktree" --branch "codex/$worktree" --base origin/main
+  fi
+elif [[ -n "$workspace" ]]; then
+  if [[ ! -d "$workspace" ]]; then
+    echo "Existing worktree not found: $workspace" >&2
     exit 2
   fi
-  continue_worktree="$(cd "$continue_worktree" && pwd -P)"
-  if ! git -C "$continue_worktree" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "Not a Git worktree: $continue_worktree" >&2
-    exit 2
-  fi
+  workspace="$(cd "$workspace" && pwd -P)"
+  "$repo_root/scripts/worktree.sh" reuse "$workspace"
+fi
+if [[ -n "$workspace" ]]; then
   origin_common="$(git -C "$origin_root" rev-parse --path-format=absolute --git-common-dir)"
-  target_common="$(git -C "$continue_worktree" rev-parse --path-format=absolute --git-common-dir)"
+  target_common="$(git -C "$workspace" rev-parse --path-format=absolute --git-common-dir)"
   if [[ "$origin_common" != "$target_common" ]]; then
-    echo "Worktree belongs to a different repository: $continue_worktree" >&2
+    echo "Worktree belongs to a different repository: $workspace" >&2
     exit 2
   fi
-  repo_root="$(git -C "$continue_worktree" rev-parse --show-toplevel)"
+  repo_root="$(git -C "$workspace" rev-parse --show-toplevel)"
 fi
 cd "$repo_root"
 
@@ -145,20 +156,21 @@ else
   work_order="$prompt"
 fi
 
-if [[ -z "$worktree" && -z "$continue_worktree" && "$allow_dirty" -ne 1 && -n "$(git status --porcelain)" ]]; then
+if [[ -z "$worktree" && -z "$workspace" && "$allow_dirty" -ne 1 && -n "$(git status --porcelain)" ]]; then
   cat >&2 <<'EOF'
 Current checkout has uncommitted changes.
 Refusing to run Cursor directly because its edits could mix with existing work.
 
 Use one of:
-  --worktree <name>   (recommended)
+  --worktree <task-name> (recommended)
+  --workspace <path>  Reuse an existing worktree
   --allow-dirty       (only when mixing changes is intentional)
 EOF
   exit 3
 fi
 
-if [[ -n "$continue_worktree" ]]; then
-  work_order="$(printf '%s\n\n%s' 'CONTINUATION REQUIREMENT: This is an existing worktree that may contain partial work from a previous worker. Before editing, inspect git status --short, staged and unstaged diffs, and relevant untracked files. Explain what is already changed, preserve all existing work, and continue the same work order in this worktree. Do not reset, checkout, stash, clean, or revert existing changes. If the existing diff is ambiguous or conflicts with the work order, stop and report it to the supervisor.' "$work_order")"
+if [[ -n "$workspace" ]]; then
+  work_order="$(printf '%s\n\n%s' 'EXISTING WORKTREE REQUIREMENT: Before editing, inspect git status --short, staged and unstaged diffs, and relevant untracked files. Explain what is already changed, preserve all existing work, and continue in this worktree. Do not reset, checkout, stash, clean, or revert existing changes. If the existing diff is ambiguous or conflicts with the work order, stop and report it to the supervisor.' "$work_order")"
 fi
 
 read -r -d '' supervisor_prefix <<'EOF' || true
@@ -194,11 +206,8 @@ WORK ORDER
 ${work_order}"
 
 cmd=(agent --approve-mcps --trust --model "$model")
-if [[ -n "$worktree" ]]; then
-  cmd+=(--worktree "$worktree")
-fi
-if [[ -n "$continue_worktree" ]]; then
-  cmd+=(--workspace "$continue_worktree")
+if [[ -n "$workspace" ]]; then
+  cmd+=(--workspace "$workspace")
 fi
 echo "[delegate-cursor] repo: $repo_root" >&2
 echo "[delegate-cursor] route: $route" >&2
@@ -206,10 +215,8 @@ echo "[delegate-cursor] tier: $tier" >&2
 echo "[delegate-cursor] model: $model" >&2
 started_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "[delegate-cursor] started_at: $started_at" >&2
-if [[ -n "$worktree" ]]; then
-  echo "[delegate-cursor] worktree: $worktree" >&2
-elif [[ -n "$continue_worktree" ]]; then
-  echo "[delegate-cursor] worktree: continue $continue_worktree" >&2
+if [[ -n "$workspace" ]]; then
+  echo "[delegate-cursor] workspace: $workspace" >&2
 else
   echo "[delegate-cursor] worktree: direct checkout" >&2
 fi
@@ -269,9 +276,9 @@ fi
 
 failure_stage="none"
 if [[ "$agent_exit_code" -ne 0 || "$result_status" == "error" ]]; then
-  if [[ -n "$worktree" ]] && { grep -Eiq 'worktree setup (failed|error)|setup script.*(failed|error)|failed.*setup' "$stderr_log" "$stdout_log" || { grep -Eiq 'Running worktree setup script' "$stderr_log" "$stdout_log" && ! grep -Eiq '\[worktree-setup\] Complete\.' "$stderr_log" "$stdout_log"; }; }; then
+  if [[ -n "$workspace" ]] && { grep -Eiq 'worktree setup (failed|error)|setup script.*(failed|error)|failed.*setup' "$stderr_log" "$stdout_log" || { grep -Eiq 'Running worktree setup script' "$stderr_log" "$stdout_log" && ! grep -Eiq '\[worktree-setup\] Complete\.' "$stderr_log" "$stdout_log"; }; }; then
     failure_stage="worktree_setup"
-  elif [[ -n "$worktree" ]] && grep -Eiq '(fatal:.*worktree|Error:.*(worktree|mkdir)|unable to create.*worktree|failed to create.*worktree)' "$stderr_log" "$stdout_log"; then
+  elif [[ -n "$workspace" ]] && grep -Eiq '(fatal:.*worktree|Error:.*(worktree|mkdir)|unable to create.*worktree|failed to create.*worktree)' "$stderr_log" "$stdout_log"; then
     failure_stage="worktree_creation"
   else
     failure_stage="cursor_agent_unclassified"

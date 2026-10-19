@@ -231,6 +231,8 @@ cd .. && npm run dev
 
 ### 7.2 環境変数
 
+追加worktreeの保存先、環境変数symlink、依存関係セットアップ、Cursor委譲の手順は [worktree-development.md](./worktree-development.md) を参照。
+
 **フロント**（A の Dev/Prod と同じ値でよい。本番は Docker build-arg）
 
 - `VITE_SUPABASE_URL`
@@ -328,6 +330,7 @@ price-memo/
 | 2026-10-10 | `main` 向け Pull Request の品質チェック workflow を追加 |
 | 2026-10-10 | S1-03: バックエンドの CORS ミドルウェアを除去。ブラウザ API は同一オリジン `/api`（Vite / nginx）のみ |
 | 2026-10-10 | S1-07: 本番 deploy の `.env` から未使用の `GEMINI_API_KEY` 注入を除去。必須 Secrets 一覧を現行利用に合わせて更新 |
+| 2026-10-19 | Git worktree環境設定の明示移行、起動前検証、`origin/main`基準のCursor worktree作成を追加 |
 | 2026-10-08 | 認証済み画面状態と店舗キャッシュをユーザーIDで分離し、切替前の非同期結果を破棄 |
 | 2026-10-07 | 買い物メモの開いたカードから、フォルダタブの品目詳細へ移動できる |
 | 2026-10-07 | Cursor worker 向け `npm run devserver:ensure` / `devserver:stop` を追加。`:8001` / `:5273` の起動・再利用と per-worktree 状態管理 |
