@@ -134,6 +134,9 @@ export function ShoppingMemoPage({
   const [mutating, setMutating] = useState(false)
   const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [pendingMemoAddFolderIds, setPendingMemoAddFolderIds] = useState(
+    () => new Set<string>(),
+  )
   const cardRefs = useRef(new Map<string, HTMLElement>())
   const loadGenerationRef = useRef(0)
   const visibleLoadRef = useRef(createVisibleLoadTracker())
@@ -499,11 +502,14 @@ export function ShoppingMemoPage({
 
   const foldersForPick = useMemo(() => {
     return allFolders
-      .filter((f) => !memoFolderIds.has(f.id))
+      .filter(
+        (f) =>
+          !memoFolderIds.has(f.id) && !pendingMemoAddFolderIds.has(f.id),
+      )
       .sort((a, b) =>
         nameCollator.compare(folderSortKey(a.name), folderSortKey(b.name)),
       )
-  }, [allFolders, memoFolderIds])
+  }, [allFolders, memoFolderIds, pendingMemoAddFolderIds])
 
   const pickableFolders = useMemo(() => {
     const q = newName.trim()
@@ -530,15 +536,24 @@ export function ShoppingMemoPage({
 
   const putOnMemo = useCallback(
     async (folder: PriceFolder) => {
-      const item = await addMemoItem(folder.id)
-      setMemoItems((prev) => {
-        if (deletedFolderTombstonesRef.current.has(folder.id)) return prev
-        if (prev.some((m) => m.folder_id === folder.id)) return prev
-        return [item, ...prev]
-      })
-      refreshAfterMemoMutation()
-      await mergeFolderRecords(folder.id)
-      return item
+      setPendingMemoAddFolderIds((prev) => new Set(prev).add(folder.id))
+      try {
+        const item = await addMemoItem(folder.id)
+        setMemoItems((prev) => {
+          if (deletedFolderTombstonesRef.current.has(folder.id)) return prev
+          if (prev.some((m) => m.folder_id === folder.id)) return prev
+          return [item, ...prev]
+        })
+        refreshAfterMemoMutation()
+        await mergeFolderRecords(folder.id)
+        return item
+      } finally {
+        setPendingMemoAddFolderIds((prev) => {
+          const next = new Set(prev)
+          next.delete(folder.id)
+          return next
+        })
+      }
     },
     [mergeFolderRecords, refreshAfterMemoMutation],
   )
@@ -564,22 +579,39 @@ export function ShoppingMemoPage({
     if (!trimmed) return
     setError(null)
     setMutating(true)
+    let folder: PriceFolder | undefined = findFolderByInput(allFolders, trimmed)
+    let createdNewFolder = false
     try {
-      const existing = findFolderByInput(allFolders, trimmed)
-      let folder = existing
       if (!folder) {
         folder = await createFolder(trimmed)
-        setAllFolders((prev) => [...prev, folder!])
+        createdNewFolder = true
       }
 
       const alreadyOnMemo = memoFolderIds.has(folder.id)
       if (!alreadyOnMemo) {
         await putOnMemo(folder)
+        if (createdNewFolder) {
+          setAllFolders((prev) =>
+            prev.some((f) => f.id === folder!.id) ? prev : [...prev, folder!],
+          )
+        }
+      } else if (createdNewFolder) {
+        setAllFolders((prev) =>
+          prev.some((f) => f.id === folder!.id) ? prev : [...prev, folder!],
+        )
       }
       setNewName('')
       setAddOpen(false)
       focusFolder(folder.id)
     } catch (err) {
+      const createdFolder = folder
+      if (createdNewFolder && createdFolder) {
+        setAllFolders((prev) =>
+          prev.some((f) => f.id === createdFolder.id)
+            ? prev
+            : [...prev, createdFolder],
+        )
+      }
       setError(toUserMessage(err, '追加に失敗しました。'))
     } finally {
       setMutating(false)
@@ -723,11 +755,11 @@ export function ShoppingMemoPage({
                 追加
               </button>
             </form>
-            {allFolders.length > 0 && foldersForPick.length === 0 ? (
-              <p className="text-sm text-stone-500">
+            {!mutating && allFolders.length > 0 && foldersForPick.length === 0 ? (
+              <p className="text-center text-sm text-stone-500">
                 追加できるフォルダはありません
               </p>
-            ) : newName.trim() && pickableFolders.length > 0 ? (
+            ) : !mutating && newName.trim() && pickableFolders.length > 0 ? (
               <ul className="max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-md border border-stone-200 bg-white">
                 {pickableFolders.map((f) => (
                   <li key={f.id}>
@@ -747,9 +779,9 @@ export function ShoppingMemoPage({
                   </li>
                 ))}
               </ul>
-            ) : newName.trim() && foldersForPick.length > 0 ? (
-              <p className="text-sm text-stone-500">
-                一致するフォルダがありません。追加ボタンで新規作成できます。
+            ) : !mutating && newName.trim() && foldersForPick.length > 0 ? (
+              <p className="text-center text-sm text-stone-500">
+                一致するフォルダがありません。
               </p>
             ) : null}
           </div>
