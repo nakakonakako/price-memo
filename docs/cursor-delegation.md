@@ -49,23 +49,26 @@ Supervisor after diagnosing a likely Cursor Models usage/quota failure:
 Examples:
 
 ```sh
-scripts/delegate-cursor.sh --fallback-tier light --task-file /tmp/work-order.md --worktree fallback-light
-scripts/delegate-cursor.sh --fallback-tier normal --task-file /tmp/work-order.md --continue-worktree /path/to/existing/worktree
-scripts/delegate-cursor.sh --model-override gpt-5.6-luna-medium --task-file /tmp/work-order.md --worktree luna-reserve
+scripts/delegate-cursor.sh --fallback-tier light --task-file /path/to/work-order.md --worktree fallback-light
+scripts/delegate-cursor.sh --fallback-tier normal --task-file /path/to/work-order.md --workspace ~/worktrees/price-memo/existing-task
+scripts/delegate-cursor.sh --model-override gpt-5.6-luna-medium --task-file /path/to/work-order.md --worktree luna-reserve
 ```
 
 `--tier` and `--fallback-tier` cannot be combined. A model override cannot be
-combined with either tier. `--continue-worktree` is only available with an
-explicit Other Models route and requires a worktree belonging to this checkout.
-The continuation prompt requires the worker to inspect status, staged and
-unstaged diffs, and relevant untracked files before editing, then preserve and
-continue existing work in place. The standard `--trust`, `--approve-mcps`,
+combined with either tier. `--workspace` reuses a worktree belonging to this
+checkout, runs its setup, and passes its absolute path to Cursor. The
+compatibility alias `--continue-worktree` has the same behavior and is no longer
+limited to an Other Models route. The continuation prompt requires the worker
+to inspect status, staged and unstaged diffs, and relevant untracked files
+before editing, then preserve and continue existing work in place. The standard
+`--trust`, `--approve-mcps`,
 worktree, `stream-json`, Playwright MCP, shared profile, and dev server flows
 apply to both routes.
 
 Do not take over implementation merely because the checkout is dirty. Use a
 direct checkout only when it is clean and has no concurrent work; otherwise
-delegate with `--worktree <name>` so the implementation is isolated.
+use the standard Git worktree flow described in
+[worktree-development.md](./worktree-development.md).
 
 If Cursor CLI is unavailable, the delegation script is broken, or another
 tooling failure prevents delegation, report the concrete failure and repair
@@ -229,18 +232,16 @@ cross-repo task in receipt-manager.
 
 ## Worktree policy
 
-Do **not** use a worktree for every task.
+The standard checkout is `~/web/price-memo`; additional worktrees are stored at
+`~/worktrees/price-memo/<task-name>`. Environment files live outside Git under
+`~/.config/price-memo/<environment>/`. Follow [worktree-development.md](./worktree-development.md)
+for create, list, reuse, setup, removal, and Cursor delegation commands.
 
-Use direct checkout when:
-- one Cursor worker is running
-- the checkout is clean
-- no concurrent implementation is touching the same repo
-
-Use `--worktree` when:
-- multiple Cursor workers run in parallel
-- Codex or the user is concurrently editing the repo
-- the current checkout has uncommitted work that should be isolated
-- a risky/large implementation should be kept separate until reviewed
+Use a direct checkout only when one worker is running, the checkout is clean,
+and no concurrent implementation touches the repository. Use the standard Git
+worktree flow for concurrent work, an uncommitted checkout, or changes that
+need isolation. Existing worktrees in other locations are not moved or removed
+automatically.
 
 ## Cursor worker UI verification
 
@@ -311,5 +312,5 @@ revision together after checking the package metadata and
 - `light` struggles with implementation: clarify the work order and retry as `normal`.
 - `normal` struggles after a clarified work order: retry as `hard`.
 - `hard` still cannot complete due to implementation difficulty: escalate to the Sol supervisor before another implementation attempt.
-- Cursor Models usage/quota limit: do not try another Cursor Models tier (same pool) or silently switch to Other Models. The Supervisor may explicitly choose `--fallback-tier light|normal` after reviewing the failure; no quota string matching is used. For partial work, use `--continue-worktree` so the worker reviews and preserves the existing diff. Tooling/environment failures are repaired without fallback. Other Models failures are returned normally; billing settings are never changed.
+- Cursor Models usage/quota limit: do not try another Cursor Models tier (same pool) or silently switch to Other Models. The Supervisor may explicitly choose `--fallback-tier light|normal` after reviewing the failure; no quota string matching is used. For partial work, use `--workspace` so the worker reviews and preserves the existing diff. Tooling/environment failures are repaired without fallback. Other Models failures are returned normally; billing settings are never changed.
 - High-risk areas listed above should receive Codex review even if Cursor succeeds.
