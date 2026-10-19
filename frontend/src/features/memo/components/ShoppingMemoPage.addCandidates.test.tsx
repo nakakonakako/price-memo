@@ -71,10 +71,18 @@ vi.mock('@/components/trash/TrashDragProvider', () => ({
   MemoTrashZone: () => null,
 }))
 
+const folderMemoCardProps = vi.fn()
+
 vi.mock('./FolderMemoCard', () => ({
-  FolderMemoCard: ({ folderId }: { folderId: string }) => (
-    <li data-testid={`memo-card-${folderId}`}>{folderId}</li>
-  ),
+  FolderMemoCard: (props: {
+    folderId: string
+    forceOpen?: boolean
+  }) => {
+    folderMemoCardProps(props)
+    return (
+      <li data-testid={`memo-card-${props.folderId}`}>{props.folderId}</li>
+    )
+  },
 }))
 
 vi.mock('@/lib/supabase', () => ({
@@ -164,6 +172,7 @@ describe('ShoppingMemoPage add candidates', () => {
     addMemoItem.mockReset()
     getSession.mockReset()
     onAuthStateChange.mockReset()
+    folderMemoCardProps.mockReset()
 
     onAuthStateChange.mockImplementation((cb) => {
       void cb('INITIAL_SESSION', {
@@ -247,7 +256,7 @@ describe('ShoppingMemoPage add candidates', () => {
     ).toBeNull()
   })
 
-  it('does not flash candidates or no-match while memo add is in flight', async () => {
+  it('keeps no-match copy visible while memo add is in flight', async () => {
     const newFolder: PriceFolder = {
       id: 'folder-new',
       user_id: 'user-a',
@@ -286,8 +295,8 @@ describe('ShoppingMemoPage add candidates', () => {
     const panel = addPanel()
     expect(within(panel).queryByRole('button', { name: /メモに追加/ })).toBeNull()
     expect(
-      within(panel).queryByText('一致するフォルダがありません。'),
-    ).toBeNull()
+      within(panel).getByText('一致するフォルダがありません。'),
+    ).toBeTruthy()
 
     await act(async () => {
       resolveAdd?.()
@@ -296,7 +305,13 @@ describe('ShoppingMemoPage add candidates', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('memo-card-folder-new')).toBeTruthy()
+      expect(screen.queryByPlaceholderText(/品目名/)).toBeNull()
     })
+    expect(
+      folderMemoCardProps.mock.calls.some(
+        ([props]) => props.folderId === 'folder-new' && props.forceOpen === true,
+      ),
+    ).toBe(false)
   })
 
   it('keeps the add panel open and shows an error when memo add fails', async () => {
@@ -327,7 +342,7 @@ describe('ShoppingMemoPage add candidates', () => {
     ).toBe('失敗品目')
   })
 
-  it('hides list row while adding from candidates, then completes', async () => {
+  it('keeps picked candidate visible but disabled while adding, then closes panel on success', async () => {
     let resolveAdd: (() => void) | null = null
     addMemoItem.mockImplementation(
       (folderId: string) =>
@@ -352,10 +367,14 @@ describe('ShoppingMemoPage add candidates', () => {
 
     const panel = addPanel()
     await waitFor(() => {
-      expect(within(panel).queryByRole('button', { name: /メモに追加/ })).toBeNull()
+      expect(addMemoItem).toHaveBeenCalledWith('folder-c')
     })
+    const candidateButton = within(panel).getByRole('button', {
+      name: /メモに追加/,
+    })
+    expect((candidateButton as HTMLButtonElement).disabled).toBe(true)
     expect(
-      within(panel).queryByText('一致するフォルダがありません。'),
+      within(panel).queryByText('追加できるフォルダはありません'),
     ).toBeNull()
 
     await act(async () => {
@@ -365,7 +384,13 @@ describe('ShoppingMemoPage add candidates', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
+      expect(screen.queryByPlaceholderText(/品目名/)).toBeNull()
     })
+    expect(
+      folderMemoCardProps.mock.calls.some(
+        ([props]) => props.folderId === 'folder-c' && props.forceOpen === true,
+      ),
+    ).toBe(false)
   })
 
   it('supports consecutive add operations without stale candidate UI', async () => {
@@ -380,6 +405,7 @@ describe('ShoppingMemoPage add candidates', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
+      expect(screen.queryByPlaceholderText(/品目名/)).toBeNull()
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'メモを追加' }))
@@ -394,5 +420,42 @@ describe('ShoppingMemoPage add candidates', () => {
     expect(
       screen.queryByRole('button', { name: /メモに追加/ }),
     ).toBeNull()
+  })
+
+  it('completes memo add when only record fetch fails after addMemoItem', async () => {
+    listRecords.mockRejectedValue(new Error('records failed'))
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: 'C' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /メモに追加/ }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
+      expect(screen.queryByPlaceholderText(/品目名/)).toBeNull()
+    })
+    expect(screen.queryByText('メモへの追加に失敗しました。')).toBeNull()
+    expect(screen.getByText(/メモへの追加は完了しています/)).toBeTruthy()
+  })
+
+  it('does not trigger a full memo list reload after addMemoItem', async () => {
+    renderPage()
+    await waitForInitialLoad()
+    const callsAfterLoad = listMemoItems.mock.calls.length
+
+    await openAddPanel()
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: 'C' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /メモに追加/ }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
+    })
+    expect(listMemoItems.mock.calls.length).toBe(callsAfterLoad)
   })
 })

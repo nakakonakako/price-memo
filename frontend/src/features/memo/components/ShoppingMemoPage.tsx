@@ -134,9 +134,6 @@ export function ShoppingMemoPage({
   const [mutating, setMutating] = useState(false)
   const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
-  const [pendingMemoAddFolderIds, setPendingMemoAddFolderIds] = useState(
-    () => new Set<string>(),
-  )
   const cardRefs = useRef(new Map<string, HTMLElement>())
   const loadGenerationRef = useRef(0)
   const visibleLoadRef = useRef(createVisibleLoadTracker())
@@ -286,12 +283,16 @@ export function ShoppingMemoPage({
     ],
   )
 
-  const refreshAfterMemoMutation = useCallback(() => {
+  const invalidateInFlightLoads = useCallback(() => {
     loadGenerationRef.current += 1
     reorderGenerationRef.current += 1
     reorderInFlightRef.current = false
+  }, [])
+
+  const refreshAfterMemoMutation = useCallback(() => {
+    invalidateInFlightLoads()
     void load({ silent: true })
-  }, [load])
+  }, [invalidateInFlightLoads, load])
 
   useEffect(() => {
     if (!authUserId) return
@@ -502,14 +503,11 @@ export function ShoppingMemoPage({
 
   const foldersForPick = useMemo(() => {
     return allFolders
-      .filter(
-        (f) =>
-          !memoFolderIds.has(f.id) && !pendingMemoAddFolderIds.has(f.id),
-      )
+      .filter((f) => !memoFolderIds.has(f.id))
       .sort((a, b) =>
         nameCollator.compare(folderSortKey(a.name), folderSortKey(b.name)),
       )
-  }, [allFolders, memoFolderIds, pendingMemoAddFolderIds])
+  }, [allFolders, memoFolderIds])
 
   const pickableFolders = useMemo(() => {
     const q = newName.trim()
@@ -525,37 +523,34 @@ export function ShoppingMemoPage({
     setFocusFolderId(null)
   }, [])
 
-  const focusFolder = useCallback((folderId: string) => {
-    setFocusFolderId(folderId)
-    setError(null)
-    requestAnimationFrame(() => {
-      const el = cardRefs.current.get(folderId)
-      el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  const applyMemoItemLocally = useCallback((item: PriceMemoItem) => {
+    setMemoItems((prev) => {
+      if (deletedFolderTombstonesRef.current.has(item.folder_id)) return prev
+      if (prev.some((m) => m.folder_id === item.folder_id)) return prev
+      return [item, ...prev]
     })
   }, [])
 
   const putOnMemo = useCallback(
     async (folder: PriceFolder) => {
-      setPendingMemoAddFolderIds((prev) => new Set(prev).add(folder.id))
+      const item = await addMemoItem(folder.id)
+      invalidateInFlightLoads()
       try {
-        const item = await addMemoItem(folder.id)
-        setMemoItems((prev) => {
-          if (deletedFolderTombstonesRef.current.has(folder.id)) return prev
-          if (prev.some((m) => m.folder_id === folder.id)) return prev
-          return [item, ...prev]
-        })
-        refreshAfterMemoMutation()
         await mergeFolderRecords(folder.id)
+      } catch (err) {
+        applyMemoItemLocally(item)
+        setError(
+          toUserMessage(
+            err,
+            '価格記録の取得に失敗しました。メモへの追加は完了しています。',
+          ),
+        )
         return item
-      } finally {
-        setPendingMemoAddFolderIds((prev) => {
-          const next = new Set(prev)
-          next.delete(folder.id)
-          return next
-        })
       }
+      applyMemoItemLocally(item)
+      return item
     },
-    [mergeFolderRecords, refreshAfterMemoMutation],
+    [applyMemoItemLocally, invalidateInFlightLoads, mergeFolderRecords],
   )
 
   const addFolderToMemo = async (folder: PriceFolder) => {
@@ -565,7 +560,6 @@ export function ShoppingMemoPage({
       await putOnMemo(folder)
       setNewName('')
       setAddOpen(false)
-      focusFolder(folder.id)
     } catch (err) {
       setError(toUserMessage(err, 'メモへの追加に失敗しました。'))
     } finally {
@@ -590,19 +584,14 @@ export function ShoppingMemoPage({
       const alreadyOnMemo = memoFolderIds.has(folder.id)
       if (!alreadyOnMemo) {
         await putOnMemo(folder)
-        if (createdNewFolder) {
-          setAllFolders((prev) =>
-            prev.some((f) => f.id === folder!.id) ? prev : [...prev, folder!],
-          )
-        }
-      } else if (createdNewFolder) {
+      }
+      if (createdNewFolder) {
         setAllFolders((prev) =>
           prev.some((f) => f.id === folder!.id) ? prev : [...prev, folder!],
         )
       }
       setNewName('')
       setAddOpen(false)
-      focusFolder(folder.id)
     } catch (err) {
       const createdFolder = folder
       if (createdNewFolder && createdFolder) {
@@ -755,11 +744,11 @@ export function ShoppingMemoPage({
                 追加
               </button>
             </form>
-            {!mutating && allFolders.length > 0 && foldersForPick.length === 0 ? (
+            {allFolders.length > 0 && foldersForPick.length === 0 ? (
               <p className="text-center text-sm text-stone-500">
                 追加できるフォルダはありません
               </p>
-            ) : !mutating && newName.trim() && pickableFolders.length > 0 ? (
+            ) : newName.trim() && pickableFolders.length > 0 ? (
               <ul className="max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-md border border-stone-200 bg-white">
                 {pickableFolders.map((f) => (
                   <li key={f.id}>
@@ -779,7 +768,7 @@ export function ShoppingMemoPage({
                   </li>
                 ))}
               </ul>
-            ) : !mutating && newName.trim() && foldersForPick.length > 0 ? (
+            ) : newName.trim() && foldersForPick.length > 0 ? (
               <p className="text-center text-sm text-stone-500">
                 一致するフォルダがありません。
               </p>

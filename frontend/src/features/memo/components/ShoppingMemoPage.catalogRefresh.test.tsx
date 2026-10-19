@@ -619,8 +619,8 @@ describe('ShoppingMemoPage catalog refresh', () => {
     })
 
     await waitFor(() => {
-      expect(listFolders).toHaveBeenCalledTimes(3)
-      expect(listRecordsForFolders).toHaveBeenCalledTimes(3)
+      expect(listFolders).toHaveBeenCalledTimes(2)
+      expect(listMemoItems).toHaveBeenCalledTimes(2)
     })
     expect(screen.getByTestId('memo-card-folder-c')).toBeTruthy()
     expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
