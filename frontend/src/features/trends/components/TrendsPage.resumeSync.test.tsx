@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ReactNode } from 'react'
+import { StrictMode, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { applyAuthIdentity, resetAuthIdentityForTests } from '@/lib/authIdentity'
@@ -173,6 +173,20 @@ describe('TrendsPage resume sync', () => {
     expect(screen.getByText('store-a').closest('tr')?.className).toContain(
       'bg-stone-100',
     )
+  })
+
+  it('completes the initial folder load when StrictMode replays the effect', async () => {
+    render(
+      <StrictMode>
+        <TrendsPage active />
+      </StrictMode>,
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('フォルダを読み込み中...')).toBeNull()
+    })
+    await waitFor(() => expect(listRecords).toHaveBeenCalledTimes(1))
+    expect(listFolders).toHaveBeenCalledTimes(2)
   })
 
   it('clears loading after resume during the initial folder fetch', async () => {

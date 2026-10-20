@@ -63,11 +63,18 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
   })
 
   useEffect(() => {
-    const generation = resumeRefreshGenerationRef.current
+    const visibleLoad = visibleLoadRef.current
+    const generation = ++resumeRefreshGenerationRef.current
     const userIdAtStart = getCurrentAuthUserId()
     let cancelled = false
-    ;(async () => {
-      visibleLoadRef.current.begin()
+    let initialVisibleLoadReleased = false
+    const releaseInitialVisibleLoad = () => {
+      if (initialVisibleLoadReleased) return false
+      initialVisibleLoadReleased = true
+      return visibleLoad.end()
+    }
+    visibleLoad.begin()
+    void (async () => {
       setFoldersLoading(true)
       try {
         const list = await listFolders()
@@ -90,8 +97,8 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
         }
       } finally {
         if (
+          releaseInitialVisibleLoad() &&
           !cancelled &&
-          visibleLoadRef.current.end() &&
           getCurrentAuthUserId() === userIdAtStart
         ) {
           setFoldersLoading(false)
@@ -100,6 +107,8 @@ export function TrendsPage({ active = true }: { active?: boolean }) {
     })()
     return () => {
       cancelled = true
+      resumeRefreshGenerationRef.current += 1
+      releaseInitialVisibleLoad()
     }
   }, [])
 

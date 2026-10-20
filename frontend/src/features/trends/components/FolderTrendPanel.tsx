@@ -63,6 +63,11 @@ export function FolderTrendPanel({
   const CHART_PAD = 8
   const Y_AXIS_WIDTH = 44
   const CHART_MARGIN_RIGHT = 8
+  /** Reserves one line so chart position stays stable when toggling store filter. */
+  const storeFilterSlotClass =
+    'flex w-full min-h-[2.25rem] items-center text-sm text-stone-600'
+  /** Reserves space for PointDetail including a wrapped store name (2 lines). */
+  const detailSlotClass = 'min-h-[7rem]'
 
   const usesExternalRecords = recordsProp !== undefined
   const fetchGenerationRef = useRef(0)
@@ -321,22 +326,28 @@ export function FolderTrendPanel({
             </p>
           )}
 
-          {activeStoreFilter && (
-            <p className="text-sm text-stone-600">
-              <span className="font-medium text-stone-900">「{activeStoreFilter}」</span>
-              の記録を表示中
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStore(null)
-                  setSelectedRecordId(null)
-                }}
-                className="ml-2 text-stone-500 underline hover:text-stone-800"
-              >
-                すべて表示
-              </button>
-            </p>
-          )}
+          <div className={storeFilterSlotClass} aria-live="polite">
+            {activeStoreFilter ? (
+              <p className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="min-w-0 truncate">
+                  <span className="font-medium text-stone-900">
+                    「{activeStoreFilter}」
+                  </span>
+                  の記録を表示中
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStore(null)
+                    setSelectedRecordId(null)
+                  }}
+                  className="shrink-0 text-stone-500 underline hover:text-stone-800"
+                >
+                  すべて表示
+                </button>
+              </p>
+            ) : null}
+          </div>
 
           {points.length === 0 ? (
             <p className="rounded-md border border-dashed border-stone-300 bg-stone-50/80 px-3 py-6 text-center text-sm text-stone-500">
@@ -422,9 +433,11 @@ export function FolderTrendPanel({
                 </ResponsiveContainer>
               </div>
 
-              {selectedPoint && (
-                <PointDetail point={selectedPoint} valueLabel={valueLabel} />
-              )}
+              <div className={detailSlotClass} aria-live="polite">
+                {selectedPoint ? (
+                  <PointDetail point={selectedPoint} valueLabel={valueLabel} />
+                ) : null}
+              </div>
             </>
           )}
 
