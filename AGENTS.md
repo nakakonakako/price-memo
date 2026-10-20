@@ -154,6 +154,12 @@ Use this path end to end; do not substitute standalone Playwright CLI,
 6. `http://localhost:5273`
 7. `npm run devserver:stop` for process groups started by that ensure invocation
 
+Always navigate the browser to `http://localhost:5273`. The devserver helper
+prints this browser URL when startup completes. Its internal health checks may
+use `127.0.0.1`; do not use that address for Playwright navigation because it
+is a different browser origin and does not share localhost authentication
+storage.
+
 The helper starts or reuses the price-memo backend on `:8001` and frontend on
 `:5273` (`strictPort`), refuses unrelated port occupants without fallback or
 kill, and records per-worktree state under the user's home directory so a fresh

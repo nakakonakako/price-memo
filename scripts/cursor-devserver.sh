@@ -3,7 +3,9 @@ set -euo pipefail
 
 FRONTEND_PORT=5273
 BACKEND_PORT=8001
+# Keep probes on loopback IP, but direct browser users to the localhost origin.
 FRONTEND_URL="http://127.0.0.1:${FRONTEND_PORT}"
+FRONTEND_BROWSER_URL="http://localhost:${FRONTEND_PORT}"
 BACKEND_URL="http://127.0.0.1:${BACKEND_PORT}"
 
 usage() {
@@ -277,7 +279,7 @@ NODE
   write_session "$session_json"
   trap - ERR INT TERM
 
-  echo "[cursor-devserver] frontend: ${FRONTEND_URL}"
+  echo "[cursor-devserver] frontend: ${FRONTEND_BROWSER_URL}"
   echo "[cursor-devserver] backend:  ${BACKEND_URL}"
   echo "[cursor-devserver] session:  $session_file"
 }
