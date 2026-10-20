@@ -21,17 +21,12 @@ export function useBodyScrollLock(
       bodyOverflow: body.style.overflow,
       htmlOverscroll: html.style.overscrollBehavior,
       bodyOverscroll: body.style.overscrollBehavior,
-      htmlPaddingRight: html.style.paddingRight,
     }
 
-    const scrollbarWidth = window.innerWidth - html.clientWidth
     html.style.overflow = 'hidden'
     body.style.overflow = 'hidden'
     html.style.overscrollBehavior = 'none'
     body.style.overscrollBehavior = 'none'
-    if (scrollbarWidth > 0) {
-      html.style.paddingRight = `${scrollbarWidth}px`
-    }
 
     const onTouchMove = (e: TouchEvent) => {
       const target = e.target
@@ -56,7 +51,6 @@ export function useBodyScrollLock(
       body.style.overflow = prev.bodyOverflow
       html.style.overscrollBehavior = prev.htmlOverscroll
       body.style.overscrollBehavior = prev.bodyOverscroll
-      html.style.paddingRight = prev.htmlPaddingRight
       window.scrollTo(0, scrollY)
     }
   }, [locked, options?.touchGuard])
