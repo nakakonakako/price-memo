@@ -48,8 +48,10 @@ import {
   unitPrice,
 } from '@/features/records/utils/unitPrice'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
+import type { PriceMemoTable } from '@/lib/externalSync'
 import { getResumeSyncGeneration } from '@/lib/resumeSync'
 import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
+import { useExternalCatalogRefresh } from '@/hooks/useExternalCatalogRefresh'
 import { isMissingTargetError } from '@/lib/appError'
 import { toUserMessage } from '@/lib/userError'
 import {
@@ -67,6 +69,7 @@ import {
   setStoresCache,
   upsertStoresCache,
 } from '@/features/stores/api/storesApi'
+import { subscribeStoresCacheRefresh } from '@/features/stores/api/storesCache'
 import type { PriceStore } from '@/features/stores/types'
 import { useFolders } from '../hooks/useFolders'
 import type { PriceFolder } from '../types'
@@ -495,6 +498,16 @@ export function FoldersPage({
     [],
   )
 
+  useEffect(
+    () =>
+      subscribeStoresCacheRefresh((current) => {
+        setStores(current)
+        setStoresError(null)
+        setStoresLoading(false)
+      }),
+    [],
+  )
+
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
     null,
   )
@@ -561,6 +574,27 @@ export function FoldersPage({
     active,
     onResumeSignal: invalidateResumeLoads,
     onRefresh: refreshFromServerResume,
+  })
+
+  const refreshFromRealtime = useCallback(
+    async (tables: ReadonlySet<PriceMemoTable>) => {
+      const refreshes: Promise<unknown>[] = []
+      if (tables.has('price_folders')) {
+        refreshes.push(refreshFolders({ silent: true }))
+        refreshes.push(refreshAllRecords())
+      } else if (tables.has('price_records')) {
+        refreshes.push(refreshAllRecords())
+      }
+      await Promise.all(refreshes)
+    },
+    [refreshAllRecords, refreshFolders],
+  )
+
+  useExternalCatalogRefresh({
+    active,
+    tables: ['price_folders', 'price_records'],
+    onSignal: invalidateResumeLoads,
+    onRefresh: refreshFromRealtime,
   })
 
   useEffect(() => {

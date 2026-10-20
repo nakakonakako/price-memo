@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
+import { useExternalCatalogRefresh } from '@/hooks/useExternalCatalogRefresh'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
 import {
   CartesianGrid,
@@ -52,7 +53,7 @@ export function FolderTrendPanel({
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [unit, setUnit] = useState<PriceUnit>('g')
   const [basis, setBasis] = useState<PriceBasis>('per_100')
-  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null)
   const [selectedStore, setSelectedStore] = useState<string | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const initializedFolderRef = useRef<string | null>(null)
@@ -118,6 +119,13 @@ export function FolderTrendPanel({
     onRefresh: fetchRecordsFromServer,
   })
 
+  useExternalCatalogRefresh({
+    active: resumeSyncActive && !usesExternalRecords,
+    tables: ['price_records'],
+    onSignal: invalidateResumeFetch,
+    onRefresh: fetchRecordsFromServer,
+  })
+
   const records = recordsProp ?? fetchedRecords
   const recordsLoading = recordsLoadingProp ?? fetchLoading
   const error = fetchError
@@ -144,16 +152,11 @@ export function FolderTrendPanel({
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      setSelectedIndex(null)
+      setSelectedRecordId(null)
       setSelectedStore(null)
     })
     return () => cancelAnimationFrame(frame)
-  }, [folderId, unit, basis, records])
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => setSelectedIndex(null))
-    return () => cancelAnimationFrame(frame)
-  }, [selectedStore])
+  }, [folderId, unit, basis])
 
   const unitsInFolder = useMemo(() => {
     return [...new Set(records.map((r) => r.unit.trim()).filter(Boolean))].sort(
@@ -184,13 +187,18 @@ export function FolderTrendPanel({
     return allPoints.filter((p) => p.store === activeStoreFilter)
   }, [allPoints, activeStoreFilter])
 
+  const selectedIndex = selectedRecordId
+    ? points.findIndex((point) => point.id === selectedRecordId)
+    : null
+  const selectedPoint =
+    selectedRecordId == null
+      ? null
+      : (points.find((point) => point.id === selectedRecordId) ?? null)
+
   const chartRows = useMemo(
     () => toChronologicalChartData(points),
     [points],
   )
-
-  const selectedPoint: TrendPoint | null =
-    selectedIndex != null ? (points[selectedIndex] ?? null) : null
 
   const valueLabel =
     effectiveBasis === 'per_100'
@@ -220,7 +228,7 @@ export function FolderTrendPanel({
     const ratio = Math.max(0, Math.min(1, x / plotWidth))
     const idx =
       points.length === 1 ? 0 : Math.round(ratio * (points.length - 1))
-    setSelectedIndex(idx)
+    setSelectedRecordId(points[idx]?.id ?? null)
   }
 
   const filterControls = (
@@ -319,7 +327,10 @@ export function FolderTrendPanel({
               の記録を表示中
               <button
                 type="button"
-                onClick={() => setSelectedStore(null)}
+                onClick={() => {
+                  setSelectedStore(null)
+                  setSelectedRecordId(null)
+                }}
                 className="ml-2 text-stone-500 underline hover:text-stone-800"
               >
                 すべて表示
@@ -339,7 +350,7 @@ export function FolderTrendPanel({
                 style={{ height: chartHeight }}
                 onMouseMove={handleChartMouseMove}
                 onClick={() => {
-                  if (isMobile) setSelectedIndex(null)
+                  if (isMobile) setSelectedRecordId(null)
                 }}
               >
                 <ResponsiveContainer width="100%" height="100%">
@@ -390,7 +401,7 @@ export function FolderTrendPanel({
                               style={{ cursor: 'pointer' }}
                               onClick={(e) => {
                                 e.stopPropagation()
-                                if (isMobile) setSelectedIndex(index)
+                                if (isMobile) setSelectedRecordId(points[index]?.id ?? null)
                               }}
                             />
                             <circle
@@ -420,7 +431,10 @@ export function FolderTrendPanel({
           <StoreList
             summaries={storeSummaries}
             selectedStore={activeStoreFilter}
-            onSelectStore={setSelectedStore}
+            onSelectStore={(store) => {
+              setSelectedStore(store)
+              setSelectedRecordId(null)
+            }}
             compact={compact}
             useCards={useStoreCards}
             isMobile={isMobile}

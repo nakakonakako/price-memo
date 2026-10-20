@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
-import { createVisibleLoadTracker } from '@/lib/visibleLoad'
 import { isMissingTargetError } from '@/lib/appError'
 import { toUserMessage } from '@/lib/userError'
 import {
@@ -25,7 +24,18 @@ export function useFolders() {
   const reorderInFlightRef = useRef(false)
   const mountedRef = useRef(true)
   const refreshGenerationRef = useRef(0)
-  const visibleLoadRef = useRef(createVisibleLoadTracker())
+  const visibleLoadIdsRef = useRef(new Set<number>())
+  const visibleLoadSequenceRef = useRef(0)
+
+  const beginVisibleLoad = useCallback(() => {
+    const loadId = ++visibleLoadSequenceRef.current
+    visibleLoadIdsRef.current.add(loadId)
+    return loadId
+  }, [])
+  const endVisibleLoad = useCallback((loadId: number) => {
+    if (!visibleLoadIdsRef.current.delete(loadId)) return false
+    return visibleLoadIdsRef.current.size === 0
+  }, [])
 
   useEffect(() => {
     mountedRef.current = true
@@ -37,9 +47,8 @@ export function useFolders() {
   const refresh = useCallback(async (opts?: { silent?: boolean }) => {
     const generation = ++refreshGenerationRef.current
     const userIdAtStart = getCurrentAuthUserId()
-    const startedVisibleLoad = !opts?.silent
-    if (startedVisibleLoad) {
-      visibleLoadRef.current.begin()
+    const visibleLoadId = opts?.silent ? null : beginVisibleLoad()
+    if (visibleLoadId !== null) {
       setIsLoading(true)
     }
     setError(null)
@@ -66,27 +75,32 @@ export function useFolders() {
       setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
     } finally {
       if (opts?.silent) {
-        visibleLoadRef.current.settle()
-        if (mountedRef.current && getCurrentAuthUserId() === userIdAtStart) {
+        if (
+          generation === refreshGenerationRef.current &&
+          mountedRef.current &&
+          getCurrentAuthUserId() === userIdAtStart
+        ) {
+          visibleLoadIdsRef.current.clear()
+          setIsLoading(false)
+        }
+      } else if (visibleLoadId !== null) {
+        const lastVisibleLoad = endVisibleLoad(visibleLoadId)
+        if (
+          lastVisibleLoad &&
+          mountedRef.current &&
+          getCurrentAuthUserId() === userIdAtStart
+        ) {
           setIsLoading(false)
         }
       }
-      if (
-        startedVisibleLoad &&
-        mountedRef.current &&
-        visibleLoadRef.current.end() &&
-        getCurrentAuthUserId() === userIdAtStart
-      ) {
-        setIsLoading(false)
-      }
     }
-  }, [])
+  }, [beginVisibleLoad, endVisibleLoad])
 
   useEffect(() => {
     let cancelled = false
     const generation = ++refreshGenerationRef.current
     const userIdAtStart = getCurrentAuthUserId()
-    visibleLoadRef.current.begin()
+    const visibleLoadId = beginVisibleLoad()
     listFolders()
       .then((next) => {
         if (
@@ -107,9 +121,10 @@ export function useFolders() {
         }
       })
       .finally(() => {
+        const lastVisibleLoad = endVisibleLoad(visibleLoadId)
         if (
           !cancelled &&
-          visibleLoadRef.current.end() &&
+          lastVisibleLoad &&
           getCurrentAuthUserId() === userIdAtStart
         ) {
           setIsLoading(false)
@@ -118,8 +133,9 @@ export function useFolders() {
     return () => {
       cancelled = true
       refreshGenerationRef.current += 1
+      endVisibleLoad(visibleLoadId)
     }
-  }, [])
+  }, [beginVisibleLoad, endVisibleLoad])
 
   const create = async (
     name: string,

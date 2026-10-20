@@ -149,6 +149,8 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 ## 6. 実装パス
 
+他端末のフォルダ・記録変更はPrivate Broadcastを無効化信号として扱い、表示中は既存APIからフォルダ／全記録を再取得する。店舗変更は共有店舗キャッシュのforce取得をStoreFieldとフォルダ画面へ反映する。非表示keep-alive画面は再表示時に取得し、フォームや展開状態を維持する（[Realtime同期仕様](./spec-realtime-sync.md)）。
+
 | 領域 | パス |
 |------|------|
 | フォルダタブ UI | `frontend/src/features/folders/components/FoldersPage.tsx` |

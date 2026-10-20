@@ -82,6 +82,7 @@ B は支出管理アプリではなく **厳密単価の統計アプリ** であ
 - 既定タブのため、記録取得は掲載フォルダに限定
 - タブは keep-alive（`App.tsx`）。他タブでのフォルダ／記録変更は `catalogSync` の revision で、再表示時に差分同期
 - 別デバイスなど外部からの更新は `resumeSync`（`visibilitychange` / `window.focus` / `pageshow`）で再取得。表示中タブは復帰直後、非表示の keep-alive タブは次に表示されたときに再取得。`catalogSync` の revision とは別経路。通信失敗時は既存表示を維持し、次の復帰で再試行
+- Private Broadcastで `price_folders` / `price_records` / `price_memo_items` の変更を受けた場合もpayloadを適用せず既存APIで再取得する。表示中は即時、非表示中は次回表示時に更新し、カードの展開・入力下書き・並びを維持（[Realtime同期仕様](./spec-realtime-sync.md)）
 - フォルダタブで品目（フォルダ）を **DB 削除** したときは、削除成功直後に `catalogSync` の folder-delete 通知で買い物メモ（非表示中も）が対象 `folder_id` のメモ行・記録・フォルダ候補を即時除去する。他カードの並び・展開・入力下書きは維持し、一覧全体の半透明ロックは使わない。削除前に始まった取得や並べ替え RPC の古い応答では復活させない（generation と一時 tombstone）。再取得で削除対象が確認できなければ tombstone を解除する。残存が返った場合は一度再取得し、なお残る場合は不整合エラーを表示して tombstone を解除する。再取得自体に失敗した場合は tombstone を保持し、次の再同期で再確認する。いずれの場合も他カードは操作可能のまま
 - 店舗一覧は `storesCache` を共有し、作成・改名・削除は stores revision でマウント済み StoreField にも同期する。記録保存時の `ensureStore` による新規作成も同じ通知経路を通る
 

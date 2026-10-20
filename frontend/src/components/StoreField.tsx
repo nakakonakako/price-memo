@@ -8,6 +8,7 @@ import {
   peekStoresCache,
   upsertStoresCache,
 } from '@/features/stores/api/storesApi'
+import { subscribeStoresCacheRefresh } from '@/features/stores/api/storesCache'
 import type { PriceStore } from '@/features/stores/types'
 import { subscribeCatalogRevisions } from '@/lib/catalogSync'
 import { toUserMessage } from '@/lib/userError'
@@ -43,6 +44,7 @@ export function StoreField({
       const current = peekStoresCache()
       if (current) setStores(current)
     })
+    const unsubscribeRealtimeRefresh = subscribeStoresCacheRefresh(setStores)
     getStoresCached()
       .then((nextStores) => {
         if (!cancelled) setStores(peekStoresCache() ?? nextStores)
@@ -56,6 +58,7 @@ export function StoreField({
     return () => {
       cancelled = true
       unsubscribe()
+      unsubscribeRealtimeRefresh()
     }
   }, [])
 

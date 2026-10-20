@@ -313,6 +313,7 @@ price-memo/
 | [spec-data-management.md](./spec-data-management.md) | price-memoデータの本人による一括削除 |
 | [spec-folders-catalog.md](./spec-folders-catalog.md) | フォルダタブ（品目名・店名・記録 UI） |
 | [spec-trends.md](./spec-trends.md) | 値段推移（グラフ・店舗一覧） |
+| [spec-realtime-sync.md](./spec-realtime-sync.md) | 他端末変更のPrivate Broadcast通知と再取得 |
 | [spec-guide.md](./spec-guide.md) | 使い方タブ |
 | [cursor-delegation.md](./cursor-delegation.md) | Codex Luna/Sol と Cursor worker の委譲手順 |
 | `../receipt-manager/docs/project-overview.md` | A の生きた概要（隣リポジトリ） |
@@ -323,6 +324,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-18 | Private Broadcast通知から表示中画面と店舗キャッシュを再取得。再接続時とアプリ復帰時の同期を維持 |
 | 2026-10-18 | BL-02 第3段階のうち、0件更新・削除を対象なしとして扱うフロント保護を追加（同時編集CASはDB側RPC待ち） |
 | 2026-10-18 | BL-02 第1段階: `resumeSync` で復帰時に Supabase から再取得（`catalogSync` revision とは別経路） |
 | 2026-10-16 | フォルダ削除通知で買い物メモの対象カードを即時同期 |

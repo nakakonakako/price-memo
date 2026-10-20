@@ -5,6 +5,24 @@ import { useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 
 const useAuth = vi.fn()
+const realtimeMocks = vi.hoisted(() => ({
+  subscribe: vi.fn(),
+  refreshStores: vi.fn(),
+}))
+
+vi.mock('@/lib/priceMemoRealtime', () => ({
+  subscribePriceMemoRealtime: realtimeMocks.subscribe,
+}))
+
+vi.mock('@/lib/externalSync', () => ({
+  clearPendingExternalSync: vi.fn(),
+  requestExternalSync: vi.fn(),
+  subscribeExternalSync: vi.fn(() => vi.fn()),
+}))
+
+vi.mock('@/features/stores/api/storesCache', () => ({
+  refreshStoresCacheFromRealtime: realtimeMocks.refreshStores,
+}))
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuth(),
@@ -86,6 +104,8 @@ function getPageMarker(): string {
 
 describe('App auth-keyed remount', () => {
   beforeEach(() => {
+    realtimeMocks.subscribe.mockReset().mockReturnValue(vi.fn())
+    realtimeMocks.refreshStores.mockReset().mockResolvedValue([])
     useAuth.mockReturnValue({
       session: mockSession('user-a', 'token-a'),
       isLoading: false,
@@ -147,6 +167,28 @@ describe('App auth-keyed remount', () => {
     rerender(<App />)
 
     expect(getPageMarker()).toBe(markerA)
+    expect(realtimeMocks.subscribe).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves the private subscription on user switch and removes it on logout', () => {
+    const unsubscribeA = vi.fn()
+    realtimeMocks.subscribe.mockReturnValueOnce(unsubscribeA).mockReturnValue(vi.fn())
+    const { rerender } = render(<App />)
+    expect(realtimeMocks.subscribe).toHaveBeenCalledTimes(1)
+
+    useAuth.mockReturnValue({
+      session: mockSession('user-b', 'token-b'),
+      isLoading: false,
+      logout: vi.fn(),
+    })
+    rerender(<App />)
+    expect(unsubscribeA).toHaveBeenCalledTimes(1)
+    expect(realtimeMocks.subscribe).toHaveBeenCalledTimes(2)
+    expect(realtimeMocks.subscribe.mock.calls[1][0]).toBe('user-b')
+
+    useAuth.mockReturnValue({ session: null, isLoading: false, logout: vi.fn() })
+    rerender(<App />)
+    expect(realtimeMocks.subscribe.mock.results[1].value).toHaveBeenCalledTimes(1)
   })
 
   it('returns to a fresh memo screen after successful data deletion', () => {
