@@ -304,9 +304,13 @@ describe('FoldersPage record mutation races', () => {
 
       await waitFor(() => expect(listAllRecords).toHaveBeenCalledTimes(2))
 
-      listAllRecords.mockResolvedValue([
-        recordRow('fresh-regular', 'fresh-regular-marker'),
-      ])
+      let releaseFreshRegular: () => void = () => {}
+      const freshRegularGate = new Promise<PriceRecord[]>((resolve) => {
+        releaseFreshRegular = () =>
+          resolve([recordRow('fresh-regular', 'fresh-regular-marker')])
+      })
+      listAllRecords.mockImplementationOnce(() => freshRegularGate)
+
       view.rerender(<FoldersPage active={false} />)
       await act(async () => {
         bumpRecordsRevision()
@@ -314,6 +318,11 @@ describe('FoldersPage record mutation races', () => {
       view.rerender(<FoldersPage active />)
 
       await waitFor(() => expect(listAllRecords).toHaveBeenCalledTimes(3))
+      await act(async () => {
+        releaseFreshRegular()
+        await freshRegularGate
+        await Promise.resolve()
+      })
 
       fireEvent.click(screen.getByRole('button', { name: /すべての記録/ }))
       await waitFor(() => expect(screen.getByText('fresh-regular-marker')).toBeTruthy())
