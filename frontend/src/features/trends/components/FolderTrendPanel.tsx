@@ -66,8 +66,8 @@ export function FolderTrendPanel({
   /** Reserves one line so chart position stays stable when toggling store filter. */
   const storeFilterSlotClass =
     'flex w-full min-h-[2.25rem] items-center text-sm text-stone-600'
-  /** Matches PointDetail height so the store list does not jump on select/hover. */
-  const detailSlotClass = 'min-h-[5.5rem]'
+  /** Reserves space for PointDetail including a wrapped store name (2 lines). */
+  const detailSlotClass = 'min-h-[7rem]'
 
   const usesExternalRecords = recordsProp !== undefined
   const fetchGenerationRef = useRef(0)
