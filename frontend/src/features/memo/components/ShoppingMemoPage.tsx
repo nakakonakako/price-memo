@@ -62,6 +62,9 @@ const nameCollator = new Intl.Collator('ja', {
 const MEMO_REORDER_STALE_MESSAGE =
   'メモの一覧が変更されました。もう一度並べ替えてください。'
 
+const DELETED_FOLDER_PERSISTENCE_MESSAGE =
+  '削除したフォルダがまだ残っています。ページを再読み込みしてください。'
+
 function reorderFailureMessage(err: unknown): string {
   if (isMemoReorderStaleError(err)) return MEMO_REORDER_STALE_MESSAGE
   return toUserMessage(err, '並べ替えの保存に失敗しました。')
@@ -228,9 +231,7 @@ export function ShoppingMemoPage({
             deletedFolderTombstonesRef.current.delete(folderId)
           }
           if (stillPresent.length > 0) {
-            setError(
-              '削除したフォルダがサーバーに残っています。状態を確認して再読み込みしてください。',
-            )
+            setError(DELETED_FOLDER_PERSISTENCE_MESSAGE)
           }
         }
         for (const folderId of tombstones) {
@@ -258,9 +259,7 @@ export function ShoppingMemoPage({
         }
         const message = toUserMessage(err, '読み込みに失敗しました。')
         setError((current) =>
-          opts?.preserveError && current
-            ? `${current} 最新の一覧を再取得できませんでした。`
-            : message,
+          opts?.preserveError && current ? current : message,
         )
         return 'error'
       } finally {

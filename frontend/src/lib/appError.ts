@@ -1,9 +1,9 @@
 /** User-facing copy when a mutation matched zero rows or the target is gone. */
 export const MISSING_TARGET_MESSAGE =
-  '対象を確認できず、操作を完了できませんでした。最新の一覧を再取得し、ログイン状態や権限も確認してください。'
+  '対象を確認できませんでした。もう一度お試しください。'
 
 export const RECORD_FOLDER_MISSING_MESSAGE =
-  '選択した品目（フォルダ）が見つかりません。一覧を更新してからもう一度お試しください。'
+  '選択した品目が見つかりません。もう一度お試しください。'
 
 export type AppErrorKind = 'MissingTarget'
 

@@ -904,7 +904,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
       expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
       expect(listFolders).toHaveBeenCalledTimes(3)
     })
-    expect(screen.queryByText(/削除したフォルダがサーバーに残っています/)).toBeNull()
+    expect(screen.queryByText(/削除したフォルダがまだ残っています/)).toBeNull()
 
     listFolders.mockResolvedValueOnce([folderA, folderB, folderC])
     listMemoItems.mockResolvedValueOnce([
@@ -957,7 +957,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
       expect(screen.getByTestId('memo-card-folder-b')).toBeTruthy()
       expect(
         screen.getByText(
-          '削除したフォルダがサーバーに残っています。状態を確認して再読み込みしてください。',
+          '削除したフォルダがまだ残っています。ページを再読み込みしてください。',
         ),
       ).toBeTruthy()
     })

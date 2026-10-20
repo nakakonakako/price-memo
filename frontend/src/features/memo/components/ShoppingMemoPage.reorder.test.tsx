@@ -257,6 +257,29 @@ describe('ShoppingMemoPage reorder', () => {
     })
   })
 
+  it('keeps a single error message when silent reload fails after reorder failure', async () => {
+    listMemoItems
+      .mockResolvedValueOnce([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+      .mockRejectedValueOnce({ message: 'Failed to fetch' })
+    reorderMemoItems.mockRejectedValue({ code: '08006', message: 'connection lost' })
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('memo-card-folder-a')).toBeTruthy()
+    })
+
+    await act(async () => {
+      screen.getByTestId('trigger-reorder').click()
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('並べ替えの保存に失敗しました。')).toBeTruthy()
+      expect(screen.queryByText(/最新の一覧を再取得/)).toBeNull()
+      expect(listMemoItems).toHaveBeenCalledTimes(2)
+    })
+  })
+
   it('does not submit overlapping reorder operations', async () => {
     let resolveReorder: () => void = () => {}
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])

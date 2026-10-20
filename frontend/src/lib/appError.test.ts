@@ -17,6 +17,12 @@ describe('appError', () => {
     expect(err.message).toBe(MISSING_TARGET_MESSAGE)
   })
 
+  it('uses concise missing-target copy without overlapping refresh or login guidance', () => {
+    expect(MISSING_TARGET_MESSAGE).not.toMatch(/ログイン|再取得|権限/)
+    expect(RECORD_FOLDER_MISSING_MESSAGE).not.toMatch(/フォルダ|一覧を更新/)
+    expect(MISSING_TARGET_MESSAGE).not.toMatch(RECORD_FOLDER_MISSING_MESSAGE)
+  })
+
   it('maps PGRST116 and P0002 to MissingTarget', () => {
     expect(
       isMissingTargetError(

@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { createMissingTargetError } from '@/lib/appError'
+import {
+  MISSING_TARGET_MESSAGE,
+  createMissingTargetError,
+} from '@/lib/appError'
 import type { PriceRecord } from '@/features/records/types'
 import type { PriceFolder } from '../types'
 import type { PriceStore } from '@/features/stores/types'
@@ -187,7 +190,7 @@ describe('FoldersPage store deletion after MissingTarget', () => {
 
       expect(removeFromStoresCache).not.toHaveBeenCalled()
       expect(screen.getAllByText(store.name).length).toBeGreaterThan(0)
-      expect(screen.getByText(/対象を確認できず/)).toBeTruthy()
+      expect(screen.getByText(MISSING_TARGET_MESSAGE)).toBeTruthy()
     },
   )
 
@@ -208,7 +211,7 @@ describe('FoldersPage store deletion after MissingTarget', () => {
 
       expect(removeFromStoresCache).not.toHaveBeenCalled()
       expect(screen.getAllByText(store.name).length).toBeGreaterThan(0)
-      expect(screen.getByText(/対象を確認できず/)).toBeTruthy()
+      expect(screen.getByText(MISSING_TARGET_MESSAGE)).toBeTruthy()
     },
   )
 })
