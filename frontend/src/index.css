@@ -1,5 +1,9 @@
 @import 'tailwindcss';
 
+html {
+  scrollbar-gutter: stable;
+}
+
 :root {
   color-scheme: light;
   font-family: 'Segoe UI', 'Hiragino Sans', 'Noto Sans JP', sans-serif;
