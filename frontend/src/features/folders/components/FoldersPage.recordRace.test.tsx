@@ -201,7 +201,7 @@ describe('FoldersPage record mutation races', () => {
 
     expect(screen.queryByText('stale-folder-marker')).toBeNull()
     expect(screen.getByText('fresh-marker')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '← 一覧へ' }))
+    fireEvent.click(screen.getByRole('button', { name: '一覧へ戻る' }))
     expect(
       screen.getByRole('button', { name: 'すべての記録（1）' }),
     ).toBeTruthy()

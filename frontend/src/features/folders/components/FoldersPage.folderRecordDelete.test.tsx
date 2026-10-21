@@ -412,7 +412,7 @@ describe('FoldersPage folder record delete', () => {
         expect(() => findRecordListItem(recordB, false)).toThrow()
       })
       expect(findRecordListItem(recordA, false)).toBeTruthy()
-      expect(screen.getByRole('button', { name: '← 一覧へ' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '一覧へ戻る' })).toBeTruthy()
     })
 
     it('keeps the record and shows an error when delete fails', async () => {
@@ -543,7 +543,7 @@ describe('FoldersPage folder record delete', () => {
         expect(() => findRecordListItem(recordB, false)).toThrow()
       })
       expect(findRecordListItem(recordA, false)).toBeTruthy()
-      expect(screen.getByRole('button', { name: '← 一覧へ' })).toBeTruthy()
+      expect(screen.getByRole('button', { name: '一覧へ戻る' })).toBeTruthy()
     })
 
     it('does not start folder swipe tracking when pointerdown begins on a record row', async () => {
