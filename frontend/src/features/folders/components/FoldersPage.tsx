@@ -12,6 +12,7 @@ import {
 } from 'react'
 import { EditIconButton } from '@/components/EditIconButton'
 import { CopyIconButton } from '@/components/CopyIconButton'
+import { ArrowLeftIcon } from '@/components/icons/ArrowLeftIcon'
 import { ChartIcon } from '@/components/icons/ChartIcon'
 import { SearchIcon } from '@/components/icons/SearchIcon'
 import { Modal } from '@/components/Modal'
@@ -87,6 +88,9 @@ type CatalogView = 'folder' | 'store'
 type CatalogSort = 'added' | 'name'
 
 const PREVIEW_RECORD_LIMIT = 3
+
+const catalogToolbarIconButtonClass =
+  'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-stone-300 bg-white text-stone-600 hover:bg-stone-50'
 
 const nameCollator = new Intl.Collator('ja', {
   numeric: true,
@@ -1649,9 +1653,11 @@ export function FoldersPage({
             <button
               type="button"
               onClick={closeCatalogDetail}
-              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
+              aria-label="一覧へ戻る"
+              title="一覧へ戻る"
+              className={catalogToolbarIconButtonClass}
             >
-              ← 一覧へ
+              <ArrowLeftIcon />
             </button>
             <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-stone-900">
               {parseFolderName(detailFolder.name).displayName}
@@ -1710,9 +1716,11 @@ export function FoldersPage({
             <button
               type="button"
               onClick={closeCatalogDetail}
-              className="rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
+              aria-label="一覧へ戻る"
+              title="一覧へ戻る"
+              className={catalogToolbarIconButtonClass}
             >
-              ← 一覧へ
+              <ArrowLeftIcon />
             </button>
             <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-stone-900">
               {detailStore.name}
@@ -1992,6 +2000,7 @@ export function FoldersPage({
                   records={trendsRecords ?? []}
                   recordsLoading={trendsRecordsLoading}
                   compact
+                  onRequestClose={closeTrendsPanel}
                 />
               </Suspense>
             )}

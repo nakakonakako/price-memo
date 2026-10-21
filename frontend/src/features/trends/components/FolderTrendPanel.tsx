@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { CloseIcon } from '@/components/icons/CloseIcon'
 import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
 import { useExternalCatalogRefresh } from '@/hooks/useExternalCatalogRefresh'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
@@ -36,6 +37,8 @@ type Props = {
   records?: PriceRecord[]
   recordsLoading?: boolean
   compact?: boolean
+  /** PC folder split panel: icon button to close without using the chart toggle. */
+  onRequestClose?: () => void
   /** Trends tab keep-alive: refetch records on app resume without remounting. */
   resumeSyncActive?: boolean
 }
@@ -45,6 +48,7 @@ export function FolderTrendPanel({
   records: recordsProp,
   recordsLoading: recordsLoadingProp,
   compact = false,
+  onRequestClose,
   resumeSyncActive = false,
 }: Props) {
   const isMobile = useMediaQuery('(max-width: 1023px)')
@@ -274,8 +278,23 @@ export function FolderTrendPanel({
     </>
   )
 
+  const showPanelClose = Boolean(onRequestClose && !isMobile)
+
   return (
     <div className="space-y-3 rounded-lg border border-stone-200 bg-white/80 p-3 shadow-sm">
+      {showPanelClose && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            aria-label="値段推移を閉じる"
+            title="値段推移を閉じる"
+            onClick={onRequestClose}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-stone-300 bg-white text-stone-600 hover:bg-stone-50"
+          >
+            <CloseIcon />
+          </button>
+        </div>
+      )}
       {isMobile ? (
         <div>
           <button
