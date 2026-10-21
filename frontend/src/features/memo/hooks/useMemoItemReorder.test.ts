@@ -17,6 +17,11 @@ vi.mock('../api/memoApi', () => ({
   },
 }))
 
+vi.mock('@/features/stores/api/storesApi', () => ({
+  createStore: vi.fn(),
+  listStores: vi.fn(),
+}))
+
 function memoItem(folderId: string, sortOrder: number) {
   return {
     id: `memo-${folderId}`,
