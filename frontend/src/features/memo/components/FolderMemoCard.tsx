@@ -1,5 +1,17 @@
-import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from 'react'
 import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
+import { useMobileReorderOptional } from './MemoMobileReorderContext'
+import {
+  MemoMobileReorderHandle,
+  MemoMobileReorderInsertMarker,
+  MemoMobileReorderItemRegistrar,
+} from './MemoMobileReorder'
 import { DateInput } from '@/components/DateInput'
 import { StoreField } from '@/components/StoreField'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -36,6 +48,9 @@ type Props = {
   rootRef?: (el: HTMLElement | null) => void
   onSaved: (record: PriceRecord) => void
   dragEnabled?: boolean
+  mobileReorderEnabled?: boolean
+  mobileReorderIndex?: number
+  mobileReorderTotal?: number
   onRemoveFromMemo?: () => void
   onOpenFolder?: () => void
 }
@@ -50,10 +65,17 @@ export function FolderMemoCard({
   rootRef,
   onSaved,
   dragEnabled = true,
+  mobileReorderEnabled = false,
+  mobileReorderIndex = 0,
+  mobileReorderTotal = 1,
   onRemoveFromMemo,
   onOpenFolder,
 }: Props) {
   const isMobile = useMediaQuery('(max-width: 1023px)')
+  const [listItemEl, setListItemEl] = useState<HTMLElement | null>(null)
+  const mobileReorder = useMobileReorderOptional()
+  const isReorderLifted =
+    mobileReorderEnabled && mobileReorder?.activeId === folderId
   const displayName = parseFolderName(folderName).displayName
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
@@ -208,8 +230,26 @@ export function FolderMemoCard({
     }
   }
 
+  const setLiRef = (el: HTMLElement | null) => {
+    setListItemEl(el)
+    rootRef?.(el)
+  }
+
   return (
-    <li className="list-none" ref={rootRef}>
+    <li className="list-none" ref={setLiRef}>
+      {mobileReorderEnabled && (
+        <>
+          <MemoMobileReorderInsertMarker folderId={folderId} />
+          <MemoMobileReorderItemRegistrar folderId={folderId} rootRef={listItemEl} />
+        </>
+      )}
+      {isReorderLifted && (
+        <div
+          aria-hidden
+          className={`min-h-[4.5rem] rounded-lg border-2 border-dashed border-stone-300 bg-stone-100/80 ${colorClass}`}
+        />
+      )}
+      <div className={isReorderLifted ? 'hidden' : undefined}>
       <DraggableCatalogItem
         dragEnabled={dragEnabled}
         payload={{ kind: 'memo-folder', id: folderId }}
@@ -233,6 +273,15 @@ export function FolderMemoCard({
                   {displayName}
                 </p>
                 {openFolderButton}
+                {mobileReorderEnabled && (
+                  <MemoMobileReorderHandle
+                    folderId={folderId}
+                    folderName={displayName}
+                    cardRootRef={listItemEl}
+                    index={mobileReorderIndex}
+                    total={mobileReorderTotal}
+                  />
+                )}
               </div>
 
               {activeStats ? (
@@ -515,6 +564,7 @@ export function FolderMemoCard({
         </form>
       )}
       </DraggableCatalogItem>
+      </div>
     </li>
   )
 }

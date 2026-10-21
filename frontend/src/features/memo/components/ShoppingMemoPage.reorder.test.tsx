@@ -274,8 +274,10 @@ describe('ShoppingMemoPage reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByText('並べ替えの保存に失敗しました。')).toBeTruthy()
-      expect(screen.queryByText(/最新の一覧を再取得/)).toBeNull()
+      expect(screen.getByText(/並べ替えの保存に失敗しました/)).toBeTruthy()
+      expect(
+        screen.getByText(/並べ替えの結果を確認できませんでした/),
+      ).toBeTruthy()
       expect(listMemoItems).toHaveBeenCalledTimes(2)
     })
   })
