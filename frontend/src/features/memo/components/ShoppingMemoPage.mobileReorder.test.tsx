@@ -327,6 +327,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     const control = reorderA11yButton('B')
+    expect(control.classList.contains('memo-reorder-a11y-btn')).toBe(true)
     control.focus()
     await act(async () => {
       fireEvent.keyDown(control, { key: 'ArrowUp' })

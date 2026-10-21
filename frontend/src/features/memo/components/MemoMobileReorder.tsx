@@ -690,7 +690,7 @@ export function MemoMobileReorderA11yControls({
       onKeyDown={onKeyDown}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
-      className="sr-only"
+      className="memo-reorder-a11y-btn"
     >
       <span id={`memo-reorder-hint-${folderId}`}>
         {`位置 ${index + 1} / ${total}。上下キーで1段、Shift+上下で先頭・末尾。カード余白の長押しでドラッグ。`}

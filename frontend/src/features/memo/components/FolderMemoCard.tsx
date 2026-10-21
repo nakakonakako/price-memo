@@ -282,7 +282,7 @@ export function FolderMemoCard({
         <div className="px-3 py-2.5">
           {isMobile ? (
             <div className="space-y-2">
-              <div className="flex min-w-0 items-center gap-1">
+              <div className="relative flex min-w-0 items-center gap-1">
                 <div
                   data-memo-card-toggle
                   className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5"
