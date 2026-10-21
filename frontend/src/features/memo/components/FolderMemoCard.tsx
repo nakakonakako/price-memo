@@ -274,8 +274,10 @@ export function FolderMemoCard({
         onClick={isMobile ? undefined : handleOpen}
         onDelete={() => onRemoveFromMemo?.()}
         className={`overflow-hidden rounded-lg border shadow-sm transition-colors ${colorClass} ${
-          isOpen ? 'ring-1 ring-stone-400' : 'hover:brightness-[0.99]'
-        }`}
+          isOpen && !compactListDisplay
+            ? 'ring-1 ring-stone-400'
+            : 'hover:brightness-[0.99]'
+        } ${compactListDisplay ? 'select-none' : ''}`}
       >
         <div className="px-3 py-2.5">
           {isMobile ? (
@@ -287,7 +289,9 @@ export function FolderMemoCard({
                   onClick={handleOpen}
                 >
                   <span
-                    className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                    className={`shrink-0 text-stone-400 transition-transform ${
+                      isOpen && !compactListDisplay ? 'rotate-90' : ''
+                    }`}
                     aria-hidden
                   >
                     ▸
@@ -309,11 +313,6 @@ export function FolderMemoCard({
                   />
                 )}
               </div>
-              {mobileReorderEnabled && !compactListDisplay && (
-                <p className="text-center text-[11px] text-stone-400">
-                  余白を長押しで並べ替え
-                </p>
-              )}
 
               {activeStats ? (
                 <div

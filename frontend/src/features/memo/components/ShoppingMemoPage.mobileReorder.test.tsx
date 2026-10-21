@@ -169,9 +169,8 @@ function swipeRowInner(folderName: string) {
   return swipeRow?.querySelector('[style*="translateX"]') as HTMLElement
 }
 
-function reorderHintEl(folderName: string) {
-  const li = folderCardLi(folderName)
-  return within(li).getByText('余白を長押しで並べ替え')
+function reorderA11yButton(folderName: string) {
+  return screen.getByLabelText(`${folderName}の並べ替え`)
 }
 
 async function withLongPressTimers(run: () => void | Promise<void>) {
@@ -317,20 +316,20 @@ describe('ShoppingMemoPage mobile reorder', () => {
     resetAuthIdentityForTests()
   })
 
-  it('shows reorder controls and moves item with arrow key', async () => {
+  it('moves item with arrow key on the screen-reader reorder control', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bを上へ')).toBeTruthy()
+      expect(reorderA11yButton('B')).toBeTruthy()
     })
 
-    const up = screen.getByLabelText('Bを上へ')
-    up.focus()
+    const control = reorderA11yButton('B')
+    control.focus()
     await act(async () => {
-      fireEvent.keyDown(up, { key: 'ArrowUp' })
+      fireEvent.keyDown(control, { key: 'ArrowUp' })
     })
 
     await waitFor(() => {
@@ -342,55 +341,6 @@ describe('ShoppingMemoPage mobile reorder', () => {
 
     await waitFor(() => {
       expect(liveRegion()?.textContent).toBe('Bを1番目に移動しました')
-    })
-  })
-
-  it('does not toggle card open when reorder control is clicked', async () => {
-    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
-    reorderMemoItems.mockResolvedValue(undefined)
-
-    renderPage()
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Bを上へ')).toBeTruthy()
-    })
-
-    const up = screen.getByLabelText('Bを上へ')
-    await act(async () => {
-      fireEvent.click(up)
-    })
-
-    expect(screen.queryByLabelText('確認日')).toBeNull()
-
-    const cardTitle = screen.getByText('B')
-    await act(async () => {
-      fireEvent.click(cardTitle)
-    })
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('確認日')).toBeTruthy()
-    })
-  })
-
-  it('moves one step when tapping the up control', async () => {
-    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
-    reorderMemoItems.mockResolvedValue(undefined)
-
-    renderPage()
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Bを上へ')).toBeTruthy()
-    })
-
-    await act(async () => {
-      fireEvent.click(screen.getByLabelText('Bを上へ'))
-    })
-
-    await waitFor(() => {
-      expect(reorderMemoItems).toHaveBeenCalledWith(
-        ['folder-a', 'folder-b'],
-        ['folder-b', 'folder-a'],
-      )
     })
   })
 
@@ -499,13 +449,13 @@ describe('ShoppingMemoPage mobile reorder', () => {
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bを上へ')).toBeTruthy()
+      expect(reorderA11yButton('B')).toBeTruthy()
     })
 
-    const up = screen.getByLabelText('Bを上へ')
-    up.focus()
+    const control = reorderA11yButton('B')
+    control.focus()
     await act(async () => {
-      fireEvent.keyDown(up, { key: 'ArrowUp' })
+      fireEvent.keyDown(control, { key: 'ArrowUp' })
     })
 
     await waitFor(() => {
@@ -605,15 +555,14 @@ describe('ShoppingMemoPage mobile reorder', () => {
       expect(screen.getByText('B')).toBeTruthy()
     })
 
-    const hint = reorderHintEl('B')
-    expect(hint).toBeTruthy()
+    const surface = cardGestureSurface('B')
 
     await withListItemRectsAsync(async () => {
       await withLongPressTimers(async () => {
         await act(async () => {
-          touchAt(hint!, 'start', 240)
+          touchAt(surface, 'start', 240)
           vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
-          touchAt(hint!, 'move', 200)
+          touchAt(surface, 'move', 200)
         })
       })
 
@@ -624,7 +573,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
 
       await withLongPressTimers(async () => {
         await act(async () => {
-          touchAt(hint!, 'end', 200)
+          touchAt(surface, 'end', 200)
         })
       })
     })
@@ -732,15 +681,14 @@ describe('ShoppingMemoPage mobile reorder', () => {
       expect(screen.getByText('B')).toBeTruthy()
     })
 
-    const hint = reorderHintEl('B')
-    expect(hint).toBeTruthy()
+    const surface = cardGestureSurface('B')
 
     await withLongPressTimers(async () => {
       await act(async () => {
-        touchAt(hint!, 'start', 240)
+        touchAt(surface, 'start', 240)
         vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
-        touchAt(hint!, 'move', 200, 120, { cancelable: false })
-        touchAt(hint!, 'end', 200)
+        touchAt(surface, 'move', 200, 120, { cancelable: false })
+        touchAt(surface, 'end', 200)
       })
     })
 

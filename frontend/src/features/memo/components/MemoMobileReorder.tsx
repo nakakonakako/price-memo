@@ -612,6 +612,10 @@ export function MemoMobileReorderGestureRoot({
   const reorder = useContext(MobileReorderContext)
   const cardGesture = useContext(CardGestureContext)
   const surfaceRef = useRef<HTMLDivElement | null>(null)
+  const blockSelection =
+    reorder?.dragging ||
+    reorder?.gesturePhase === 'longPressPending' ||
+    reorder?.gesturePhase === 'dragging'
 
   useEffect(() => {
     if (!cardGesture) return
@@ -625,7 +629,11 @@ export function MemoMobileReorderGestureRoot({
   return (
     <div
       ref={surfaceRef}
-      className="min-w-0 flex-1"
+      className={`min-w-0 flex-1 ${blockSelection ? 'select-none' : ''}`}
+      onContextMenu={(e) => {
+        if (!blockSelection) return
+        e.preventDefault()
+      }}
       onClickCapture={(e) => {
         if (reorder?.shouldSuppressCardClick()) {
           e.preventDefault()
@@ -655,56 +663,39 @@ export function MemoMobileReorderA11yControls({
 }: A11yProps) {
   const { requestStepMove, dragging } = useMobileReorder()
 
-  const onKeyDown = (
-    e: React.KeyboardEvent<HTMLButtonElement>,
-    direction: 'up' | 'down' | 'start' | 'end',
-  ) => {
+  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
     if (disabled || dragging) return
+    let direction: 'up' | 'down' | 'start' | 'end' | null = null
+    if (e.key === 'ArrowUp' && e.shiftKey) direction = 'start'
+    else if (e.key === 'ArrowUp') direction = 'up'
+    else if (e.key === 'ArrowDown' && e.shiftKey) direction = 'end'
+    else if (e.key === 'ArrowDown') direction = 'down'
+    if (!direction) return
+    if (direction === 'up' && index === 0) return
+    if (direction === 'down' && index >= total - 1) return
+    if (direction === 'start' && index === 0) return
+    if (direction === 'end' && index >= total - 1) return
     e.preventDefault()
     e.stopPropagation()
     requestStepMove(folderId, direction)
   }
 
   return (
-    <div
+    <button
+      type="button"
       data-memo-reorder-a11y
-      className="flex shrink-0 items-center gap-0.5"
+      disabled={disabled || dragging}
+      aria-label={`${folderName}の並べ替え`}
+      aria-describedby={`memo-reorder-hint-${folderId}`}
+      onKeyDown={onKeyDown}
       onClick={(e) => e.stopPropagation()}
       onPointerDown={(e) => e.stopPropagation()}
+      className="sr-only"
     >
-      <button
-        type="button"
-        disabled={disabled || dragging || index === 0}
-        aria-label={`${folderName}を上へ`}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowUp' && e.shiftKey) onKeyDown(e, 'start')
-          else if (e.key === 'ArrowUp') onKeyDown(e, 'up')
-        }}
-        onClick={() => requestStepMove(folderId, 'up')}
-        className="flex h-11 w-9 items-center justify-center rounded text-stone-500 hover:bg-black/5 disabled:opacity-40"
-      >
-        ↑
-      </button>
-      <button
-        type="button"
-        disabled={disabled || dragging || index >= total - 1}
-        aria-label={`${folderName}を下へ`}
-        onKeyDown={(e) => {
-          if (e.key === 'ArrowDown' && e.shiftKey) onKeyDown(e, 'end')
-          else if (e.key === 'ArrowDown') onKeyDown(e, 'down')
-        }}
-        onClick={() => requestStepMove(folderId, 'down')}
-        className="flex h-11 w-9 items-center justify-center rounded text-stone-500 hover:bg-black/5 disabled:opacity-40"
-      >
-        ↓
-      </button>
-      <span
-        id={`memo-reorder-hint-${folderId}`}
-        className="sr-only"
-      >
-        {`位置 ${index + 1} / ${total}。カードの余白を長押ししてドラッグ、または上下ボタンで移動。`}
+      <span id={`memo-reorder-hint-${folderId}`}>
+        {`位置 ${index + 1} / ${total}。上下キーで1段、Shift+上下で先頭・末尾。カード余白の長押しでドラッグ。`}
       </span>
-    </div>
+    </button>
   )
 }
 
