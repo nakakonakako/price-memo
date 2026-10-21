@@ -26,7 +26,7 @@ export function isInteractiveReorderTarget(target: EventTarget | null): boolean 
   return (
     target instanceof Element &&
     !!target.closest(
-      'button, input, select, textarea, a, label, form, [data-no-trash-drag], [data-memo-reorder-a11y], [data-memo-card-toggle]',
+      'button, input, select, textarea, a, label, form, [data-no-trash-drag], [data-memo-reorder-a11y]',
     )
   )
 }

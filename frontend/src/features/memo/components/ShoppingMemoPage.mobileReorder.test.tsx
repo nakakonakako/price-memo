@@ -605,7 +605,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     expect(reorderMemoItems).not.toHaveBeenCalled()
   })
 
-  it('does not start reorder from the card title toggle region', async () => {
+  it('opens the card on a short tap on the title toggle region', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
@@ -618,16 +618,39 @@ describe('ShoppingMemoPage mobile reorder', () => {
     const titleToggle = screen.getByText('B').closest('[data-memo-card-toggle]')
     expect(titleToggle).toBeTruthy()
 
-    await withLongPressTimers(async () => {
-      await act(async () => {
-        touchAt(titleToggle as HTMLElement, 'start', 240)
-        vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
-        touchAt(titleToggle as HTMLElement, 'move', 180)
-        touchAt(titleToggle as HTMLElement, 'end', 180)
-      })
+    await act(async () => {
+      fireEvent.click(titleToggle as HTMLElement)
     })
 
+    await waitFor(() => {
+      expect(screen.getByLabelText('確認日')).toBeTruthy()
+    })
     expect(reorderMemoItems).not.toHaveBeenCalled()
+  })
+
+  it('starts reorder when long-pressing the card title toggle region', async () => {
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+    reorderMemoItems.mockResolvedValue(undefined)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('B')).toBeTruthy()
+    })
+
+    const titleToggle = screen.getByText('B').closest('[data-memo-card-toggle]')
+    expect(titleToggle).toBeTruthy()
+
+    await withListItemRectsAsync(async () => {
+      await longPressDrag(titleToggle as HTMLElement, 30)
+    })
+
+    await waitFor(() => {
+      expect(reorderMemoItems).toHaveBeenCalledWith(
+        ['folder-a', 'folder-b'],
+        ['folder-b', 'folder-a'],
+      )
+    })
   })
 
   it('keeps open state and form input after a successful compact-list reorder', async () => {

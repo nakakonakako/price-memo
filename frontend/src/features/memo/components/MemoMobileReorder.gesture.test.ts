@@ -26,10 +26,10 @@ describe('memo mobile reorder gesture thresholds', () => {
     expect(shouldActivateDrag(20, 4)).toBe(false)
   })
 
-  it('treats card toggle regions as non-reorder surfaces', () => {
+  it('allows long-press reorder from card title toggle regions', () => {
     document.body.innerHTML =
       '<div data-memo-card-toggle><span id="title">A</span></div>'
     const title = document.getElementById('title')
-    expect(isInteractiveReorderTarget(title)).toBe(true)
+    expect(isInteractiveReorderTarget(title)).toBe(false)
   })
 })
