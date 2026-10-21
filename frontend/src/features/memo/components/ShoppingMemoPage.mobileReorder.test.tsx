@@ -1,14 +1,24 @@
 // @vitest-environment jsdom
 import '@/test/pointerEventPolyfill'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { applyAuthIdentity, resetAuthIdentityForTests } from '@/lib/authIdentity'
 import { AuthProvider } from '@/contexts/AuthContext'
+import { MEMO_REORDER_LONG_PRESS_MS } from './memoMobileReorderGesture'
 
 const listFolders = vi.fn()
 const listMemoItems = vi.fn()
 const listRecordsForFolders = vi.fn()
 const reorderMemoItems = vi.fn()
+const removeMemoItem = vi.fn()
 const getSession = vi.fn()
 const onAuthStateChange = vi.fn()
 
@@ -31,7 +41,7 @@ vi.mock('../api/memoApi', async (importOriginal) => {
   return {
     ...actual,
     addMemoItem: vi.fn(),
-    removeMemoItem: vi.fn(),
+    removeMemoItem: (...args: unknown[]) => removeMemoItem(...args),
     listMemoItems: () => listMemoItems(),
     reorderMemoItems: (...args: unknown[]) => reorderMemoItems(...args),
   }
@@ -137,6 +147,84 @@ async function withListItemRectsAsync(
   await withListItemRects(run, rowHeight)
 }
 
+function folderCardLi(folderName: string) {
+  const title = within(document.body).getByText(folderName, {
+    selector: '[data-memo-compact-title]',
+  })
+  const li = title.closest('li')
+  if (!li) throw new Error(`folder card not found: ${folderName}`)
+  return li as HTMLElement
+}
+
+function cardGestureSurface(folderName: string) {
+  const li = folderCardLi(folderName)
+  const surface = li.querySelector(':scope > .flex > .min-w-0.flex-1')
+  if (!surface) throw new Error(`gesture surface not found: ${folderName}`)
+  return surface as HTMLElement
+}
+
+function swipeRowInner(folderName: string) {
+  const li = folderCardLi(folderName)
+  const swipeRow = li.querySelector('[style*="translateX"]')?.parentElement
+  return swipeRow?.querySelector('[style*="translateX"]') as HTMLElement
+}
+
+function reorderHintEl(folderName: string) {
+  const li = folderCardLi(folderName)
+  return within(li).getByText('余白を長押しで並べ替え')
+}
+
+async function withLongPressTimers(run: () => void | Promise<void>) {
+  vi.useFakeTimers()
+  try {
+    await run()
+  } finally {
+    vi.useRealTimers()
+  }
+}
+
+function touchAt(
+  el: HTMLElement,
+  type: 'start' | 'move' | 'end' | 'cancel',
+  clientY: number,
+  clientX = 120,
+  opts?: { cancelable?: boolean },
+) {
+  const touch = { identifier: 1, clientX, clientY, target: el }
+  if (type === 'start') {
+    fireEvent.touchStart(el, { touches: [touch], targetTouches: [touch] })
+  } else if (type === 'move') {
+    fireEvent.touchMove(el, {
+      touches: [touch],
+      targetTouches: [touch],
+      cancelable: opts?.cancelable ?? true,
+    })
+  } else if (type === 'cancel') {
+    fireEvent.touchCancel(el, { touches: [], changedTouches: [touch] })
+  } else {
+    fireEvent.touchEnd(el, { changedTouches: [touch], touches: [] })
+  }
+}
+
+async function longPressDrag(
+  el: HTMLElement,
+  endY: number,
+  opts?: { cancel?: boolean },
+) {
+  await withLongPressTimers(async () => {
+    await act(async () => {
+      touchAt(el, 'start', 240)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+      touchAt(el, 'move', endY)
+      if (opts?.cancel) {
+        touchAt(el, 'cancel', endY)
+      } else {
+        touchAt(el, 'end', endY)
+      }
+    })
+  })
+}
+
 function pointerSwipe(
   el: HTMLElement,
   opts: { dy: number; dx?: number; cancel?: boolean; endY?: number },
@@ -187,6 +275,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     listMemoItems.mockReset()
     listRecordsForFolders.mockReset()
     reorderMemoItems.mockReset()
+    removeMemoItem.mockReset()
     getSession.mockReset()
     onAuthStateChange.mockReset()
 
@@ -223,24 +312,25 @@ describe('ShoppingMemoPage mobile reorder', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     cleanup()
     resetAuthIdentityForTests()
   })
 
-  it('shows reorder handles and moves item with arrow key', async () => {
+  it('shows reorder controls and moves item with arrow key', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Aの並べ替え')).toBeTruthy()
+      expect(screen.getByLabelText('Bを上へ')).toBeTruthy()
     })
 
-    const handle = screen.getByLabelText('Bの並べ替え')
-    handle.focus()
+    const up = screen.getByLabelText('Bを上へ')
+    up.focus()
     await act(async () => {
-      fireEvent.keyDown(handle, { key: 'ArrowUp' })
+      fireEvent.keyDown(up, { key: 'ArrowUp' })
     })
 
     await waitFor(() => {
@@ -255,19 +345,19 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
   })
 
-  it('does not toggle card open when the reorder handle is clicked', async () => {
+  it('does not toggle card open when reorder control is clicked', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bの並べ替え')).toBeTruthy()
+      expect(screen.getByLabelText('Bを上へ')).toBeTruthy()
     })
 
-    const handle = screen.getByLabelText('Bの並べ替え')
+    const up = screen.getByLabelText('Bを上へ')
     await act(async () => {
-      fireEvent.click(handle)
+      fireEvent.click(up)
     })
 
     expect(screen.queryByLabelText('確認日')).toBeNull()
@@ -282,19 +372,18 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
   })
 
-  it('moves one step with a short vertical swipe on the handle', async () => {
+  it('moves one step when tapping the up control', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bの並べ替え')).toBeTruthy()
+      expect(screen.getByLabelText('Bを上へ')).toBeTruthy()
     })
 
-    const handle = screen.getByLabelText('Bの並べ替え')
     await act(async () => {
-      pointerSwipe(handle, { dy: -20 })
+      fireEvent.click(screen.getByLabelText('Bを上へ'))
     })
 
     await waitFor(() => {
@@ -305,7 +394,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
   })
 
-  it('moves one step down with a short vertical swipe from the first handle', async () => {
+  it('commits drag reorder when long-pressing and dragging the first item to the end', async () => {
     listMemoItems.mockResolvedValue([
       memoItem('folder-a', 0),
       memoItem('folder-b', 1),
@@ -317,42 +406,12 @@ describe('ShoppingMemoPage mobile reorder', () => {
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Aの並べ替え')).toBeTruthy()
-    })
-
-    const handle = screen.getByLabelText('Aの並べ替え')
-    await act(async () => {
-      pointerSwipe(handle, { dy: 20 })
-    })
-
-    await waitFor(() => {
-      expect(reorderMemoItems).toHaveBeenCalledWith(
-        ['folder-a', 'folder-b', 'folder-c'],
-        ['folder-b', 'folder-a', 'folder-c'],
-      )
-    })
-  })
-
-  it('commits drag reorder when dragging the first item to the end of the list', async () => {
-    listMemoItems.mockResolvedValue([
-      memoItem('folder-a', 0),
-      memoItem('folder-b', 1),
-      memoItem('folder-c', 2),
-    ])
-    listFolders.mockResolvedValue([folderA, folderB, folderC])
-    reorderMemoItems.mockResolvedValue(undefined)
-
-    renderPage()
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Aの並べ替え')).toBeTruthy()
+      expect(screen.getByText('A')).toBeTruthy()
     })
 
     await withListItemRectsAsync(async () => {
-      const handle = screen.getByLabelText('Aの並べ替え')
-      await act(async () => {
-        pointerSwipe(handle, { dy: 0, endY: 280 })
-      })
+      const surface = cardGestureSurface('A')
+      await longPressDrag(surface, 280)
 
       await waitFor(() => {
         expect(reorderMemoItems).toHaveBeenCalledWith(
@@ -363,7 +422,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
   })
 
-  it('commits drag reorder after a long vertical swipe', async () => {
+  it('commits drag reorder after long press and a small vertical move', async () => {
     listMemoItems.mockResolvedValue([
       memoItem('folder-a', 0),
       memoItem('folder-b', 1),
@@ -375,14 +434,12 @@ describe('ShoppingMemoPage mobile reorder', () => {
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bの並べ替え')).toBeTruthy()
+      expect(screen.getByText('B')).toBeTruthy()
     })
 
     await withListItemRectsAsync(async () => {
-      const handle = screen.getByLabelText('Bの並べ替え')
-      await act(async () => {
-        pointerSwipe(handle, { dy: 0, endY: 30 })
-      })
+      const surface = cardGestureSurface('B')
+      await longPressDrag(surface, 30)
 
       await waitFor(() => {
         expect(reorderMemoItems).toHaveBeenCalledWith(
@@ -393,20 +450,18 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
   })
 
-  it('does not commit reorder when pointer is cancelled mid-drag', async () => {
+  it('does not commit reorder when touch is cancelled mid-drag', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bの並べ替え')).toBeTruthy()
+      expect(screen.getByText('B')).toBeTruthy()
     })
 
-    const handle = screen.getByLabelText('Bの並べ替え')
-    await act(async () => {
-      pointerSwipe(handle, { dy: -40, cancel: true })
-    })
+    const surface = cardGestureSurface('B')
+    await longPressDrag(surface, 180, { cancel: true })
 
     expect(reorderMemoItems).not.toHaveBeenCalled()
   })
@@ -418,30 +473,16 @@ describe('ShoppingMemoPage mobile reorder', () => {
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bの並べ替え')).toBeTruthy()
+      expect(screen.getByText('B')).toBeTruthy()
     })
 
     await withListItemRectsAsync(async () => {
-      const handle = screen.getByLabelText('Bの並べ替え')
-      handle.setPointerCapture = vi.fn()
-      await act(async () => {
-        fireEvent.pointerDown(handle, {
-          clientX: 100,
-          clientY: 200,
-          button: 0,
-          buttons: 1,
-          pointerId: 1,
-          pointerType: 'touch',
-          isPrimary: true,
-        })
-        fireEvent.pointerMove(handle, {
-          clientX: 100,
-          clientY: 30,
-          button: 0,
-          buttons: 1,
-          pointerId: 1,
-          pointerType: 'touch',
-          isPrimary: true,
+      const surface = cardGestureSurface('B')
+      await withLongPressTimers(async () => {
+        await act(async () => {
+          touchAt(surface, 'start', 200)
+          vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+          touchAt(surface, 'move', 30)
         })
       })
 
@@ -458,13 +499,13 @@ describe('ShoppingMemoPage mobile reorder', () => {
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bの並べ替え')).toBeTruthy()
+      expect(screen.getByLabelText('Bを上へ')).toBeTruthy()
     })
 
-    const handle = screen.getByLabelText('Bの並べ替え')
-    handle.focus()
+    const up = screen.getByLabelText('Bを上へ')
+    up.focus()
     await act(async () => {
-      fireEvent.keyDown(handle, { key: 'ArrowUp' })
+      fireEvent.keyDown(up, { key: 'ArrowUp' })
     })
 
     await waitFor(() => {
@@ -474,56 +515,48 @@ describe('ShoppingMemoPage mobile reorder', () => {
     expect(liveRegion()?.textContent ?? '').not.toMatch(/移動しました/)
   })
 
-  it('keeps touch-action on the handle only', async () => {
+  it('cancels long press when finger moves before hold completes', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
     renderPage()
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Bの並べ替え')).toBeTruthy()
+      expect(screen.getByText('B')).toBeTruthy()
     })
 
-    const handle = screen.getByLabelText('Bの並べ替え')
-    expect(handle.className).toContain('touch-none')
+    const surface = cardGestureSurface('B')
+    await withLongPressTimers(async () => {
+      await act(async () => {
+        touchAt(surface, 'start', 200)
+        touchAt(surface, 'move', 170)
+        vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+        touchAt(surface, 'end', 170)
+      })
+    })
 
-    const cardTitle = screen.getByText('B')
-    expect(cardTitle.className).not.toContain('touch-none')
+    expect(reorderMemoItems).not.toHaveBeenCalled()
   })
 
-  it('uses measured placeholder height while lifted', async () => {
+  it('uses compact sibling row height for lifted placeholder', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
-    const rowHeight = 132
+    const compactRowHeight = 52
 
     await withListItemRectsAsync(async () => {
       renderPage()
 
       await waitFor(() => {
-        expect(screen.getByLabelText('Bの並べ替え')).toBeTruthy()
+        expect(screen.getByText('B')).toBeTruthy()
       })
 
-      const handle = screen.getByLabelText('Bの並べ替え')
-      handle.setPointerCapture = vi.fn()
-      await act(async () => {
-        fireEvent.pointerDown(handle, {
-          clientX: 120,
-          clientY: 240,
-          button: 0,
-          buttons: 1,
-          pointerId: 1,
-          pointerType: 'touch',
-          isPrimary: true,
-        })
-        fireEvent.pointerMove(handle, {
-          clientX: 120,
-          clientY: 200,
-          button: 0,
-          buttons: 1,
-          pointerId: 1,
-          pointerType: 'touch',
-          isPrimary: true,
+      const surface = cardGestureSurface('B')
+      await withLongPressTimers(async () => {
+        await act(async () => {
+          touchAt(surface, 'start', 240)
+          vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+          touchAt(surface, 'move', 200)
         })
       })
 
@@ -531,8 +564,186 @@ describe('ShoppingMemoPage mobile reorder', () => {
         const placeholder = document.querySelector(
           'li [aria-hidden="true"].border-dashed',
         ) as HTMLElement | null
-        expect(placeholder?.style.height).toBe(`${rowHeight}px`)
+        expect(placeholder?.style.height).toBe(`${compactRowHeight}px`)
       })
-    }, rowHeight)
+    }, compactRowHeight)
+  })
+
+  it('does not start reorder when swiping horizontally for delete', async () => {
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+    reorderMemoItems.mockResolvedValue(undefined)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('B')).toBeTruthy()
+    })
+
+    const swipeRow = screen.getByText('B').closest('[style*="translateX"]')
+      ?.parentElement as HTMLElement
+    const inner = swipeRow?.querySelector('[style*="translateX"]') as HTMLElement
+
+    await withLongPressTimers(async () => {
+      await act(async () => {
+        touchAt(cardGestureSurface('B'), 'start', 200)
+        pointerSwipe(inner, { dx: -120, dy: 0, endY: 200 })
+        vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+      })
+    })
+
+    expect(reorderMemoItems).not.toHaveBeenCalled()
+  })
+
+  it('does not delete when horizontal pointer moves after long-press drag starts', async () => {
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+    reorderMemoItems.mockResolvedValue(undefined)
+    removeMemoItem.mockResolvedValue(undefined)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('B')).toBeTruthy()
+    })
+
+    const hint = reorderHintEl('B')
+    expect(hint).toBeTruthy()
+
+    await withListItemRectsAsync(async () => {
+      await withLongPressTimers(async () => {
+        await act(async () => {
+          touchAt(hint!, 'start', 240)
+          vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+          touchAt(hint!, 'move', 200)
+        })
+      })
+
+      const inner = swipeRowInner('B')
+      await act(async () => {
+        pointerSwipe(inner, { dx: -140, dy: 0, endY: 240 })
+      })
+
+      await withLongPressTimers(async () => {
+        await act(async () => {
+          touchAt(hint!, 'end', 200)
+        })
+      })
+    })
+
+    expect(removeMemoItem).not.toHaveBeenCalled()
+  })
+
+  it('swipes left to delete once before long press completes', async () => {
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+    reorderMemoItems.mockResolvedValue(undefined)
+    removeMemoItem.mockResolvedValue(undefined)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('B')).toBeTruthy()
+    })
+
+    const inner = swipeRowInner('B')
+    await act(async () => {
+      pointerSwipe(inner, { dx: -140, dy: 0, endY: 240 })
+    })
+
+    await waitFor(() => {
+      expect(removeMemoItem).toHaveBeenCalledTimes(1)
+      expect(removeMemoItem).toHaveBeenCalledWith('folder-b')
+    })
+    expect(reorderMemoItems).not.toHaveBeenCalled()
+  })
+
+  it('does not start reorder from the card title toggle region', async () => {
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+    reorderMemoItems.mockResolvedValue(undefined)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('B')).toBeTruthy()
+    })
+
+    const titleToggle = screen.getByText('B').closest('[data-memo-card-toggle]')
+    expect(titleToggle).toBeTruthy()
+
+    await withLongPressTimers(async () => {
+      await act(async () => {
+        touchAt(titleToggle as HTMLElement, 'start', 240)
+        vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+        touchAt(titleToggle as HTMLElement, 'move', 180)
+        touchAt(titleToggle as HTMLElement, 'end', 180)
+      })
+    })
+
+    expect(reorderMemoItems).not.toHaveBeenCalled()
+  })
+
+  it('keeps open state and form input after a successful compact-list reorder', async () => {
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+    reorderMemoItems.mockResolvedValue(undefined)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('B')).toBeTruthy()
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('B'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('確認日')).toBeTruthy()
+    })
+
+    const storeInput = screen.getByLabelText('店名') as HTMLInputElement
+    await act(async () => {
+      fireEvent.change(storeInput, { target: { value: 'テスト店' } })
+    })
+
+    await withListItemRectsAsync(async () => {
+      await longPressDrag(cardGestureSurface('B'), 30)
+    })
+
+    await waitFor(() => {
+      expect(reorderMemoItems).toHaveBeenCalledWith(
+        ['folder-a', 'folder-b'],
+        ['folder-b', 'folder-a'],
+      )
+    })
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('確認日')).toBeTruthy()
+      expect((screen.getByLabelText('店名') as HTMLInputElement).value).toBe(
+        'テスト店',
+      )
+    })
+  })
+
+  it('does not call reorder RPC on non-cancelable touchmove during drag', async () => {
+    listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
+    reorderMemoItems.mockResolvedValue(undefined)
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByText('B')).toBeTruthy()
+    })
+
+    const hint = reorderHintEl('B')
+    expect(hint).toBeTruthy()
+
+    await withLongPressTimers(async () => {
+      await act(async () => {
+        touchAt(hint!, 'start', 240)
+        vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+        touchAt(hint!, 'move', 200, 120, { cancelable: false })
+        touchAt(hint!, 'end', 200)
+      })
+    })
+
+    expect(reorderMemoItems).not.toHaveBeenCalled()
   })
 })

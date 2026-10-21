@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { useMobileReorderOptional } from '@/features/memo/components/MemoMobileReorderContext'
 
 const AXIS_LOCK_DISTANCE = 8
 const CLICK_SUPPRESS_DISTANCE = 10
@@ -23,6 +24,7 @@ export function SwipeToDeleteRow({
   onDelete,
   className = '',
 }: Props) {
+  const mobileReorder = useMobileReorderOptional()
   const [offset, setOffset] = useState(0)
   const [animate, setAnimate] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -39,8 +41,25 @@ export function SwipeToDeleteRow({
 
   const clamp = (v: number) => Math.min(0, v)
 
+  const abortSwipeGesture = (el?: HTMLDivElement, pointerId?: number) => {
+    const g = gesture.current
+    if (g.axis === 'x' && el != null && pointerId != null) {
+      try {
+        el.releasePointerCapture(pointerId)
+      } catch {
+        /* already released */
+      }
+    }
+    g.tracking = false
+    g.axis = null
+    offsetRef.current = 0
+    setOffset(0)
+    setAnimate(true)
+  }
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || isInteractive(e.target)) return
+    if (mobileReorder?.isSwipeDeleteBlocked()) return
     e.stopPropagation()
     const width = rootRef.current?.offsetWidth ?? 0
     gesture.current = {
@@ -55,6 +74,10 @@ export function SwipeToDeleteRow({
   }
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (mobileReorder?.isSwipeDeleteBlocked()) {
+      abortSwipeGesture(e.currentTarget, e.pointerId)
+      return
+    }
     const g = gesture.current
     if (!g.tracking || e.pointerId !== g.pointerId) return
     const dx = e.clientX - g.startX
@@ -67,6 +90,7 @@ export function SwipeToDeleteRow({
         return
       }
       g.axis = 'x'
+      mobileReorder?.cancelPendingLongPress()
       setAnimate(false)
       ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
     }
@@ -101,6 +125,10 @@ export function SwipeToDeleteRow({
   }
 
   const onPointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (mobileReorder?.isSwipeDeleteBlocked()) {
+      abortSwipeGesture(e.currentTarget, e.pointerId)
+      return
+    }
     const g = gesture.current
     if (e.pointerId !== g.pointerId) return
     if (g.axis === 'x') {

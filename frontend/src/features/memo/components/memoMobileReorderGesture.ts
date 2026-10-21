@@ -1,10 +1,18 @@
-/** Min predominantly-vertical movement on release to move one step (drag not entered). */
-export const MEMO_REORDER_STEP_SWIPE_MIN_PX = 16
-/** Movement required to enter free drag (must exceed step swipe band). */
-export const MEMO_REORDER_DRAG_ACTIVATION_PX = 36
+/** Hold still this long on a card body to start reorder drag. */
+export const MEMO_REORDER_LONG_PRESS_MS = 350
+/** Fallback lifted-row placeholder height when no sibling row is measurable. */
+export const MEMO_REORDER_COMPACT_ROW_FALLBACK_PX = 56
+/** Movement before long-press completes cancels the hold (scroll / swipe win). */
+export const MEMO_REORDER_LONG_PRESS_MOVE_CANCEL_PX = 10
+/** Movement required after long-press to enter free drag (vertical-dominant). */
+export const MEMO_REORDER_DRAG_ACTIVATION_PX = 8
 
 function isVerticalDominant(dx: number, dy: number): boolean {
   return Math.abs(dy) > Math.abs(dx)
+}
+
+export function shouldCancelLongPress(dx: number, dy: number): boolean {
+  return Math.hypot(dx, dy) > MEMO_REORDER_LONG_PRESS_MOVE_CANCEL_PX
 }
 
 export function shouldActivateDrag(dx: number, dy: number): boolean {
@@ -14,11 +22,11 @@ export function shouldActivateDrag(dx: number, dy: number): boolean {
   )
 }
 
-export function shouldStepSwipeOnRelease(dx: number, dy: number): boolean {
-  const absDy = Math.abs(dy)
+export function isInteractiveReorderTarget(target: EventTarget | null): boolean {
   return (
-    isVerticalDominant(dx, dy) &&
-    absDy >= MEMO_REORDER_STEP_SWIPE_MIN_PX &&
-    absDy < MEMO_REORDER_DRAG_ACTIVATION_PX
+    target instanceof Element &&
+    !!target.closest(
+      'button, input, select, textarea, a, label, form, [data-no-trash-drag], [data-memo-reorder-a11y], [data-memo-card-toggle]',
+    )
   )
 }

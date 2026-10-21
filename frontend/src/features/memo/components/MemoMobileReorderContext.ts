@@ -1,17 +1,25 @@
 import { createContext, useContext } from 'react'
 
+export type MemoReorderGesturePhase = 'idle' | 'longPressPending' | 'dragging'
+
 export type MobileReorderContextValue = {
   registerItem: (id: string, el: HTMLElement | null) => void
   insertBeforeId: string | null | undefined
   activeId: string | null
   dragging: boolean
-  /** Measured row height (px) for the lifted item placeholder */
+  /** All list rows use compact chrome while any row is dragged */
+  compactListDisplay: boolean
+  gesturePhase: MemoReorderGesturePhase
+  /** Compact list-row height (px) for the lifted item placeholder */
   activePlaceholderHeight: number | null
   requestStepMove: (
     folderId: string,
     direction: 'up' | 'down' | 'start' | 'end',
   ) => void
   announce: (message: string) => void
+  cancelPendingLongPress: () => void
+  isSwipeDeleteBlocked: () => boolean
+  shouldSuppressCardClick: () => boolean
 }
 
 export const MobileReorderContext =

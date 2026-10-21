@@ -6,18 +6,20 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from 'react'
-import { createPortal } from 'react-dom'
+import { createPortal, flushSync } from 'react-dom'
 import {
   MobileReorderContext,
   useMobileReorder,
+  type MemoReorderGesturePhase,
 } from './MemoMobileReorderContext'
 import {
-  shouldActivateDrag,
-  shouldStepSwipeOnRelease,
+  isInteractiveReorderTarget,
+  shouldCancelLongPress,
+  MEMO_REORDER_COMPACT_ROW_FALLBACK_PX,
+  MEMO_REORDER_LONG_PRESS_MS,
 } from './memoMobileReorderGesture'
 
 type ItemRect = {
@@ -35,6 +37,17 @@ type ProviderProps = {
   onAnnounce?: (message: string) => void
 }
 
+type CardGestureApi = {
+  attachCardGesture: (
+    folderId: string,
+    surfaceEl: HTMLElement,
+    cardEl: HTMLElement,
+  ) => void
+  detachCardGesture: (folderId: string, surfaceEl: HTMLElement) => void
+}
+
+const CardGestureContext = createContext<CardGestureApi | null>(null)
+
 export function MemoMobileReorderProvider({
   children,
   folderIds,
@@ -50,13 +63,24 @@ export function MemoMobileReorderProvider({
 
   const [dragging, setDragging] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [gesturePhase, setGesturePhase] =
+    useState<MemoReorderGesturePhase>('idle')
   const [activePlaceholderHeight, setActivePlaceholderHeight] = useState<
     number | null
   >(null)
   const [insertBeforeId, setInsertBeforeId] = useState<
     string | null | undefined
   >(undefined)
+  const [liftPreview, setLiftPreview] = useState<{
+    top: number
+    left: number
+    width: number
+    title: string
+  } | null>(null)
   const insertBeforeIdRef = useRef<string | null | undefined>(undefined)
+  const suppressClickUntilRef = useRef(0)
+  /** List-item viewport top captured at drag start (before compact layout). */
+  const scrollAnchorViewportTopRef = useRef<number | null>(null)
 
   const setInsertTarget = useCallback((next: string | null | undefined) => {
     insertBeforeIdRef.current = next
@@ -66,6 +90,18 @@ export function MemoMobileReorderProvider({
   const registerItem = useCallback((id: string, el: HTMLElement | null) => {
     if (el) itemElsRef.current.set(id, el)
     else itemElsRef.current.delete(id)
+  }, [])
+
+  const measureCompactRowHeight = useCallback((activeRowId: string): number => {
+    const ids = idsRef.current
+    for (const id of ids) {
+      if (id === activeRowId) continue
+      const el = itemElsRef.current.get(id)
+      if (!el) continue
+      const h = el.getBoundingClientRect().height
+      if (h > 0) return h
+    }
+    return MEMO_REORDER_COMPACT_ROW_FALLBACK_PX
   }, [])
 
   const collectRects = useCallback((ids: string[], skipId: string): ItemRect[] => {
@@ -104,8 +140,12 @@ export function MemoMobileReorderProvider({
       const before = insertBeforeIdRef.current
       setDragging(false)
       setActiveId(null)
+      setGesturePhase('idle')
       setActivePlaceholderHeight(null)
+      scrollAnchorViewportTopRef.current = null
       setInsertTarget(undefined)
+      setLiftPreview(null)
+      suppressClickUntilRef.current = Date.now() + 400
       if (before === undefined) return
       await onCommit(draggedId, before)
     },
@@ -115,76 +155,326 @@ export function MemoMobileReorderProvider({
   const cancelDrag = useCallback(() => {
     setDragging(false)
     setActiveId(null)
+    setGesturePhase('idle')
     setActivePlaceholderHeight(null)
+    scrollAnchorViewportTopRef.current = null
     setInsertTarget(undefined)
+    setLiftPreview(null)
+    suppressClickUntilRef.current = Date.now() + 400
   }, [setInsertTarget])
 
-  const dragSessionRef = useRef({
-    active: false,
-    moved: false,
+  const touchSessionRef = useRef({
     folderId: '',
+    cardEl: null as HTMLElement | null,
+    touchId: -1,
     startX: 0,
     startY: 0,
-    offsetX: 0,
+    lastClientY: 0,
+    longPressTimer: null as ReturnType<typeof setTimeout> | null,
+    dragActive: false,
     offsetY: 0,
-    width: 0,
     height: 0,
-    pointerId: -1,
-    liftEl: null as HTMLDivElement | null,
+    width: 0,
   })
 
-  const beginHandleDrag = useCallback(
-    (
-      folderId: string,
-      pointerId: number,
-      clientX: number,
-      clientY: number,
-      handleEl: HTMLElement,
-      cardEl: HTMLElement,
-    ) => {
-      if (disabled) return
-      const rect = cardEl.getBoundingClientRect()
-      dragSessionRef.current = {
-        active: true,
-        moved: false,
-        folderId,
-        startX: clientX,
-        startY: clientY,
-        offsetX: clientX - rect.left,
-        offsetY: clientY - rect.top,
-        width: rect.width,
-        height: rect.height,
-        pointerId,
-        liftEl: null,
+  const clearLongPressTimer = useCallback(() => {
+    const s = touchSessionRef.current
+    if (s.longPressTimer != null) {
+      clearTimeout(s.longPressTimer)
+      s.longPressTimer = null
+    }
+  }, [])
+
+  const resetTouchSession = useCallback(() => {
+    clearLongPressTimer()
+    touchSessionRef.current = {
+      folderId: '',
+      cardEl: null,
+      touchId: -1,
+      startX: 0,
+      startY: 0,
+      lastClientY: 0,
+      longPressTimer: null,
+      dragActive: false,
+      offsetY: 0,
+      height: 0,
+      width: 0,
+    }
+    setGesturePhase('idle')
+  }, [clearLongPressTimer])
+
+  const cancelPendingLongPress = useCallback(() => {
+    if (touchSessionRef.current.dragActive) return
+    clearLongPressTimer()
+    touchSessionRef.current.touchId = -1
+    setGesturePhase('idle')
+  }, [clearLongPressTimer])
+
+  const isSwipeDeleteBlocked = useCallback(() => {
+    return touchSessionRef.current.dragActive || dragging
+  }, [dragging])
+
+  const shouldSuppressCardClick = useCallback(() => {
+    return Date.now() < suppressClickUntilRef.current
+  }, [])
+
+  const syncLiftPreview = useCallback((cardEl: HTMLElement, clientY: number) => {
+    const rect = cardEl.getBoundingClientRect()
+    const s = touchSessionRef.current
+    const titleEl = cardEl.querySelector('[data-memo-compact-title]')
+    const title =
+      titleEl instanceof HTMLElement ? titleEl.textContent?.trim() ?? '' : ''
+    setLiftPreview({
+      left: rect.left,
+      top: clientY - s.offsetY,
+      width: s.width || rect.width,
+      title,
+    })
+  }, [])
+
+  const applyCompactDragLayout = useCallback(
+    (folderId: string, clientY: number) => {
+      const compactHeight = measureCompactRowHeight(folderId)
+      flushSync(() => {
+        setActivePlaceholderHeight(compactHeight)
+      })
+
+      const anchorBefore = scrollAnchorViewportTopRef.current
+      const activeEl = itemElsRef.current.get(folderId)
+      if (anchorBefore != null && activeEl) {
+        const anchorAfter = activeEl.getBoundingClientRect().top
+        const scrollDelta = anchorAfter - anchorBefore
+        if (Math.abs(scrollDelta) >= 1) {
+          window.scrollBy({ top: scrollDelta, left: 0 })
+        }
+        scrollAnchorViewportTopRef.current = null
       }
-      handleEl.setPointerCapture(pointerId)
+
+      setInsertTarget(resolveInsertBefore(clientY, folderId))
     },
-    [disabled],
+    [measureCompactRowHeight, resolveInsertBefore, setInsertTarget],
   )
 
-  const moveHandleDrag = useCallback(
-    (clientX: number, clientY: number) => {
-      const s = dragSessionRef.current
-      if (!s.active) return
-      const dx = clientX - s.startX
-      const dy = clientY - s.startY
-      if (!s.moved) {
-        if (!shouldActivateDrag(dx, dy)) return
-        s.moved = true
+  const activateDragFromLongPress = useCallback(
+    (folderId: string, cardEl: HTMLElement, clientY: number) => {
+      const rect = cardEl.getBoundingClientRect()
+      const s = touchSessionRef.current
+      s.dragActive = true
+      s.offsetY = clientY - rect.top
+      s.lastClientY = clientY
+      s.height = rect.height
+      s.width = rect.width
+      scrollAnchorViewportTopRef.current = rect.top
+      flushSync(() => {
+        setGesturePhase('dragging')
         setDragging(true)
-        setActiveId(s.folderId)
-        setActivePlaceholderHeight(s.height)
-        setInsertTarget(resolveInsertBefore(clientY, s.folderId))
-      } else {
-        setInsertTarget(resolveInsertBefore(clientY, s.folderId))
-      }
+        setActiveId(folderId)
+        setActivePlaceholderHeight(null)
+      })
+      applyCompactDragLayout(folderId, clientY)
+      syncLiftPreview(cardEl, clientY)
     },
-    [resolveInsertBefore, setInsertTarget],
+    [applyCompactDragLayout, syncLiftPreview],
   )
+
+  const moveActiveDrag = useCallback(
+    (clientY: number) => {
+      const s = touchSessionRef.current
+      if (!s.dragActive || !s.folderId || !s.cardEl) return
+      s.lastClientY = clientY
+      setInsertTarget(resolveInsertBefore(clientY, s.folderId))
+      syncLiftPreview(s.cardEl, clientY)
+    },
+    [resolveInsertBefore, setInsertTarget, syncLiftPreview],
+  )
+
+  const endActiveDrag = useCallback(async () => {
+    const s = touchSessionRef.current
+    if (!s.dragActive || !s.folderId) {
+      resetTouchSession()
+      return
+    }
+    const folderId = s.folderId
+    resetTouchSession()
+    await finishDrag(folderId)
+  }, [finishDrag, resetTouchSession])
+
+  const cancelActiveDrag = useCallback(() => {
+    if (touchSessionRef.current.dragActive) cancelDrag()
+    resetTouchSession()
+  }, [cancelDrag, resetTouchSession])
+
+  const cardBindingsRef = useRef(
+    new Map<
+      string,
+      {
+        surfaceEl: HTMLElement
+        cardEl: HTMLElement
+        handlers: {
+          touchstart: (e: TouchEvent) => void
+          touchmove: (e: TouchEvent) => void
+          touchend: (e: TouchEvent) => void
+          touchcancel: (e: TouchEvent) => void
+        }
+      }
+    >(),
+  )
+
+  const attachCardGesture = useCallback(
+    (folderId: string, surfaceEl: HTMLElement, cardEl: HTMLElement) => {
+      if (disabled) return
+
+      const existingKey = `${folderId}:${surfaceEl}`
+      const existing = cardBindingsRef.current.get(existingKey)
+      if (existing) {
+        const { handlers } = existing
+        surfaceEl.removeEventListener('touchstart', handlers.touchstart)
+        surfaceEl.removeEventListener('touchmove', handlers.touchmove)
+        surfaceEl.removeEventListener('touchend', handlers.touchend)
+        surfaceEl.removeEventListener('touchcancel', handlers.touchcancel)
+        cardBindingsRef.current.delete(existingKey)
+      }
+
+      const onTouchStart = (e: TouchEvent) => {
+        if (disabled || e.touches.length !== 1) return
+        if (isInteractiveReorderTarget(e.target)) return
+        if (isSwipeDeleteBlocked()) return
+
+        const touch = e.touches[0]
+        clearLongPressTimer()
+        touchSessionRef.current = {
+          folderId,
+          cardEl,
+          touchId: touch.identifier,
+          startX: touch.clientX,
+          startY: touch.clientY,
+          lastClientY: touch.clientY,
+          longPressTimer: null,
+          dragActive: false,
+          offsetY: 0,
+          height: 0,
+          width: 0,
+        }
+        setGesturePhase('longPressPending')
+
+        touchSessionRef.current.longPressTimer = setTimeout(() => {
+          const s = touchSessionRef.current
+          if (s.touchId !== touch.identifier || s.folderId !== folderId) return
+          activateDragFromLongPress(folderId, cardEl, s.lastClientY)
+        }, MEMO_REORDER_LONG_PRESS_MS)
+      }
+
+      const onTouchMove = (e: TouchEvent) => {
+        const s = touchSessionRef.current
+        if (s.touchId < 0) return
+        const touch = Array.from(e.touches).find((t) => t.identifier === s.touchId)
+        if (!touch) return
+        s.lastClientY = touch.clientY
+
+        if (!s.dragActive) {
+          const dx = touch.clientX - s.startX
+          const dy = touch.clientY - s.startY
+          if (shouldCancelLongPress(dx, dy)) {
+            cancelPendingLongPress()
+            resetTouchSession()
+          }
+          return
+        }
+
+        if (!e.cancelable) {
+          cancelActiveDrag()
+          return
+        }
+
+        e.preventDefault()
+        moveActiveDrag(touch.clientY)
+      }
+
+      const onTouchEnd = (e: TouchEvent) => {
+        const s = touchSessionRef.current
+        if (s.touchId < 0) return
+        const ended = Array.from(e.changedTouches).some(
+          (t) => t.identifier === s.touchId,
+        )
+        if (!ended) return
+        clearLongPressTimer()
+        if (s.dragActive) {
+          void endActiveDrag()
+        } else {
+          resetTouchSession()
+        }
+      }
+
+      const onTouchCancel = () => {
+        clearLongPressTimer()
+        if (touchSessionRef.current.dragActive) cancelActiveDrag()
+        else resetTouchSession()
+      }
+
+      const handlers = {
+        touchstart: onTouchStart,
+        touchmove: onTouchMove,
+        touchend: onTouchEnd,
+        touchcancel: onTouchCancel,
+      }
+
+      surfaceEl.addEventListener('touchstart', onTouchStart, { passive: true })
+      surfaceEl.addEventListener('touchmove', onTouchMove, { passive: false })
+      surfaceEl.addEventListener('touchend', onTouchEnd, { passive: true })
+      surfaceEl.addEventListener('touchcancel', onTouchCancel, { passive: true })
+
+      cardBindingsRef.current.set(`${folderId}:${surfaceEl}`, {
+        surfaceEl,
+        cardEl,
+        handlers,
+      })
+    },
+    [
+      activateDragFromLongPress,
+      cancelActiveDrag,
+      cancelPendingLongPress,
+      clearLongPressTimer,
+      disabled,
+      endActiveDrag,
+      isSwipeDeleteBlocked,
+      moveActiveDrag,
+      resetTouchSession,
+    ],
+  )
+
+  const detachCardGesture = useCallback(
+    (folderId: string, surfaceEl: HTMLElement) => {
+      const key = `${folderId}:${surfaceEl}`
+      const binding = cardBindingsRef.current.get(key)
+      if (!binding) return
+      const { handlers } = binding
+      surfaceEl.removeEventListener('touchstart', handlers.touchstart)
+      surfaceEl.removeEventListener('touchmove', handlers.touchmove)
+      surfaceEl.removeEventListener('touchend', handlers.touchend)
+      surfaceEl.removeEventListener('touchcancel', handlers.touchcancel)
+      cardBindingsRef.current.delete(key)
+    },
+    [],
+  )
+
+  useEffect(() => {
+    const bindings = cardBindingsRef.current
+    return () => {
+      for (const [, binding] of bindings) {
+        const { surfaceEl, handlers } = binding
+        surfaceEl.removeEventListener('touchstart', handlers.touchstart)
+        surfaceEl.removeEventListener('touchmove', handlers.touchmove)
+        surfaceEl.removeEventListener('touchend', handlers.touchend)
+        surfaceEl.removeEventListener('touchcancel', handlers.touchcancel)
+      }
+      bindings.clear()
+      clearLongPressTimer()
+    }
+  }, [clearLongPressTimer])
 
   const requestStepMove = useCallback(
     (folderId: string, direction: 'up' | 'down' | 'start' | 'end') => {
-      if (disabled) return
+      if (disabled || dragging) return
       const ids = idsRef.current
       const index = ids.indexOf(folderId)
       if (index < 0) return
@@ -196,8 +486,7 @@ export function MemoMobileReorderProvider({
           break
         case 'down':
           if (index >= ids.length - 1) return
-          beforeId =
-            index + 2 < ids.length ? ids[index + 2] : null
+          beforeId = index + 2 < ids.length ? ids[index + 2] : null
           break
         case 'start':
           if (index === 0) return
@@ -210,34 +499,8 @@ export function MemoMobileReorderProvider({
       }
       void onCommit(folderId, beforeId)
     },
-    [disabled, onCommit],
+    [disabled, dragging, onCommit],
   )
-
-  const endHandleDrag = useCallback(
-    async (clientX: number, clientY: number) => {
-      const s = dragSessionRef.current
-      if (!s.active) return
-      const { folderId, moved, startX, startY } = s
-      s.active = false
-      if (!moved) {
-        const dx = clientX - startX
-        const dy = clientY - startY
-        if (shouldStepSwipeOnRelease(dx, dy)) {
-          const direction = dy < 0 ? 'up' : 'down'
-          requestStepMove(folderId, direction)
-        }
-        return
-      }
-      await finishDrag(folderId)
-    },
-    [finishDrag, requestStepMove],
-  )
-
-  const cancelHandleDrag = useCallback(() => {
-    if (dragSessionRef.current.moved) cancelDrag()
-    dragSessionRef.current.active = false
-    dragSessionRef.current.moved = false
-  }, [cancelDrag])
 
   const announce = useCallback(
     (message: string) => {
@@ -246,74 +509,70 @@ export function MemoMobileReorderProvider({
     [onAnnounce],
   )
 
+  const cardGestureApi = useMemo(
+    () => ({ attachCardGesture, detachCardGesture }),
+    [attachCardGesture, detachCardGesture],
+  )
+
   const value = useMemo(
     () => ({
       registerItem,
       insertBeforeId,
       activeId,
       dragging,
+      compactListDisplay: dragging,
+      gesturePhase,
       activePlaceholderHeight,
       requestStepMove,
       announce,
+      cancelPendingLongPress,
+      isSwipeDeleteBlocked,
+      shouldSuppressCardClick,
     }),
     [
       registerItem,
       insertBeforeId,
       activeId,
       dragging,
+      gesturePhase,
       activePlaceholderHeight,
       requestStepMove,
       announce,
+      cancelPendingLongPress,
+      isSwipeDeleteBlocked,
+      shouldSuppressCardClick,
     ],
   )
 
   return (
     <MobileReorderContext.Provider value={value}>
-      <HandleDragController
-        beginHandleDrag={beginHandleDrag}
-        moveHandleDrag={moveHandleDrag}
-        endHandleDrag={endHandleDrag}
-        cancelHandleDrag={cancelHandleDrag}
-      >
+      <CardGestureContext.Provider value={cardGestureApi}>
+        {liftPreview
+          ? createPortal(
+              <div
+                className="select-none shadow-xl ring-2 ring-stone-400 overflow-hidden rounded-lg"
+                style={{
+                  position: 'fixed',
+                  left: liftPreview.left,
+                  top: liftPreview.top,
+                  width: liftPreview.width,
+                  zIndex: 70,
+                  pointerEvents: 'none',
+                  margin: 0,
+                }}
+                aria-hidden
+              >
+                <div className="h-10 bg-stone-100/90 px-3 py-2.5 text-sm font-semibold text-stone-900">
+                  {liftPreview.title}
+                </div>
+              </div>,
+              document.body,
+            )
+          : null}
         {children}
-      </HandleDragController>
+      </CardGestureContext.Provider>
     </MobileReorderContext.Provider>
   )
-}
-
-type HandleDragControllerProps = {
-  beginHandleDrag: (
-    folderId: string,
-    pointerId: number,
-    clientX: number,
-    clientY: number,
-    handleEl: HTMLElement,
-    cardEl: HTMLElement,
-  ) => void
-  moveHandleDrag: (clientX: number, clientY: number) => void
-  endHandleDrag: (clientX: number, clientY: number) => Promise<void>
-  cancelHandleDrag: () => void
-}
-
-const HandleDragControllerContext = createContext<HandleDragControllerProps | null>(
-  null,
-)
-
-function HandleDragController({
-  children,
-  ...handlers
-}: HandleDragControllerProps & { children: ReactNode }) {
-  return (
-    <HandleDragControllerContext.Provider value={handlers}>
-      {children}
-    </HandleDragControllerContext.Provider>
-  )
-}
-
-function useHandleDragController() {
-  const ctx = useContext(HandleDragControllerContext)
-  if (!ctx) throw new Error('HandleDragController missing')
-  return ctx
 }
 
 export function MemoMobileReorderLiveRegion({ message }: { message: string }) {
@@ -339,145 +598,113 @@ export function MemoMobileReorderEndMarker({ lastId }: { lastId: string | null }
   return <div className="h-1 rounded-full bg-stone-800" aria-hidden />
 }
 
-type HandleProps = {
+type GestureRootProps = {
+  folderId: string
+  cardRootRef: RefObject<HTMLElement | null>
+  children: ReactNode
+}
+
+export function MemoMobileReorderGestureRoot({
+  folderId,
+  cardRootRef,
+  children,
+}: GestureRootProps) {
+  const reorder = useContext(MobileReorderContext)
+  const cardGesture = useContext(CardGestureContext)
+  const surfaceRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!cardGesture) return
+    const surface = surfaceRef.current
+    const card = cardRootRef.current
+    if (!surface || !card) return
+    cardGesture.attachCardGesture(folderId, surface, card)
+    return () => cardGesture.detachCardGesture(folderId, surface)
+  }, [cardGesture, cardRootRef, folderId])
+
+  return (
+    <div
+      ref={surfaceRef}
+      className="min-w-0 flex-1"
+      onClickCapture={(e) => {
+        if (reorder?.shouldSuppressCardClick()) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+type A11yProps = {
   folderId: string
   folderName: string
-  cardRootRef: RefObject<HTMLElement | null>
   index: number
   total: number
   disabled?: boolean
 }
 
-export function MemoMobileReorderHandle({
+export function MemoMobileReorderA11yControls({
   folderId,
   folderName,
-  cardRootRef,
   index,
   total,
   disabled = false,
-}: HandleProps) {
-  const { activeId, dragging, requestStepMove } = useMobileReorder()
-  const {
-    beginHandleDrag,
-    moveHandleDrag,
-    endHandleDrag,
-    cancelHandleDrag,
-  } = useHandleDragController()
+}: A11yProps) {
+  const { requestStepMove, dragging } = useMobileReorder()
 
-  const [liftStyle, setLiftStyle] = useState<CSSProperties | null>(null)
-  const dragOffsetYRef = useRef(0)
-
-  const isDragging = activeId === folderId && dragging
-
-  const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    const cardEl = cardRootRef.current
-    if (disabled || e.button > 0 || !cardEl) return
-    e.stopPropagation()
-    const rect = cardEl.getBoundingClientRect()
-    dragOffsetYRef.current = e.clientY - rect.top
-    beginHandleDrag(
-      folderId,
-      e.pointerId,
-      e.clientX,
-      e.clientY,
-      e.currentTarget,
-      cardEl,
-    )
-  }
-
-  const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    moveHandleDrag(e.clientX, e.clientY)
-    const cardEl = cardRootRef.current
-    if (activeId === folderId && dragging && cardEl) {
-      const rect = cardEl.getBoundingClientRect()
-      setLiftStyle({
-        position: 'fixed',
-        left: rect.left,
-        top: e.clientY - dragOffsetYRef.current,
-        width: rect.width,
-        zIndex: 70,
-        pointerEvents: 'none',
-        margin: 0,
-      })
-    }
-  }
-
-  const onPointerUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    await endHandleDrag(e.clientX, e.clientY)
-    setLiftStyle(null)
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch {
-      /* released */
-    }
-  }
-
-  const onPointerCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    cancelHandleDrag()
-    setLiftStyle(null)
-  }
-
-  const stopActivationClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    e.stopPropagation()
-    e.preventDefault()
-  }
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (disabled) return
-    let direction: 'up' | 'down' | 'start' | 'end' | null = null
-    if (e.key === 'ArrowUp' && e.shiftKey) direction = 'start'
-    else if (e.key === 'ArrowDown' && e.shiftKey) direction = 'end'
-    else if (e.key === 'ArrowUp') direction = 'up'
-    else if (e.key === 'ArrowDown') direction = 'down'
-    if (!direction) return
+  const onKeyDown = (
+    e: React.KeyboardEvent<HTMLButtonElement>,
+    direction: 'up' | 'down' | 'start' | 'end',
+  ) => {
+    if (disabled || dragging) return
     e.preventDefault()
     e.stopPropagation()
     requestStepMove(folderId, direction)
   }
 
-  const liftPreview =
-    isDragging && liftStyle
-      ? createPortal(
-          <div
-            className="select-none shadow-xl ring-2 ring-stone-400 overflow-hidden rounded-lg"
-            style={liftStyle}
-            aria-hidden
-          >
-            <div className="h-10 bg-stone-100/90 px-3 py-2.5 text-sm font-semibold text-stone-900">
-              {folderName}
-            </div>
-          </div>,
-          document.body,
-        )
-      : null
-
   return (
-    <>
+    <div
+      data-memo-reorder-a11y
+      className="flex shrink-0 items-center gap-0.5"
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       <button
         type="button"
-        data-no-trash-drag
-        disabled={disabled}
-        aria-label={`${folderName}の並べ替え`}
-        aria-keyshortcuts="ArrowUp ArrowDown Shift+ArrowUp Shift+ArrowDown"
-        aria-describedby={`memo-reorder-hint-${folderId}`}
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={(e) => void onPointerUp(e)}
-        onPointerCancel={onPointerCancel}
-        onClick={stopActivationClick}
-        onKeyDown={onKeyDown}
-        className="touch-none flex h-11 w-11 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-black/5 hover:text-stone-600 disabled:opacity-40"
+        disabled={disabled || dragging || index === 0}
+        aria-label={`${folderName}を上へ`}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowUp' && e.shiftKey) onKeyDown(e, 'start')
+          else if (e.key === 'ArrowUp') onKeyDown(e, 'up')
+        }}
+        onClick={() => requestStepMove(folderId, 'up')}
+        className="flex h-11 w-9 items-center justify-center rounded text-stone-500 hover:bg-black/5 disabled:opacity-40"
       >
-        <GripIcon />
-        <span id={`memo-reorder-hint-${folderId}`} className="sr-only">
-          {`位置 ${index + 1} / ${total}。ドラッグ、または上下キーで移動。Shift+上下で先頭・末尾。`}
-        </span>
+        ↑
       </button>
-      {liftPreview}
-    </>
+      <button
+        type="button"
+        disabled={disabled || dragging || index >= total - 1}
+        aria-label={`${folderName}を下へ`}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowDown' && e.shiftKey) onKeyDown(e, 'end')
+          else if (e.key === 'ArrowDown') onKeyDown(e, 'down')
+        }}
+        onClick={() => requestStepMove(folderId, 'down')}
+        className="flex h-11 w-9 items-center justify-center rounded text-stone-500 hover:bg-black/5 disabled:opacity-40"
+      >
+        ↓
+      </button>
+      <span
+        id={`memo-reorder-hint-${folderId}`}
+        className="sr-only"
+      >
+        {`位置 ${index + 1} / ${total}。カードの余白を長押ししてドラッグ、または上下ボタンで移動。`}
+      </span>
+    </div>
   )
 }
 
@@ -494,23 +721,4 @@ export function MemoMobileReorderItemRegistrar({
     return () => registerItem(folderId, null)
   }, [folderId, rootRef, registerItem])
   return null
-}
-
-function GripIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      aria-hidden
-    >
-      <circle cx="7" cy="5" r="1.5" />
-      <circle cx="13" cy="5" r="1.5" />
-      <circle cx="7" cy="10" r="1.5" />
-      <circle cx="13" cy="10" r="1.5" />
-      <circle cx="7" cy="15" r="1.5" />
-      <circle cx="13" cy="15" r="1.5" />
-    </svg>
-  )
 }

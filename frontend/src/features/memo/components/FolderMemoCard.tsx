@@ -9,7 +9,8 @@ import {
 import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
 import { useMobileReorderOptional } from './MemoMobileReorderContext'
 import {
-  MemoMobileReorderHandle,
+  MemoMobileReorderA11yControls,
+  MemoMobileReorderGestureRoot,
   MemoMobileReorderInsertMarker,
   MemoMobileReorderItemRegistrar,
 } from './MemoMobileReorder'
@@ -78,6 +79,8 @@ export function FolderMemoCard({
   const mobileReorder = useMobileReorderOptional()
   const isReorderLifted =
     mobileReorderEnabled && mobileReorder?.activeId === folderId
+  const compactListDisplay =
+    mobileReorderEnabled && (mobileReorder?.compactListDisplay ?? false)
   const displayName = parseFolderName(folderName).displayName
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
@@ -258,6 +261,10 @@ export function FolderMemoCard({
         />
       )}
       <div className="flex min-w-0 items-start gap-0.5">
+        <MemoMobileReorderGestureRoot
+          folderId={folderId}
+          cardRootRef={listItemRef}
+        >
         <div
           className={`min-w-0 flex-1 ${isReorderLifted ? 'hidden' : ''}`}
         >
@@ -273,25 +280,45 @@ export function FolderMemoCard({
         <div className="px-3 py-2.5">
           {isMobile ? (
             <div className="space-y-2">
-              <div
-                className="flex min-w-0 cursor-pointer items-center gap-1.5"
-                onClick={handleOpen}
-              >
-                <span
-                  className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
-                  aria-hidden
+              <div className="flex min-w-0 items-center gap-1">
+                <div
+                  data-memo-card-toggle
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5"
+                  onClick={handleOpen}
                 >
-                  ▸
-                </span>
-                <p className="min-w-0 flex-1 truncate text-left text-base font-semibold text-stone-900">
-                  {displayName}
-                </p>
-                {openFolderButton}
+                  <span
+                    className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
+                    aria-hidden
+                  >
+                    ▸
+                  </span>
+                  <p
+                    data-memo-compact-title
+                    className="min-w-0 flex-1 truncate text-left text-base font-semibold text-stone-900"
+                  >
+                    {displayName}
+                  </p>
+                  {openFolderButton}
+                </div>
+                {mobileReorderEnabled && (
+                  <MemoMobileReorderA11yControls
+                    folderId={folderId}
+                    folderName={displayName}
+                    index={mobileReorderIndex}
+                    total={mobileReorderTotal}
+                  />
+                )}
               </div>
+              {mobileReorderEnabled && !compactListDisplay && (
+                <p className="text-center text-[11px] text-stone-400">
+                  余白を長押しで並べ替え
+                </p>
+              )}
 
               {activeStats ? (
                 <div
-                  className="cursor-pointer text-center"
+                  data-memo-card-toggle
+                  className={`cursor-pointer text-center ${compactListDisplay ? 'hidden' : ''}`}
                   onClick={handleOpen}
                 >
                   <div className="inline-grid grid-cols-3 gap-3">
@@ -319,14 +346,16 @@ export function FolderMemoCard({
                   )}
                 </div>
               ) : records.length > 0 && store.trim() ? (
-                <p className="text-center text-[11px] text-stone-500">
+                <p
+                  className={`text-center text-[11px] text-stone-500 ${compactListDisplay ? 'hidden' : ''}`}
+                >
                   この店の記録なし
                 </p>
               ) : null}
 
               {unitColumns.length > 0 && (
                 <div
-                  className="flex justify-center gap-1"
+                  className={`flex justify-center gap-1 ${compactListDisplay ? 'hidden' : ''}`}
                   data-no-trash-drag
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -440,7 +469,7 @@ export function FolderMemoCard({
         {isOpen && (
           <form
             onSubmit={(e) => void handleSave(e)}
-            className="space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3"
+            className={`space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3 ${compactListDisplay ? 'hidden' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-3 sm:gap-x-3">
@@ -573,17 +602,7 @@ export function FolderMemoCard({
       )}
       </DraggableCatalogItem>
         </div>
-        {mobileReorderEnabled && (
-          <div className="shrink-0 self-start pt-2.5 pr-0.5">
-            <MemoMobileReorderHandle
-              folderId={folderId}
-              folderName={displayName}
-              cardRootRef={listItemRef}
-              index={mobileReorderIndex}
-              total={mobileReorderTotal}
-            />
-          </div>
-        )}
+        </MemoMobileReorderGestureRoot>
       </div>
     </li>
   )
