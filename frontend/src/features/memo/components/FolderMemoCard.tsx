@@ -1,5 +1,19 @@
-import { useEffect, useMemo, useState, type FormEvent, type MouseEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from 'react'
 import { DraggableCatalogItem } from '@/components/catalog/DraggableCatalogItem'
+import { useMobileReorderOptional } from './MemoMobileReorderContext'
+import {
+  MemoMobileReorderA11yControls,
+  MemoMobileReorderGestureRoot,
+  MemoMobileReorderInsertMarker,
+  MemoMobileReorderItemRegistrar,
+} from './MemoMobileReorder'
 import { DateInput } from '@/components/DateInput'
 import { StoreField } from '@/components/StoreField'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -36,6 +50,9 @@ type Props = {
   rootRef?: (el: HTMLElement | null) => void
   onSaved: (record: PriceRecord) => void
   dragEnabled?: boolean
+  mobileReorderEnabled?: boolean
+  mobileReorderIndex?: number
+  mobileReorderTotal?: number
   onRemoveFromMemo?: () => void
   onOpenFolder?: () => void
 }
@@ -50,10 +67,20 @@ export function FolderMemoCard({
   rootRef,
   onSaved,
   dragEnabled = true,
+  mobileReorderEnabled = false,
+  mobileReorderIndex = 0,
+  mobileReorderTotal = 1,
   onRemoveFromMemo,
   onOpenFolder,
 }: Props) {
   const isMobile = useMediaQuery('(max-width: 1023px)')
+  const listItemRef = useRef<HTMLElement | null>(null)
+  const [listItemEl, setListItemEl] = useState<HTMLElement | null>(null)
+  const mobileReorder = useMobileReorderOptional()
+  const isReorderLifted =
+    mobileReorderEnabled && mobileReorder?.activeId === folderId
+  const compactListDisplay =
+    mobileReorderEnabled && (mobileReorder?.compactListDisplay ?? false)
   const displayName = parseFolderName(folderName).displayName
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
@@ -208,35 +235,94 @@ export function FolderMemoCard({
     }
   }
 
+  const setLiRef = (el: HTMLElement | null) => {
+    listItemRef.current = el
+    setListItemEl(el)
+    rootRef?.(el)
+  }
+
   return (
-    <li className="list-none" ref={rootRef}>
+    <li className="list-none" ref={setLiRef}>
+      {mobileReorderEnabled && (
+        <>
+          <MemoMobileReorderInsertMarker folderId={folderId} />
+          <MemoMobileReorderItemRegistrar folderId={folderId} rootRef={listItemEl} />
+        </>
+      )}
+      {isReorderLifted && (
+        <div
+          aria-hidden
+          className={`rounded-lg border-2 border-dashed border-stone-300 bg-stone-100/80 ${colorClass}`}
+          style={
+            mobileReorder?.activePlaceholderHeight != null
+              ? { height: mobileReorder.activePlaceholderHeight }
+              : { minHeight: '4.5rem' }
+          }
+        />
+      )}
+      <div className="relative flex min-w-0 items-start gap-0.5">
+        <MemoMobileReorderGestureRoot
+          folderId={folderId}
+          cardRootRef={listItemRef}
+        >
+        <div
+          className={`min-w-0 flex-1 ${
+            isReorderLifted ? 'absolute inset-x-0 top-0 opacity-0' : ''
+          }`}
+          aria-hidden={isReorderLifted ? true : undefined}
+        >
       <DraggableCatalogItem
         dragEnabled={dragEnabled}
         payload={{ kind: 'memo-folder', id: folderId }}
-        onClick={handleOpen}
+        onClick={isMobile ? undefined : handleOpen}
         onDelete={() => onRemoveFromMemo?.()}
         className={`overflow-hidden rounded-lg border shadow-sm transition-colors ${colorClass} ${
-          isOpen ? 'ring-1 ring-stone-400' : 'hover:brightness-[0.99]'
-        }`}
+          isOpen && !compactListDisplay
+            ? 'ring-1 ring-stone-400'
+            : 'hover:brightness-[0.99]'
+        } ${compactListDisplay ? 'select-none' : ''}`}
       >
         <div className="px-3 py-2.5">
           {isMobile ? (
             <div className="space-y-2">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span
-                  className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
-                  aria-hidden
+              <div className="relative flex min-w-0 items-center gap-1">
+                <div
+                  data-memo-card-toggle
+                  className="flex min-w-0 flex-1 cursor-pointer items-center gap-1.5"
+                  onClick={handleOpen}
                 >
-                  ▸
-                </span>
-                <p className="min-w-0 flex-1 truncate text-left text-base font-semibold text-stone-900">
-                  {displayName}
-                </p>
-                {openFolderButton}
+                  <span
+                    className={`shrink-0 text-stone-400 transition-transform ${
+                      isOpen && !compactListDisplay ? 'rotate-90' : ''
+                    }`}
+                    aria-hidden
+                  >
+                    ▸
+                  </span>
+                  <p
+                    data-memo-compact-title
+                    className="min-w-0 flex-1 truncate text-left text-base font-semibold text-stone-900"
+                  >
+                    {displayName}
+                  </p>
+                  {openFolderButton}
+                </div>
+                {mobileReorderEnabled && (
+                  <MemoMobileReorderA11yControls
+                    folderId={folderId}
+                    folderName={displayName}
+                    index={mobileReorderIndex}
+                    total={mobileReorderTotal}
+                  />
+                )}
               </div>
 
               {activeStats ? (
-                <div className="text-center">
+                <div
+                  data-memo-card-toggle
+                  className={`cursor-pointer text-center ${compactListDisplay ? 'hidden' : ''}`}
+                  onClick={handleOpen}
+                >
                   <div className="inline-grid grid-cols-3 gap-3">
                     <StatCell label="平均" value={activeStats.avg} />
                     <StatCell label="最安" value={activeStats.min} highlight />
@@ -262,14 +348,16 @@ export function FolderMemoCard({
                   )}
                 </div>
               ) : records.length > 0 && store.trim() ? (
-                <p className="text-center text-[11px] text-stone-500">
+                <p
+                  className={`text-center text-[11px] text-stone-500 ${compactListDisplay ? 'hidden' : ''}`}
+                >
                   この店の記録なし
                 </p>
               ) : null}
 
               {unitColumns.length > 0 && (
                 <div
-                  className="flex justify-center gap-1"
+                  className={`flex justify-center gap-1 ${compactListDisplay ? 'hidden' : ''}`}
                   data-no-trash-drag
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -383,7 +471,7 @@ export function FolderMemoCard({
         {isOpen && (
           <form
             onSubmit={(e) => void handleSave(e)}
-            className="space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3"
+            className={`space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3 ${compactListDisplay ? 'hidden' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-3 sm:gap-x-3">
@@ -515,6 +603,9 @@ export function FolderMemoCard({
         </form>
       )}
       </DraggableCatalogItem>
+        </div>
+        </MemoMobileReorderGestureRoot>
+      </div>
     </li>
   )
 }

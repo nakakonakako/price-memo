@@ -18,8 +18,8 @@ import {
 } from '@/features/folders/utils/folderName'
 import { listRecords, listRecordsForFolders } from '@/features/records/api/recordsApi'
 import type { PriceRecord } from '@/features/records/types'
-import { reorderIds } from '@/lib/listOrder'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
+import { reorderIds } from '@/lib/listOrder'
 import { isMissingTargetError } from '@/lib/appError'
 import { toUserMessage } from '@/lib/userError'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
@@ -33,14 +33,18 @@ import { useResumeCatalogRefresh } from '@/hooks/useResumeCatalogRefresh'
 import { useExternalCatalogRefresh } from '@/hooks/useExternalCatalogRefresh'
 import {
   addMemoItem,
-  isMemoReorderStaleError,
   listMemoItems,
   removeMemoItem,
-  reorderMemoItems,
   type PriceMemoItem,
 } from '../api/memoApi'
 import { recordsByFolderId } from '../utils/stats'
 import { FolderMemoCard } from './FolderMemoCard'
+import {
+  MemoMobileReorderEndMarker,
+  MemoMobileReorderLiveRegion,
+  MemoMobileReorderProvider,
+} from './MemoMobileReorder'
+import { useMemoItemReorder } from '../hooks/useMemoItemReorder'
 import { useTrashDrag } from '@/components/trash/TrashDragContext'
 
 const MEMO_PALETTES = [
@@ -59,16 +63,8 @@ const nameCollator = new Intl.Collator('ja', {
   sensitivity: 'base',
 })
 
-const MEMO_REORDER_STALE_MESSAGE =
-  'メモの一覧が変更されました。もう一度並べ替えてください。'
-
 const DELETED_FOLDER_PERSISTENCE_MESSAGE =
   '削除したフォルダがまだ残っています。ページを再読み込みしてください。'
-
-function reorderFailureMessage(err: unknown): string {
-  if (isMemoReorderStaleError(err)) return MEMO_REORDER_STALE_MESSAGE
-  return toUserMessage(err, '並べ替えの保存に失敗しました。')
-}
 
 function preserveCurrentMemoOrder(
   serverItems: PriceMemoItem[],
@@ -143,6 +139,8 @@ export function ShoppingMemoPage({
   const visibleLoadRef = useRef(createVisibleLoadTracker())
   const reorderGenerationRef = useRef(0)
   const reorderInFlightRef = useRef(false)
+  const skipPreserveMemoOrderRef = useRef(false)
+  const [reorderAnnouncement, setReorderAnnouncement] = useState('')
   const catalogRevSeen = useRef<ReturnType<typeof getCatalogRevisions> | null>(
     null,
   )
@@ -239,8 +237,9 @@ export function ShoppingMemoPage({
         }
 
         const preserveMemoOrder =
-          reorderGenerationRef.current !== reorderGeneration ||
-          reorderInFlightRef.current
+          !skipPreserveMemoOrderRef.current &&
+          (reorderGenerationRef.current !== reorderGeneration ||
+            reorderInFlightRef.current)
         setAllFolders(withoutTombstonedFolders(folderList))
         setMemoItems((current) => {
           const visible = withoutTombstonedMemoItems(memoList)
@@ -440,8 +439,9 @@ export function ShoppingMemoPage({
             return null
           }
           const preserveMemoOrder =
-            reorderGenerationRef.current !== reorderGeneration ||
-            reorderInFlightRef.current
+            !skipPreserveMemoOrderRef.current &&
+            (reorderGenerationRef.current !== reorderGeneration ||
+              reorderInFlightRef.current)
           const visible = withoutTombstonedMemoItems(memoList)
           setMemoItems((current) =>
             preserveMemoOrder
@@ -497,6 +497,38 @@ export function ShoppingMemoPage({
   }, [withoutTombstonedRecords])
 
   const interactionsLocked = mutating
+
+  const { commitReorder } = useMemoItemReorder({
+    memoItems,
+    setMemoItems,
+    setError,
+    load,
+    interactionsLocked,
+    refs: {
+      reorderGenerationRef,
+      reorderInFlightRef,
+      loadGenerationRef,
+      skipPreserveMemoOrderRef,
+    },
+    onSuccess: isMobile
+      ? undefined
+      : (message) => setReorderAnnouncement(message),
+  })
+
+  const handleMobileReorderCommit = useCallback(
+    async (draggedId: string, beforeId: string | null) => {
+      const expectedIds = memoItems.map((m) => m.folder_id)
+      const result = await commitReorder(draggedId, beforeId)
+      if (result !== 'ok') return
+      const nextIds = reorderIds(expectedIds, draggedId, beforeId)
+      const position = nextIds.indexOf(draggedId) + 1
+      const item = memoItems.find((m) => m.folder_id === draggedId)
+      if (!item || position < 1) return
+      const name = parseFolderName(item.folder.name).displayName
+      setReorderAnnouncement(`${name}を${position}番目に移動しました`)
+    },
+    [commitReorder, memoItems, setReorderAnnouncement],
+  )
 
   const byFolder = useMemo(() => recordsByFolderId(records), [records])
   const memoFolderIds = useMemo(
@@ -648,59 +680,10 @@ export function ShoppingMemoPage({
       }
 
       if (result.action === 'reorder') {
-        if (reorderInFlightRef.current) return
-
-        const userIdAtStart = getCurrentAuthUserId()
-        if (!userIdAtStart) return
-
-        const prev = memoItems
-        const expectedIds = prev.map((m) => m.folder_id)
-        const ids = reorderIds(expectedIds, result.payload.id, result.beforeId)
-        if (ids.length === expectedIds.length && ids.every((id, i) => id === expectedIds[i])) {
-          return
-        }
-        const reorderGeneration = reorderGenerationRef.current + 1
-        reorderGenerationRef.current = reorderGeneration
-        loadGenerationRef.current += 1
-        reorderInFlightRef.current = true
-
-        const map = new Map(prev.map((m) => [m.folder_id, m]))
-        const next = ids
-          .map((folderId, sort_order) => {
-            const m = map.get(folderId)
-            return m ? { ...m, sort_order } : null
-          })
-          .filter((m): m is PriceMemoItem => m != null)
-        setMemoItems(next)
-        try {
-          await reorderMemoItems(expectedIds, ids)
-          if (
-            reorderGenerationRef.current !== reorderGeneration ||
-            getCurrentAuthUserId() !== userIdAtStart
-          ) {
-            return
-          }
-        } catch (err) {
-          if (
-            reorderGenerationRef.current !== reorderGeneration ||
-            getCurrentAuthUserId() !== userIdAtStart
-          ) {
-            return
-          }
-          setError(reorderFailureMessage(err))
-          reorderGenerationRef.current += 1
-          reorderInFlightRef.current = false
-          loadGenerationRef.current += 1
-          await load({ silent: true, preserveError: true })
-        } finally {
-          if (reorderGenerationRef.current === reorderGeneration) {
-            reorderInFlightRef.current = false
-            reorderGenerationRef.current += 1
-          }
-        }
+        await commitReorder(result.payload.id, result.beforeId)
       }
     },
-    [interactionsLocked, load, memoItems, removeFromMemo],
+    [commitReorder, interactionsLocked, removeFromMemo],
   )
 
   const handleSaved = (record: PriceRecord) => {
@@ -709,13 +692,53 @@ export function ShoppingMemoPage({
     setRecords((prev) => withoutTombstonedRecords([record, ...prev]))
   }
 
+  const memoList = (
+    <ul className="space-y-2">
+      {memoItems.map((item, index) => (
+        <FolderMemoCard
+          key={item.id}
+          folderId={item.folder_id}
+          folderName={item.folder.name}
+          records={byFolder.get(item.folder_id) ?? []}
+          colorClass={MEMO_PALETTES[index % MEMO_PALETTES.length]}
+          forceOpen={focusFolderId === item.folder_id}
+          onForceOpenHandled={clearFocusFolder}
+          rootRef={(el) => {
+            if (el) cardRefs.current.set(item.folder_id, el)
+            else cardRefs.current.delete(item.folder_id)
+          }}
+          onSaved={handleSaved}
+          dragEnabled={!isMobile && !interactionsLocked}
+          mobileReorderEnabled={isMobile && !interactionsLocked}
+          mobileReorderIndex={index}
+          mobileReorderTotal={memoItems.length}
+          onRemoveFromMemo={() => void removeFromMemo(item.folder_id)}
+          onOpenFolder={
+            onOpenFolder ? () => onOpenFolder(item.folder_id) : undefined
+          }
+        />
+      ))}
+      {isMobile && (
+        <MemoMobileReorderEndMarker
+          lastId={memoItems[memoItems.length - 1]?.folder_id ?? null}
+        />
+      )}
+      {!isMobile && (
+        <MemoListEndMarker
+          lastId={memoItems[memoItems.length - 1]?.folder_id ?? null}
+        />
+      )}
+    </ul>
+  )
+
   const page = (
       <section className="space-y-4 pb-44 lg:pb-4">
+        <MemoMobileReorderLiveRegion message={reorderAnnouncement} />
         <ScrollToTopButton />
         <button
           type="button"
           onClick={() => setAddOpen((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 hover:bg-stone-50"
+          className="inline-flex select-none items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 [-webkit-touch-callout:none] hover:bg-stone-50"
           aria-expanded={addOpen}
         >
           <span className="text-base leading-none" aria-hidden>
@@ -795,39 +818,19 @@ export function ShoppingMemoPage({
           <p className="rounded-md border border-dashed border-stone-300 bg-white/60 px-4 py-8 text-center text-sm text-stone-500">
             まだメモがありません
           </p>
-        ) : (
-          <ul
-            className="space-y-2"
+        ) : isMobile ? (
+          <MemoMobileReorderProvider
+            folderIds={dragIds}
+            disabled={interactionsLocked}
+            onCommit={(draggedId, beforeId) => {
+              void handleMobileReorderCommit(draggedId, beforeId)
+            }}
+            onAnnounce={setReorderAnnouncement}
           >
-              {memoItems.map((item, index) => (
-                <FolderMemoCard
-                  key={item.id}
-                  folderId={item.folder_id}
-                  folderName={item.folder.name}
-                  records={byFolder.get(item.folder_id) ?? []}
-                  colorClass={MEMO_PALETTES[index % MEMO_PALETTES.length]}
-                  forceOpen={focusFolderId === item.folder_id}
-                  onForceOpenHandled={clearFocusFolder}
-                  rootRef={(el) => {
-                    if (el) cardRefs.current.set(item.folder_id, el)
-                    else cardRefs.current.delete(item.folder_id)
-                  }}
-                  onSaved={handleSaved}
-                  dragEnabled={!isMobile && !interactionsLocked}
-                  onRemoveFromMemo={() => void removeFromMemo(item.folder_id)}
-                  onOpenFolder={
-                    onOpenFolder
-                      ? () => onOpenFolder(item.folder_id)
-                      : undefined
-                  }
-                />
-              ))}
-              {!isMobile && (
-                <MemoListEndMarker
-                  lastId={memoItems[memoItems.length - 1]?.folder_id ?? null}
-                />
-              )}
-            </ul>
+            {memoList}
+          </MemoMobileReorderProvider>
+        ) : (
+          memoList
         )}
       </section>
   )
