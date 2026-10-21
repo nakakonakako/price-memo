@@ -738,7 +738,7 @@ export function ShoppingMemoPage({
         <button
           type="button"
           onClick={() => setAddOpen((v) => !v)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 hover:bg-stone-50"
+          className="inline-flex select-none items-center gap-1.5 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-800 [-webkit-touch-callout:none] hover:bg-stone-50"
           aria-expanded={addOpen}
         >
           <span className="text-base leading-none" aria-hidden>

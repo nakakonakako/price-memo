@@ -721,4 +721,18 @@ describe('ShoppingMemoPage mobile reorder', () => {
 
     expect(reorderMemoItems).not.toHaveBeenCalled()
   })
+
+  it('suppresses text selection on the add-memo control', async () => {
+    listMemoItems.mockResolvedValue([])
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'メモを追加' })).toBeTruthy()
+    })
+
+    const addButton = screen.getByRole('button', { name: 'メモを追加' })
+    expect(addButton.className).toContain('select-none')
+    expect(addButton.className).toContain('[-webkit-touch-callout:none]')
+  })
 })
