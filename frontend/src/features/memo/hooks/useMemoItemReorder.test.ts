@@ -9,13 +9,13 @@ import {
 
 const reorderMemoItems = vi.fn()
 
-vi.mock('../api/memoApi', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/memoApi')>()
-  return {
-    ...actual,
-    reorderMemoItems: (...args: unknown[]) => reorderMemoItems(...args),
-  }
-})
+vi.mock('../api/memoApi', () => ({
+  reorderMemoItems: (...args: unknown[]) => reorderMemoItems(...args),
+  isMemoReorderStaleError: (err: unknown): boolean => {
+    if (!err || typeof err !== 'object') return false
+    return (err as { code?: string }).code === 'PM001'
+  },
+}))
 
 function memoItem(folderId: string, sortOrder: number) {
   return {
