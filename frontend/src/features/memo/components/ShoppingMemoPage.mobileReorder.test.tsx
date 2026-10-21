@@ -183,25 +183,28 @@ async function withLongPressTimers(run: () => void | Promise<void>) {
 }
 
 function touchAt(
-  el: HTMLElement,
+  surfaceEl: HTMLElement,
   type: 'start' | 'move' | 'end' | 'cancel',
   clientY: number,
   clientX = 120,
   opts?: { cancelable?: boolean },
 ) {
-  const touch = { identifier: 1, clientX, clientY, target: el }
+  const touch = { identifier: 1, clientX, clientY, target: surfaceEl }
   if (type === 'start') {
-    fireEvent.touchStart(el, { touches: [touch], targetTouches: [touch] })
-  } else if (type === 'move') {
-    fireEvent.touchMove(el, {
+    fireEvent.touchStart(surfaceEl, { touches: [touch], targetTouches: [touch] })
+    return
+  }
+  const docTarget = document
+  if (type === 'move') {
+    fireEvent.touchMove(docTarget, {
       touches: [touch],
       targetTouches: [touch],
       cancelable: opts?.cancelable ?? true,
     })
   } else if (type === 'cancel') {
-    fireEvent.touchCancel(el, { touches: [], changedTouches: [touch] })
+    fireEvent.touchCancel(docTarget, { touches: [], changedTouches: [touch] })
   } else {
-    fireEvent.touchEnd(el, { changedTouches: [touch], touches: [] })
+    fireEvent.touchEnd(docTarget, { changedTouches: [touch], touches: [] })
   }
 }
 

@@ -260,13 +260,16 @@ export function FolderMemoCard({
           }
         />
       )}
-      <div className="flex min-w-0 items-start gap-0.5">
+      <div className="relative flex min-w-0 items-start gap-0.5">
         <MemoMobileReorderGestureRoot
           folderId={folderId}
           cardRootRef={listItemRef}
         >
         <div
-          className={`min-w-0 flex-1 ${isReorderLifted ? 'hidden' : ''}`}
+          className={`min-w-0 flex-1 ${
+            isReorderLifted ? 'absolute inset-x-0 top-0 opacity-0' : ''
+          }`}
+          aria-hidden={isReorderLifted ? true : undefined}
         >
       <DraggableCatalogItem
         dragEnabled={dragEnabled}
