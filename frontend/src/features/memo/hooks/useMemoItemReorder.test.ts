@@ -110,4 +110,115 @@ describe('useMemoItemReorder', () => {
     ).toContain(MEMO_REORDER_UNKNOWN_ORDER_MESSAGE)
     expect(skipPreserveMemoOrderRef.current).toBe(false)
   })
+
+  it('does not restore optimistic order when reload aborts after account switch', async () => {
+    const initial = [memoItem('folder-a', 0), memoItem('folder-b', 1)]
+    const afterSwitch = [memoItem('folder-c', 0)]
+    let items = initial
+    const setMemoItems = vi.fn((updater: typeof items | ((prev: typeof items) => typeof items)) => {
+      items = typeof updater === 'function' ? updater(items) : updater
+    })
+    const setError = vi.fn()
+    const load = vi.fn().mockImplementation(async () => {
+      items = afterSwitch
+      applyAuthIdentity({
+        access_token: 'token-b',
+        refresh_token: 'refresh',
+        expires_in: 3600,
+        token_type: 'bearer',
+        user: {
+          id: 'user-b',
+          aud: 'authenticated',
+          role: 'authenticated',
+          email: 'b@example.com',
+          app_metadata: {},
+          user_metadata: {},
+          created_at: '2026-01-01T00:00:00Z',
+        },
+      })
+      return 'aborted'
+    })
+    reorderMemoItems.mockRejectedValue({ code: '08006' })
+
+    const { result } = renderHook(() =>
+      useMemoItemReorder({
+        memoItems: items,
+        setMemoItems,
+        setError,
+        load,
+        interactionsLocked: false,
+        refs: {
+          reorderGenerationRef,
+          reorderInFlightRef,
+          loadGenerationRef,
+          skipPreserveMemoOrderRef,
+        },
+      }),
+    )
+
+    await act(async () => {
+      await result.current.commitReorder('folder-b', 'folder-a')
+    })
+
+    await waitFor(() => {
+      expect(load).toHaveBeenCalled()
+    })
+
+    expect(items.map((m) => m.folder_id)).toEqual(['folder-c'])
+    const restoreCalls = setMemoItems.mock.calls.filter((call) => {
+      const arg = call[0]
+      if (typeof arg !== 'function') return arg === initial
+      return arg(initial) === initial
+    })
+    expect(restoreCalls).toHaveLength(0)
+  })
+
+  it('does not restore optimistic order when reload aborts after load generation changes', async () => {
+    const initial = [memoItem('folder-a', 0), memoItem('folder-b', 1)]
+    const fresher = [memoItem('folder-x', 0), memoItem('folder-y', 1)]
+    let items = initial
+    const setMemoItems = vi.fn((updater: typeof items | ((prev: typeof items) => typeof items)) => {
+      items = typeof updater === 'function' ? updater(items) : updater
+    })
+    const setError = vi.fn()
+    const load = vi.fn().mockImplementation(async () => {
+      loadGenerationRef.current += 1
+      items = fresher
+      return 'aborted'
+    })
+    reorderMemoItems.mockRejectedValue({ code: '08006' })
+
+    const { result } = renderHook(() =>
+      useMemoItemReorder({
+        memoItems: items,
+        setMemoItems,
+        setError,
+        load,
+        interactionsLocked: false,
+        refs: {
+          reorderGenerationRef,
+          reorderInFlightRef,
+          loadGenerationRef,
+          skipPreserveMemoOrderRef,
+        },
+      }),
+    )
+
+    await act(async () => {
+      await result.current.commitReorder('folder-b', 'folder-a')
+    })
+
+    await waitFor(() => {
+      expect(load).toHaveBeenCalled()
+    })
+
+    expect(items.map((m) => m.folder_id)).toEqual(['folder-x', 'folder-y'])
+    const restoreCalls = setMemoItems.mock.calls.filter((call) => {
+      const arg = call[0]
+      if (typeof arg !== 'function') return false
+      const applied = arg(fresher)
+      return applied === initial || applied.map((m) => m.folder_id).join() === 'folder-a,folder-b'
+    })
+    expect(restoreCalls).toHaveLength(0)
+  })
 })

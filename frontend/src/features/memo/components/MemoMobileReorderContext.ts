@@ -5,6 +5,8 @@ export type MobileReorderContextValue = {
   insertBeforeId: string | null | undefined
   activeId: string | null
   dragging: boolean
+  /** Measured row height (px) for the lifted item placeholder */
+  activePlaceholderHeight: number | null
   requestStepMove: (
     folderId: string,
     direction: 'up' | 'down' | 'start' | 'end',

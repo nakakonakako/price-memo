@@ -19,6 +19,7 @@ import {
 import { listRecords, listRecordsForFolders } from '@/features/records/api/recordsApi'
 import type { PriceRecord } from '@/features/records/types'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
+import { reorderIds } from '@/lib/listOrder'
 import { isMissingTargetError } from '@/lib/appError'
 import { toUserMessage } from '@/lib/userError'
 import { getCurrentAuthUserId } from '@/lib/authIdentity'
@@ -509,8 +510,25 @@ export function ShoppingMemoPage({
       loadGenerationRef,
       skipPreserveMemoOrderRef,
     },
-    onSuccess: (message) => setReorderAnnouncement(message),
+    onSuccess: isMobile
+      ? undefined
+      : (message) => setReorderAnnouncement(message),
   })
+
+  const handleMobileReorderCommit = useCallback(
+    async (draggedId: string, beforeId: string | null) => {
+      const expectedIds = memoItems.map((m) => m.folder_id)
+      const result = await commitReorder(draggedId, beforeId)
+      if (result !== 'ok') return
+      const nextIds = reorderIds(expectedIds, draggedId, beforeId)
+      const position = nextIds.indexOf(draggedId) + 1
+      const item = memoItems.find((m) => m.folder_id === draggedId)
+      if (!item || position < 1) return
+      const name = parseFolderName(item.folder.name).displayName
+      setReorderAnnouncement(`${name}を${position}番目に移動しました`)
+    },
+    [commitReorder, memoItems, setReorderAnnouncement],
+  )
 
   const byFolder = useMemo(() => recordsByFolderId(records), [records])
   const memoFolderIds = useMemo(
@@ -805,7 +823,7 @@ export function ShoppingMemoPage({
             folderIds={dragIds}
             disabled={interactionsLocked}
             onCommit={(draggedId, beforeId) => {
-              void commitReorder(draggedId, beforeId)
+              void handleMobileReorderCommit(draggedId, beforeId)
             }}
             onAnnounce={setReorderAnnouncement}
           >

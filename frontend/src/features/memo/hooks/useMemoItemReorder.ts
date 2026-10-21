@@ -112,10 +112,15 @@ export function useMemoItemReorder({
         reorderGenerationRef.current += 1
         reorderInFlightRef.current = false
         loadGenerationRef.current += 1
+        const loadGenerationAtReload = loadGenerationRef.current
+        const userIdBeforeReload = getCurrentAuthUserId()
         skipPreserveMemoOrderRef.current = true
         const loadResult = await load({ silent: true, preserveError: true })
         skipPreserveMemoOrderRef.current = false
-        if (loadResult !== 'ok') {
+        const reloadStillValid =
+          getCurrentAuthUserId() === userIdBeforeReload &&
+          loadGenerationRef.current === loadGenerationAtReload
+        if (loadResult !== 'ok' && reloadStillValid) {
           setMemoItems(prev)
           setError((current) =>
             current

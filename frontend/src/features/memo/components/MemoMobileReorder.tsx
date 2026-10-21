@@ -8,15 +8,17 @@ import {
   useState,
   type CSSProperties,
   type ReactNode,
+  type RefObject,
 } from 'react'
 import { createPortal } from 'react-dom'
 import {
   MobileReorderContext,
   useMobileReorder,
 } from './MemoMobileReorderContext'
-
-const DRAG_THRESHOLD = 8
-const HANDLE_SWIPE_THRESHOLD = 12
+import {
+  shouldActivateDrag,
+  shouldStepSwipeOnRelease,
+} from './memoMobileReorderGesture'
 
 type ItemRect = {
   id: string
@@ -48,6 +50,9 @@ export function MemoMobileReorderProvider({
 
   const [dragging, setDragging] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [activePlaceholderHeight, setActivePlaceholderHeight] = useState<
+    number | null
+  >(null)
   const [insertBeforeId, setInsertBeforeId] = useState<
     string | null | undefined
   >(undefined)
@@ -99,6 +104,7 @@ export function MemoMobileReorderProvider({
       const before = insertBeforeIdRef.current
       setDragging(false)
       setActiveId(null)
+      setActivePlaceholderHeight(null)
       setInsertTarget(undefined)
       if (before === undefined) return
       await onCommit(draggedId, before)
@@ -109,6 +115,7 @@ export function MemoMobileReorderProvider({
   const cancelDrag = useCallback(() => {
     setDragging(false)
     setActiveId(null)
+    setActivePlaceholderHeight(null)
     setInsertTarget(undefined)
   }, [setInsertTarget])
 
@@ -162,10 +169,11 @@ export function MemoMobileReorderProvider({
       const dx = clientX - s.startX
       const dy = clientY - s.startY
       if (!s.moved) {
-        if (Math.hypot(dx, dy) < DRAG_THRESHOLD) return
+        if (!shouldActivateDrag(dx, dy)) return
         s.moved = true
         setDragging(true)
         setActiveId(s.folderId)
+        setActivePlaceholderHeight(s.height)
         setInsertTarget(resolveInsertBefore(clientY, s.folderId))
       } else {
         setInsertTarget(resolveInsertBefore(clientY, s.folderId))
@@ -188,7 +196,8 @@ export function MemoMobileReorderProvider({
           break
         case 'down':
           if (index >= ids.length - 1) return
-          beforeId = ids[index + 1]
+          beforeId =
+            index + 2 < ids.length ? ids[index + 2] : null
           break
         case 'start':
           if (index === 0) return
@@ -205,14 +214,15 @@ export function MemoMobileReorderProvider({
   )
 
   const endHandleDrag = useCallback(
-    async (clientY: number) => {
+    async (clientX: number, clientY: number) => {
       const s = dragSessionRef.current
       if (!s.active) return
-      const { folderId, moved, startY } = s
+      const { folderId, moved, startX, startY } = s
       s.active = false
       if (!moved) {
+        const dx = clientX - startX
         const dy = clientY - startY
-        if (Math.abs(dy) >= HANDLE_SWIPE_THRESHOLD) {
+        if (shouldStepSwipeOnRelease(dx, dy)) {
           const direction = dy < 0 ? 'up' : 'down'
           requestStepMove(folderId, direction)
         }
@@ -242,6 +252,7 @@ export function MemoMobileReorderProvider({
       insertBeforeId,
       activeId,
       dragging,
+      activePlaceholderHeight,
       requestStepMove,
       announce,
     }),
@@ -250,6 +261,7 @@ export function MemoMobileReorderProvider({
       insertBeforeId,
       activeId,
       dragging,
+      activePlaceholderHeight,
       requestStepMove,
       announce,
     ],
@@ -279,7 +291,7 @@ type HandleDragControllerProps = {
     cardEl: HTMLElement,
   ) => void
   moveHandleDrag: (clientX: number, clientY: number) => void
-  endHandleDrag: (clientY: number) => Promise<void>
+  endHandleDrag: (clientX: number, clientY: number) => Promise<void>
   cancelHandleDrag: () => void
 }
 
@@ -330,7 +342,7 @@ export function MemoMobileReorderEndMarker({ lastId }: { lastId: string | null }
 type HandleProps = {
   folderId: string
   folderName: string
-  cardRootRef: HTMLElement | null
+  cardRootRef: RefObject<HTMLElement | null>
   index: number
   total: number
   disabled?: boolean
@@ -358,9 +370,10 @@ export function MemoMobileReorderHandle({
   const isDragging = activeId === folderId && dragging
 
   const onPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
-    if (disabled || e.button !== 0 || !cardRootRef) return
+    const cardEl = cardRootRef.current
+    if (disabled || e.button > 0 || !cardEl) return
     e.stopPropagation()
-    const rect = cardRootRef.getBoundingClientRect()
+    const rect = cardEl.getBoundingClientRect()
     dragOffsetYRef.current = e.clientY - rect.top
     beginHandleDrag(
       folderId,
@@ -368,15 +381,16 @@ export function MemoMobileReorderHandle({
       e.clientX,
       e.clientY,
       e.currentTarget,
-      cardRootRef,
+      cardEl,
     )
   }
 
   const onPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.stopPropagation()
     moveHandleDrag(e.clientX, e.clientY)
-    if (activeId === folderId && dragging && cardRootRef) {
-      const rect = cardRootRef.getBoundingClientRect()
+    const cardEl = cardRootRef.current
+    if (activeId === folderId && dragging && cardEl) {
+      const rect = cardEl.getBoundingClientRect()
       setLiftStyle({
         position: 'fixed',
         left: rect.left,
@@ -391,7 +405,7 @@ export function MemoMobileReorderHandle({
 
   const onPointerUp = async (e: React.PointerEvent<HTMLButtonElement>) => {
     e.stopPropagation()
-    await endHandleDrag(e.clientY)
+    await endHandleDrag(e.clientX, e.clientY)
     setLiftStyle(null)
     try {
       e.currentTarget.releasePointerCapture(e.pointerId)
@@ -400,9 +414,15 @@ export function MemoMobileReorderHandle({
     }
   }
 
-  const onPointerCancel = () => {
+  const onPointerCancel = (e: React.PointerEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
     cancelHandleDrag()
     setLiftStyle(null)
+  }
+
+  const stopActivationClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation()
+    e.preventDefault()
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
@@ -419,7 +439,7 @@ export function MemoMobileReorderHandle({
   }
 
   const liftPreview =
-    isDragging && liftStyle && cardRootRef
+    isDragging && liftStyle
       ? createPortal(
           <div
             className="select-none shadow-xl ring-2 ring-stone-400 overflow-hidden rounded-lg"
@@ -447,8 +467,9 @@ export function MemoMobileReorderHandle({
         onPointerMove={onPointerMove}
         onPointerUp={(e) => void onPointerUp(e)}
         onPointerCancel={onPointerCancel}
+        onClick={stopActivationClick}
         onKeyDown={onKeyDown}
-        className="touch-none shrink-0 rounded p-1.5 text-stone-400 hover:bg-black/5 hover:text-stone-600 disabled:opacity-40"
+        className="touch-none flex h-11 w-11 shrink-0 items-center justify-center rounded text-stone-400 hover:bg-black/5 hover:text-stone-600 disabled:opacity-40"
       >
         <GripIcon />
         <span id={`memo-reorder-hint-${folderId}`} className="sr-only">

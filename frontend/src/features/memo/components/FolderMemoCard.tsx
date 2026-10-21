@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type FormEvent,
   type MouseEvent,
@@ -72,6 +73,7 @@ export function FolderMemoCard({
   onOpenFolder,
 }: Props) {
   const isMobile = useMediaQuery('(max-width: 1023px)')
+  const listItemRef = useRef<HTMLElement | null>(null)
   const [listItemEl, setListItemEl] = useState<HTMLElement | null>(null)
   const mobileReorder = useMobileReorderOptional()
   const isReorderLifted =
@@ -231,6 +233,7 @@ export function FolderMemoCard({
   }
 
   const setLiRef = (el: HTMLElement | null) => {
+    listItemRef.current = el
     setListItemEl(el)
     rootRef?.(el)
   }
@@ -246,14 +249,22 @@ export function FolderMemoCard({
       {isReorderLifted && (
         <div
           aria-hidden
-          className={`min-h-[4.5rem] rounded-lg border-2 border-dashed border-stone-300 bg-stone-100/80 ${colorClass}`}
+          className={`rounded-lg border-2 border-dashed border-stone-300 bg-stone-100/80 ${colorClass}`}
+          style={
+            mobileReorder?.activePlaceholderHeight != null
+              ? { height: mobileReorder.activePlaceholderHeight }
+              : { minHeight: '4.5rem' }
+          }
         />
       )}
-      <div className={isReorderLifted ? 'hidden' : undefined}>
+      <div className="flex min-w-0 items-start gap-0.5">
+        <div
+          className={`min-w-0 flex-1 ${isReorderLifted ? 'hidden' : ''}`}
+        >
       <DraggableCatalogItem
         dragEnabled={dragEnabled}
         payload={{ kind: 'memo-folder', id: folderId }}
-        onClick={handleOpen}
+        onClick={isMobile ? undefined : handleOpen}
         onDelete={() => onRemoveFromMemo?.()}
         className={`overflow-hidden rounded-lg border shadow-sm transition-colors ${colorClass} ${
           isOpen ? 'ring-1 ring-stone-400' : 'hover:brightness-[0.99]'
@@ -262,7 +273,10 @@ export function FolderMemoCard({
         <div className="px-3 py-2.5">
           {isMobile ? (
             <div className="space-y-2">
-              <div className="flex min-w-0 items-center gap-1.5">
+              <div
+                className="flex min-w-0 cursor-pointer items-center gap-1.5"
+                onClick={handleOpen}
+              >
                 <span
                   className={`shrink-0 text-stone-400 transition-transform ${isOpen ? 'rotate-90' : ''}`}
                   aria-hidden
@@ -273,19 +287,13 @@ export function FolderMemoCard({
                   {displayName}
                 </p>
                 {openFolderButton}
-                {mobileReorderEnabled && (
-                  <MemoMobileReorderHandle
-                    folderId={folderId}
-                    folderName={displayName}
-                    cardRootRef={listItemEl}
-                    index={mobileReorderIndex}
-                    total={mobileReorderTotal}
-                  />
-                )}
               </div>
 
               {activeStats ? (
-                <div className="text-center">
+                <div
+                  className="cursor-pointer text-center"
+                  onClick={handleOpen}
+                >
                   <div className="inline-grid grid-cols-3 gap-3">
                     <StatCell label="平均" value={activeStats.avg} />
                     <StatCell label="最安" value={activeStats.min} highlight />
@@ -564,6 +572,18 @@ export function FolderMemoCard({
         </form>
       )}
       </DraggableCatalogItem>
+        </div>
+        {mobileReorderEnabled && (
+          <div className="shrink-0 self-start pt-2.5 pr-0.5">
+            <MemoMobileReorderHandle
+              folderId={folderId}
+              folderName={displayName}
+              cardRootRef={listItemRef}
+              index={mobileReorderIndex}
+              total={mobileReorderTotal}
+            />
+          </div>
+        )}
       </div>
     </li>
   )
