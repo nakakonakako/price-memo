@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import errno
 import importlib.util
 import json
 import socket
@@ -300,6 +301,114 @@ class CursorDevserverTests(unittest.TestCase):
             server.ensure()
         self.assertTrue(wait_port(self.ports["backend"], False))
         self.assertIsNone(server.load_session())
+
+    def test_immediate_child_exit_after_popen_leaves_no_session(self) -> None:
+        commands = {
+            **self.commands,
+            "backend": [sys.executable, "-c", "raise SystemExit(9)"],
+        }
+        server = self.server(commands=commands)
+        with self.assertRaisesRegex(
+            MODULE.DevserverError, "Backend did not become ready"
+        ):
+            server.ensure()
+        session = server.load_session()
+        self.assertIsNone(session)
+        child = server.children["backend"]
+        self.assertIsNotNone(child.poll())
+
+    def test_identity_mismatch_after_popen_cleans_only_verified_child(self) -> None:
+        server = self.server()
+        original_identity = MODULE.process_identity
+        first_pid = None
+        first = True
+
+        def mismatch_once(pid):
+            nonlocal first, first_pid
+            identity = original_identity(pid)
+            if first and identity is not None:
+                first = False
+                first_pid = pid
+                return {**identity, "pgid": identity["pgid"] + 1}
+            return identity
+
+        with patch.object(MODULE, "process_identity", side_effect=mismatch_once):
+            with self.assertRaisesRegex(
+                MODULE.DevserverError, "Could not verify the started backend"
+            ):
+                server.ensure()
+        self.assertIsNotNone(first_pid)
+        self.assertTrue(wait_port(self.ports["backend"], False))
+        self.assertIsNone(server.load_session())
+        self.assertIsNotNone(server.children["backend"].poll())
+
+    def test_unverifiable_popen_child_is_left_running_and_recorded(self) -> None:
+        server = self.server()
+        original_identity = MODULE.process_identity
+        child_pid = None
+
+        def mismatched_identity(pid):
+            nonlocal child_pid
+            identity = original_identity(pid)
+            if identity is not None and child_pid is None:
+                child_pid = pid
+            if pid == child_pid and identity is not None:
+                return {**identity, "pgid": identity["pgid"] + 1}
+            return identity
+
+        with patch.object(MODULE, "process_identity", side_effect=mismatched_identity):
+            with self.assertRaisesRegex(
+                MODULE.DevserverError, "Could not verify the started backend"
+            ):
+                server.ensure()
+        self.assertIsNotNone(child_pid)
+        self.assertIsNone(server.children["backend"].poll())
+        self.assertTrue(wait_port(self.ports["backend"], True))
+        session = server.load_session()
+        self.assertEqual(session["launches"]["backend"], {"pid": child_pid})
+        self.assertNotIn("backend", session["processes"])
+
+    def test_pidfd_open_failure_does_not_signal_or_remove_session(self) -> None:
+        child_server_script = self.base / "server-with-child.py"
+        child_server_script.write_text(
+            SERVER.replace(
+                "port = int(sys.argv[1]); kind = sys.argv[2]",
+                "subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'])\n"
+                "port = int(sys.argv[1]); kind = sys.argv[2]",
+            ).replace("import http.server, sys", "import http.server, subprocess, sys")
+        )
+        commands = {
+            **self.commands,
+            "backend": [
+                sys.executable,
+                str(child_server_script),
+                str(self.ports["backend"]),
+                "backend",
+            ],
+        }
+        server = self.server(commands=commands)
+        server.ensure()
+        session = server.load_session()
+        self.assertTrue(wait_port(self.ports["backend"], True))
+        backend_pgid = session["processes"]["backend"]["pgid"]
+        members = MODULE.group_members(backend_pgid)
+        self.assertGreaterEqual(len(members), 2)
+        real_pidfd_open = MODULE.os.pidfd_open
+        backend_opened: list[int] = []
+
+        def fail_after_one(pid):
+            if pid in members and backend_opened:
+                raise OSError(errno.EMFILE, "fd limit")
+            fd = real_pidfd_open(pid)
+            if pid in members:
+                backend_opened.append(pid)
+            return fd
+
+        with patch.object(MODULE.os, "pidfd_open", side_effect=fail_after_one):
+            self.assertFalse(server.stop_session(session))
+        self.assertTrue(server.session_file.exists())
+        self.assertTrue(wait_port(self.ports["backend"], True))
+        self.assertTrue(all(MODULE.process_identity(pid) for pid in members))
 
     def test_concurrent_ensure_launches_one_pair(self) -> None:
         servers = [self.server(), self.server()]

@@ -343,11 +343,14 @@ class Devserver:
             return False
         processes = session.get("processes")
         listeners = session.get("listeners")
+        launches = session.get("launches", {})
         return (
             isinstance(processes, dict)
             and set(processes).issubset({"frontend", "backend"})
             and isinstance(listeners, dict)
             and set(listeners).issubset({"frontend", "backend"})
+            and isinstance(launches, dict)
+            and set(launches).issubset({"frontend", "backend"})
         )
 
     def verified_group(self, session: dict[str, Any], name: str) -> bool:
@@ -469,6 +472,11 @@ class Devserver:
                 start_new_session=True,
             )
         self.children[name] = process
+        # Persist a non-signalable launch marker before attempting identity
+        # inspection. It prevents a later ensure from treating this session as
+        # stale if startup verification fails.
+        session.setdefault("launches", {})[name] = {"pid": process.pid}
+        self.save_session(session)
         deadline = time.monotonic() + 2
         identity = process_identity(process.pid)
         while identity is None and time.monotonic() < deadline:
@@ -486,7 +494,44 @@ class Devserver:
             "sid": identity["sid"],
             "starttime": identity["starttime"],
         }
+        session["launches"].pop(name, None)
         self.save_session(session)
+
+    def resolve_launches(self, session: dict[str, Any]) -> bool:
+        """Promote only independently verified children; never signal provisional PIDs."""
+        launches = session.get("launches", {})
+        if not launches:
+            return True
+        for name, launch in list(launches.items()):
+            try:
+                pid = int(launch["pid"])
+            except (KeyError, TypeError, ValueError):
+                return False
+            child = self.children.get(name)
+            if child is not None and child.pid == pid and child.poll() is not None:
+                launches.pop(name, None)
+                continue
+            identity = process_identity(pid)
+            expected_cwd = self.root / "backend" if name == "backend" else self.root
+            cwd = process_cwd(pid)
+            if (
+                identity is None
+                or identity["pgid"] != pid
+                or identity["sid"] != pid
+                or process_marker(pid) != session.get("nonce")
+                or cwd is None
+                or cwd != expected_cwd.resolve()
+            ):
+                return False
+            session["processes"][name] = {
+                "pid": pid,
+                "pgid": identity["pgid"],
+                "sid": identity["sid"],
+                "starttime": identity["starttime"],
+            }
+            launches.pop(name, None)
+        self.save_session(session)
+        return True
 
     def stop_group(self, session: dict[str, Any], name: str) -> bool:
         if name not in session.get("processes", {}):
@@ -518,34 +563,44 @@ class Devserver:
                 file=sys.stderr,
             )
             return False
-        if not group_members(pgid):
+        if self.wait_group_gone(pgid, 0.25):
             return True
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
-            if not self.verified_group(session, name):
-                child = self.children.get(name)
-                if child is not None:
-                    try:
-                        child.wait(timeout=1)
-                    except subprocess.TimeoutExpired:
-                        pass
+            if not group_members(pgid):
                 return True
             time.sleep(0.05)
-        if self.verified_group(session, name) and not self.signal_owned_group(
-            session, name, signal.SIGKILL
-        ):
+        if not self.verified_group(session, name):
+            return False
+        if not self.signal_owned_group(session, name, signal.SIGKILL):
             print(
                 f"[cursor-devserver] left {name} alone: process ownership changed during stop",
+                file=sys.stderr,
+            )
+            return False
+        if not self.wait_group_gone(pgid, 3):
+            print(
+                f"[cursor-devserver] could not confirm {name} stopped; session record retained",
                 file=sys.stderr,
             )
             return False
         child = self.children.get(name)
         if child is not None:
             try:
-                child.wait(timeout=1)
+                child.wait(timeout=0.5)
             except subprocess.TimeoutExpired:
-                pass
+                return False
         return True
+
+    @staticmethod
+    def wait_group_gone(pgid: int, timeout: float) -> bool:
+        deadline = time.monotonic() + timeout
+        while True:
+            if not group_members(pgid):
+                return True
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(0.05)
 
     def signal_owned_group(
         self, session: dict[str, Any], name: str, signum: int
@@ -571,12 +626,17 @@ class Devserver:
             ):
                 return False
             snapshots.append((pid, identity))
-        for pid, expected in snapshots:
-            try:
-                pidfd = os.pidfd_open(pid)
-            except (OSError, ProcessLookupError):
-                continue
-            try:
+        pidfds: list[tuple[int, int, dict[str, int]]] = []
+        try:
+            for pid, expected in snapshots:
+                try:
+                    pidfd = os.pidfd_open(pid)
+                except ProcessLookupError:
+                    continue
+                except OSError:
+                    return False
+                pidfds.append((pidfd, pid, expected))
+            for pidfd, pid, expected in pidfds:
                 current = process_identity(pid)
                 cwd = process_cwd(pid)
                 if (
@@ -588,11 +648,15 @@ class Devserver:
                     or not cwd.is_relative_to(root)
                 ):
                     return False
+            for pidfd, _, _ in pidfds:
                 try:
                     signal.pidfd_send_signal(pidfd, signum)
                 except ProcessLookupError:
-                    pass
-            finally:
+                    continue
+                except OSError:
+                    return False
+        finally:
+            for pidfd, _, _ in pidfds:
                 os.close(pidfd)
         return True
 
@@ -600,6 +664,12 @@ class Devserver:
         if not self.valid_session_header(session):
             print(
                 f"[cursor-devserver] refusing to stop an unverified session; {REUSE_REASON}",
+                file=sys.stderr,
+            )
+            return False
+        if not self.resolve_launches(session):
+            print(
+                "[cursor-devserver] left startup process alone: ownership could not be verified; session record retained",
                 file=sys.stderr,
             )
             return False
@@ -627,6 +697,10 @@ class Devserver:
             session = self.load_session()
             occupied = self.port_occupancy()
             if session is not None:
+                if session.get("launches") and not self.resolve_launches(session):
+                    raise DevserverError(
+                        f"A startup process cannot be proven; {REUSE_REASON}."
+                    )
                 if self.session_reusable(session, fingerprint):
                     print(
                         f"[cursor-devserver] reusing verified same-worktree session; frontend http://localhost:{self.ports['frontend']} backend :{self.ports['backend']}"
@@ -661,6 +735,7 @@ class Devserver:
                 "ports": self.ports,
                 "processes": {},
                 "listeners": {},
+                "launches": {},
             }
             self.save_session(session)
             try:
@@ -685,6 +760,10 @@ class Devserver:
                 )
                 return 0
             except Exception:
+                try:
+                    self.resolve_launches(session)
+                except Exception:
+                    pass
                 self.stop_session(session)
                 raise
 
