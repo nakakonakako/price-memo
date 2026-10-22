@@ -73,9 +73,11 @@ fixed to `5173` with `strictPort`; the official Playwright server remains on
 `5273` with `strictPort`. Before launch, a supervisor checks both selected
 ports and reports listener PID, command, and working directory when available;
 occupied ports stop startup without choosing another port or stopping their
-owners. The supervisor runs each server in its own session and cleans up only
-groups it started on Ctrl+C, SIGTERM, or startup failure. After shutdown, the
-ports can be reused. The normal development ports remain `5173` and `8001`;
+owners. The supervisor runs each server in its own session and stops only groups
+it started on Ctrl+C, SIGTERM, or startup failure. It confirms group exit after
+SIGTERM and, when needed, after SIGKILL. If ownership or exit cannot be
+confirmed, or `/proc` inspection fails, cleanup reports an error and returns a
+failure status. The normal development ports remain `5173` and `8001`;
 Playwright uses `5273` and `8001`.
 
 The Cursor Playwright `devserver:ensure` path validates both effective URLs on
