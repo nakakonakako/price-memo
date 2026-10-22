@@ -78,11 +78,24 @@ groups it started on Ctrl+C, SIGTERM, or startup failure. After shutdown, the
 ports can be reused. The normal development ports remain `5173` and `8001`;
 Playwright uses `5273` and `8001`.
 
-The Cursor Playwright `devserver:ensure` path also validates both effective
-URLs. Because it cannot prove the Supabase target of an already-running
-process, it refuses to reuse occupied `:8001` or `:5273` ports. Stop the prior
-server and rerun ensure; the official MCP, pinned browser, and browser profile
-remain unchanged.
+The Cursor Playwright `devserver:ensure` path validates both effective URLs on
+every invocation. It reuses a running service pair only when a versioned
+session record matches the canonical worktree and current Dev configuration,
+the recorded PID/PGID/session/start time still match, and `ss` identifies every
+listener as a process in the recorded groups carrying that launch's private
+session marker. HTTP readiness is checked only after process ownership has
+been proven. A shared lock serializes ensure and stop across worktrees. The
+session stores no environment values or credentials; its configuration
+fingerprint is a digest used only to detect changes.
+
+Ports occupied by another worktree, an unrecorded process, an old or malformed
+session, a partial startup, or a process whose owner cannot be inspected are
+never reused or stopped automatically. `devserver:stop` signals only verified
+groups recorded for the current canonical worktree. If ownership cannot be
+proven, inspect the listener manually and stop it explicitly; do not delete a
+session record to bypass the guard. Sessions written by older versions are
+not reusable. The official MCP, pinned browser, and browser profile remain
+unchanged.
 
 A symlink does not hide its target from a trusted Cursor workspace. Configure
 only development credentials required by the task. Do not link production
