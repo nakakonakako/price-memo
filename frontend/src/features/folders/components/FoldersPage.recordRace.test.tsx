@@ -117,6 +117,7 @@ describe('FoldersPage record mutation races', () => {
 
     listFolders.mockResolvedValue([folderA])
     getStoresCached.mockResolvedValue([])
+    listRecords.mockResolvedValue([recordRow('default-folder', 'default-folder-note')])
     listAllRecords.mockResolvedValue([recordRow('initial', 'initial-note')])
   })
 
@@ -222,7 +223,12 @@ describe('FoldersPage record mutation races', () => {
       bumpFoldersRevision()
     })
 
-    listAllRecords.mockResolvedValue([recordRow('fresh', 'fresh-folders-marker')])
+    let releaseFreshAll: () => void = () => {}
+    const freshAllGate = new Promise<PriceRecord[]>((resolve) => {
+      releaseFreshAll = () =>
+        resolve([recordRow('fresh', 'fresh-folders-marker')])
+    })
+    listAllRecords.mockImplementationOnce(() => freshAllGate)
 
     await act(async () => {
       releaseStaleAll()
@@ -237,6 +243,15 @@ describe('FoldersPage record mutation races', () => {
     view.rerender(<FoldersPage active />)
 
     await waitFor(() => expect(listAllRecords).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      releaseFreshAll()
+      await freshAllGate
+      await Promise.resolve()
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'すべての記録（1）' })).toBeTruthy(),
+    )
+    expect(listRecords).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /すべての記録/ }))
     await waitFor(() => expect(screen.getByText('fresh-folders-marker')).toBeTruthy())
     expect(screen.queryByText('stale-folders-marker')).toBeNull()
