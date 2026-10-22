@@ -9,10 +9,12 @@ trap 'rm -rf "$test_root"' EXIT
 fixture_home="$test_root/home"
 fixture_repo="$fixture_home/web/$repository_name"
 fixture_config="$fixture_home/.config/$repository_name/development"
-mkdir -p "$fixture_repo/scripts" "$fixture_repo/frontend" "$fixture_repo/backend"
+mkdir -p "$fixture_repo/scripts" "$fixture_repo/frontend" "$fixture_repo/backend/app" "$fixture_repo/backend"
 cp "$source_root/scripts/dev-env.sh" "$fixture_repo/scripts/dev-env.sh"
 cp "$source_root/scripts/backend-venv.sh" "$fixture_repo/scripts/backend-venv.sh"
-chmod +x "$fixture_repo/scripts/dev-env.sh" "$fixture_repo/scripts/backend-venv.sh"
+cp "$source_root/scripts/dev-supabase-target.py" "$fixture_repo/scripts/dev-supabase-target.py"
+cp "$source_root/scripts/cursor-devserver.sh" "$fixture_repo/scripts/cursor-devserver.sh"
+chmod +x "$fixture_repo/scripts/dev-env.sh" "$fixture_repo/scripts/backend-venv.sh" "$fixture_repo/scripts/dev-supabase-target.py" "$fixture_repo/scripts/cursor-devserver.sh"
 touch "$fixture_repo/backend/pyproject.toml"
 
 write_managed_venv() {
@@ -52,9 +54,11 @@ PY
 }
 
 write_managed_venv "$fixture_repo"
-printf 'VITE_SUPABASE_URL=https://safe.invalid\nVITE_SUPABASE_PUBLISHABLE_KEY=public-test-value\nPRIVATE_MARKER=must-not-print\n' > "$fixture_repo/frontend/.env"
+development_url='https://irgahixsuvtopiwmtkku.supabase.co'
+wrong_url='https://zyxwvutsrqponmlkjihg.supabase.co'
+printf 'VITE_SUPABASE_URL=%s\nVITE_SUPABASE_PUBLISHABLE_KEY=public-test-value\nPRIVATE_MARKER=must-not-print\n' "$development_url" > "$fixture_repo/frontend/.env"
 printf 'VITE_SUPABASE_URL=https://override.invalid\nOVERRIDE_MARKER=must-not-print\n' > "$fixture_repo/frontend/.env.local"
-printf 'BACKEND_MARKER=must-not-print\n' > "$fixture_repo/backend/.env"
+printf 'SUPABASE_URL=%s\nBACKEND_MARKER=must-not-print\n' "$development_url" > "$fixture_repo/backend/.env"
 printf 'ROOT_MARKER=must-not-print\n' > "$fixture_repo/.env"
 chmod 644 "$fixture_repo/frontend/.env" "$fixture_repo/frontend/.env.local" "$fixture_repo/backend/.env" "$fixture_repo/.env"
 printf '.env\nfrontend/.env\nfrontend/.env.local\nbackend/.env\n' > "$fixture_repo/.gitignore"
@@ -62,7 +66,7 @@ touch "$fixture_repo/frontend/.keep" "$fixture_repo/backend/.keep"
 git -C "$fixture_repo" init -b main >/dev/null
 git -C "$fixture_repo" config user.name 'Dev Env Test'
 git -C "$fixture_repo" config user.email 'dev-env-test@example.invalid'
-git -C "$fixture_repo" add scripts/dev-env.sh scripts/backend-venv.sh .gitignore frontend/.keep backend/.keep backend/pyproject.toml
+git -C "$fixture_repo" add scripts/dev-env.sh scripts/backend-venv.sh scripts/dev-supabase-target.py scripts/cursor-devserver.sh .gitignore frontend/.keep backend/.keep backend/pyproject.toml
 git -C "$fixture_repo" commit -m 'development environment fixture' >/dev/null
 export HOME="$fixture_home"
 
@@ -70,12 +74,14 @@ preview="$("$fixture_repo/scripts/dev-env.sh" migrate --preview)"
 for expected in "$fixture_repo/.env" "$fixture_repo/frontend/.env" "$fixture_repo/frontend/.env.local" "$fixture_repo/backend/.env" 'VITE_SUPABASE_URL'; do
   [[ "$preview" == *"$expected"* ]]
 done
-for secret in must-not-print safe.invalid override.invalid public-test-value; do
+for secret in must-not-print "$development_url" override.invalid public-test-value; do
   [[ "$preview" != *"$secret"* ]]
 done
 
 printf 'copy\n' | "$fixture_repo/scripts/dev-env.sh" migrate --apply frontend/.env >/dev/null
+printf 'copy\n' | "$fixture_repo/scripts/dev-env.sh" migrate --apply backend/.env >/dev/null
 [[ -f "$fixture_config/frontend/.env" ]]
+[[ -f "$fixture_config/backend/.env" ]]
 [[ "$(stat -c '%a' "$fixture_config")" == 700 ]]
 [[ "$(stat -c '%a' "$fixture_config/frontend")" == 700 ]]
 [[ "$(stat -c '%a' "$fixture_config/frontend/.env")" == 600 ]]
@@ -98,6 +104,78 @@ fi
 rm "$fixture_repo/frontend/.env.local"
 "$fixture_repo/scripts/dev-env.sh" prepare >/dev/null
 [[ -f "$fixture_repo/frontend/.env" && ! -L "$fixture_repo/frontend/.env" ]]
+
+cat > "$fixture_repo/frontend/.env.development.local" <<EOF
+VITE_SUPABASE_URL=$wrong_url
+EOF
+if "$fixture_repo/scripts/dev-env.sh" prepare >"$test_root/vite-mode-override.log" 2>&1; then
+  echo 'Expected a production-targeting Vite mode override to block startup.' >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/vite-mode-override.log")" == *'effective Vite environment'* || "$(cat "$test_root/vite-mode-override.log")" == *'approved development project'* ]]
+[[ "$(cat "$test_root/vite-mode-override.log")" != *"$wrong_url"* ]]
+rm "$fixture_repo/frontend/.env.development.local"
+
+printf 'VITE_SUPABASE_URL=%s\n' "$development_url" > "$fixture_repo/frontend/.env.development"
+if python3 "$fixture_repo/scripts/dev-supabase-target.py" validate "$fixture_repo" >"$test_root/vite-ambiguous.log" 2>&1; then
+  echo 'Expected duplicate Vite URL sources to block startup.' >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/vite-ambiguous.log")" == *'multiple Vite dotenv files'* ]]
+rm "$fixture_repo/frontend/.env.development"
+
+if VITE_SUPABASE_URL="$wrong_url" python3 "$fixture_repo/scripts/dev-supabase-target.py" validate "$fixture_repo" >"$test_root/vite-process-override.log" 2>&1; then
+  echo 'Expected a wrong Vite process override to block startup.' >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/vite-process-override.log")" == *'effective Vite environment'* ]]
+[[ "$(cat "$test_root/vite-process-override.log")" != *"$wrong_url"* ]]
+
+if SUPABASE_URL="$wrong_url" python3 "$fixture_repo/scripts/dev-supabase-target.py" validate "$fixture_repo" >"$test_root/backend-process-override.log" 2>&1; then
+  echo 'Expected a wrong backend process override to block startup.' >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/backend-process-override.log")" == *'approved development project'* ]]
+[[ "$(cat "$test_root/backend-process-override.log")" != *"$wrong_url"* ]]
+
+VITE_SUPABASE_URL="$development_url" SUPABASE_URL="$development_url" python3 "$fixture_repo/scripts/dev-supabase-target.py" validate "$fixture_repo" >"$test_root/development-process-overrides.log"
+[[ "$(cat "$test_root/development-process-overrides.log")" == *'Supabase target validated'* ]]
+
+printf 'SUPABASE_URL=%s\n' "$wrong_url" > "$fixture_repo/backend/app/.env"
+if python3 "$fixture_repo/scripts/dev-supabase-target.py" validate "$fixture_repo" >"$test_root/backend-priority-env.log" 2>&1; then
+  echo 'Expected backend/app/.env to take priority and block a wrong target.' >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/backend-priority-env.log")" == *'backend/app/.env'* ]]
+[[ "$(cat "$test_root/backend-priority-env.log")" != *"$wrong_url"* ]]
+rm "$fixture_repo/backend/app/.env"
+
+if PYTHON_DOTENV_DISABLED=true python3 "$fixture_repo/scripts/dev-supabase-target.py" validate "$fixture_repo" >"$test_root/dotenv-disabled.log" 2>&1; then
+  echo 'Expected disabled python-dotenv loading to block startup.' >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/dotenv-disabled.log")" == *'PYTHON_DOTENV_DISABLED'* ]]
+
+mv "$fixture_repo/backend/.env" "$test_root/backend.env.saved"
+if python3 "$fixture_repo/scripts/dev-supabase-target.py" validate "$fixture_repo" >"$test_root/backend-missing-url.log" 2>&1; then
+  echo 'Expected a missing backend Supabase URL to block startup.' >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/backend-missing-url.log")" == *'SUPABASE_URL is missing'* ]]
+mv "$test_root/backend.env.saved" "$fixture_repo/backend/.env"
+
+fake_bin="$test_root/fake-bin"
+mkdir -p "$fake_bin"
+cat > "$fake_bin/ss" <<'EOF'
+#!/usr/bin/env bash
+printf 'LISTEN\n'
+EOF
+chmod +x "$fake_bin/ss"
+if PATH="$fake_bin:$PATH" XDG_STATE_HOME="$test_root/state" bash "$fixture_repo/scripts/cursor-devserver.sh" ensure >"$test_root/occupied-devserver.log" 2>&1; then
+  echo 'Expected Cursor devserver ensure to reject unverified occupied ports.' >&2
+  exit 1
+fi
+[[ "$(cat "$test_root/occupied-devserver.log")" == *'target cannot be verified'* ]]
 
 write_stale_managed_venv "$fixture_repo"
 if "$fixture_repo/scripts/dev-env.sh" prepare >"$test_root/stale-backend.log" 2>&1; then

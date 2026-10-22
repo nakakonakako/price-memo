@@ -16,8 +16,8 @@ Usage:
   scripts/cursor-devserver.sh status
 
 Commands:
-  ensure  Start or reuse price-memo frontend (:5273) and backend (:8001).
-          Refuses unrelated port occupants. Records only processes started here.
+  ensure  Start price-memo frontend (:5273) and backend (:8001).
+          Refuses all occupied ports because an existing process target cannot be verified.
   stop    Stop process groups started by the latest ensure in this worktree.
   status  Show port occupancy and whether each service is price-memo.
 EOF
@@ -162,6 +162,10 @@ cmd_ensure() {
   mkdir -p "$state_dir" "$log_dir"
   if [[ -f "$session_file" ]]; then
     echo "[cursor-devserver] an existing session is recorded for this worktree; run npm run devserver:stop first" >&2
+    exit 1
+  fi
+  if port_listening "$BACKEND_PORT" || port_listening "$FRONTEND_PORT"; then
+    echo "[cursor-devserver] refusing to reuse an occupied port because its Supabase target cannot be verified; stop the existing development server and retry" >&2
     exit 1
   fi
   local started_pids=() started_pgids=() started_starttimes=()

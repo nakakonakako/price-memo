@@ -62,7 +62,10 @@ the linked files.
 
 Root `npm run dev`, `npm run dev:playwright`, and `npm run devserver:ensure`
 run a lightweight environment preflight before starting. It prepares missing
-symlinks, validates the frontend Supabase settings, validates the managed
+symlinks, validates that the effective Vite and backend Supabase URLs target
+the approved development project, requires `VITE_SUPABASE_URL` and the
+publishable key in the effective Vite environment plus `SUPABASE_URL` in the
+effective backend environment, and validates the managed
 `backend/.venv` interpreter and `uvicorn` shebang without running `npm ci` or
 `uv sync`, refuses conflicting local files, and prints exact recovery steps
 when automatic backend repair would be unsafe. The ordinary Vite server is
@@ -74,6 +77,12 @@ owners. The supervisor runs each server in its own session and cleans up only
 groups it started on Ctrl+C, SIGTERM, or startup failure. After shutdown, the
 ports can be reused. The normal development ports remain `5173` and `8001`;
 Playwright uses `5273` and `8001`.
+
+The Cursor Playwright `devserver:ensure` path also validates both effective
+URLs. Because it cannot prove the Supabase target of an already-running
+process, it refuses to reuse occupied `:8001` or `:5273` ports. Stop the prior
+server and rerun ensure; the official MCP, pinned browser, and browser profile
+remain unchanged.
 
 A symlink does not hide its target from a trusted Cursor workspace. Configure
 only development credentials required by the task. Do not link production

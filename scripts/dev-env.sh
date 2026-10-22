@@ -163,6 +163,7 @@ prepare() {
       exit 2
     fi
   done
+  python3 "$script_dir/dev-supabase-target.py" validate "$repo_root"
   bash "$script_dir/backend-venv.sh" preflight "$repo_root"
 }
 
