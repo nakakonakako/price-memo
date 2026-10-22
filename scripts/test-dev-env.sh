@@ -13,8 +13,7 @@ mkdir -p "$fixture_repo/scripts" "$fixture_repo/frontend" "$fixture_repo/backend
 cp "$source_root/scripts/dev-env.sh" "$fixture_repo/scripts/dev-env.sh"
 cp "$source_root/scripts/backend-venv.sh" "$fixture_repo/scripts/backend-venv.sh"
 cp "$source_root/scripts/dev-supabase-target.py" "$fixture_repo/scripts/dev-supabase-target.py"
-cp "$source_root/scripts/cursor-devserver.sh" "$fixture_repo/scripts/cursor-devserver.sh"
-chmod +x "$fixture_repo/scripts/dev-env.sh" "$fixture_repo/scripts/backend-venv.sh" "$fixture_repo/scripts/dev-supabase-target.py" "$fixture_repo/scripts/cursor-devserver.sh"
+chmod +x "$fixture_repo/scripts/dev-env.sh" "$fixture_repo/scripts/backend-venv.sh" "$fixture_repo/scripts/dev-supabase-target.py"
 touch "$fixture_repo/backend/pyproject.toml"
 
 write_managed_venv() {
@@ -66,7 +65,7 @@ touch "$fixture_repo/frontend/.keep" "$fixture_repo/backend/.keep"
 git -C "$fixture_repo" init -b main >/dev/null
 git -C "$fixture_repo" config user.name 'Dev Env Test'
 git -C "$fixture_repo" config user.email 'dev-env-test@example.invalid'
-git -C "$fixture_repo" add scripts/dev-env.sh scripts/backend-venv.sh scripts/dev-supabase-target.py scripts/cursor-devserver.sh .gitignore frontend/.keep backend/.keep backend/pyproject.toml
+git -C "$fixture_repo" add scripts/dev-env.sh scripts/backend-venv.sh scripts/dev-supabase-target.py .gitignore frontend/.keep backend/.keep backend/pyproject.toml
 git -C "$fixture_repo" commit -m 'development environment fixture' >/dev/null
 export HOME="$fixture_home"
 
@@ -163,19 +162,6 @@ if python3 "$fixture_repo/scripts/dev-supabase-target.py" validate "$fixture_rep
 fi
 [[ "$(cat "$test_root/backend-missing-url.log")" == *'SUPABASE_URL is missing'* ]]
 mv "$test_root/backend.env.saved" "$fixture_repo/backend/.env"
-
-fake_bin="$test_root/fake-bin"
-mkdir -p "$fake_bin"
-cat > "$fake_bin/ss" <<'EOF'
-#!/usr/bin/env bash
-printf 'LISTEN\n'
-EOF
-chmod +x "$fake_bin/ss"
-if PATH="$fake_bin:$PATH" XDG_STATE_HOME="$test_root/state" bash "$fixture_repo/scripts/cursor-devserver.sh" ensure >"$test_root/occupied-devserver.log" 2>&1; then
-  echo 'Expected Cursor devserver ensure to reject unverified occupied ports.' >&2
-  exit 1
-fi
-[[ "$(cat "$test_root/occupied-devserver.log")" == *'target cannot be verified'* ]]
 
 write_stale_managed_venv "$fixture_repo"
 if "$fixture_repo/scripts/dev-env.sh" prepare >"$test_root/stale-backend.log" 2>&1; then

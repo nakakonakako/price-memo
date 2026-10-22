@@ -226,7 +226,7 @@ cd .. && npm run dev
 - Vite が `/api` を `http://localhost:8001` へプロキシ（A の 8000 と併走可能）
 - `npm run dev`、`npm run dev:playwright`、`npm run devserver:ensure` は起動前にViteとbackendの実効Supabase URLを承認済みDev project refへ照合する。URL欠落・不一致・曖昧なdotenv設定は値を表示せず停止する
 - `npm run dev` は起動前にVite `:5173` とFastAPI `:8001` を検査し、競合時は所有プロセス情報を表示できる範囲で表示して停止する。別ポートへの自動切替や既存プロセスの終了は行わず、Ctrl+C・SIGTERM・片側起動失敗時はこの起動が作成したサーバープロセス群だけを終了
-- Cursor / Playwright MCP のローカル UI 確認は `npm run devserver:ensure` で `:8001` / `:5273` を起動し、ブラウザーは `http://localhost:5273` に固定する（Vite `strictPort`）。接続先を確認できない既存プロセスによるポート占有時は再利用せず停止する。ensure の完了表示もブラウザー用にlocalhostを表示し、内部疎通確認には `127.0.0.1` を使用する。完了後は `npm run devserver:stop` で当該 ensure が起動したプロセスのみ停止。通常の `npm run dev:playwright` は `:5273` / `:8001` を使い、同じ競合検査・プロセス終了管理を行う
+- Cursor / Playwright MCP のローカル UI 確認は `npm run devserver:ensure` で `:8001` / `:5273` を起動し、ブラウザーは `http://localhost:5273` に固定する（Vite `strictPort`）。同一worktreeの起動時Dev検証記録、PID/PGID/session/starttime、worktree識別子、実listener所有者、現在の接続設定を照合できた完全なセッションだけ再利用する。起動直後の所有権未確認プロセスは検証前記録として扱い、所有者を証明できない場合はkillせず記録を保持して停止する。停止時はpidfd取得・シグナル送信の失敗を成功扱いせず、プロセス群とポートの消滅を確認できた場合だけセッション記録を削除する。所有者不明・別worktree・旧形式・片側停止・接続設定変更時は再利用せず、別プロセスを終了しない。ensure/stopは全worktree共通ロックで直列化し、通常の `npm run dev:playwright` は `:5273` / `:8001` を使い、別の競合検査・プロセス終了管理を行う
 - Playwright MCP はユーザー home 配下の共通 persistent profile を利用する。初回 Google OAuth はブラウザー上で手動実施し、main checkout と worktree からの確認は逐次実行する。詳細は [cursor-delegation.md](./cursor-delegation.md)
 - Playwright MCP / Playwright / Chromium revision は `.cursor/playwright-mcp.sh` で固定し、browser binary はユーザー共通 cache を利用する。更新手順は [cursor-delegation.md](./cursor-delegation.md)
 - DB: A と同じ Supabase プロジェクトを利用。schema migration は receipt-manager 側で管理・push する
@@ -325,7 +325,9 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-22 | Cursor検証サーバーの起動直後プロセスを追跡し、所有権未確認プロセスのkill禁止と停止完了確認を強化 |
 | 2026-10-22 | 開発・Playwright起動前にVite/backendのDev Supabase接続先を検証し、接続先不明な既存UI検証サーバーの再利用を拒否 |
+| 2026-10-22 | Cursor UI検証サーバーの同一worktree再利用にプロセス所有権・起動設定照合と排他ロックを追加 |
 | 2026-10-18 | Private Broadcast通知から表示中画面と店舗キャッシュを再取得。再接続時とアプリ復帰時の同期を維持 |
 | 2026-10-18 | BL-02 第3段階のうち、0件更新・削除を対象なしとして扱うフロント保護を追加（同時編集CASはDB側RPC待ち） |
 | 2026-10-18 | BL-02 第1段階: `resumeSync` で復帰時に Supabase から再取得（`catalogSync` revision とは別経路） |
