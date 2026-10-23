@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import os
 import signal
 import select
@@ -58,17 +59,52 @@ class WorktreeRemoveGuardTests(unittest.TestCase):
         self.repo_name = Path(common_dir).parent.name
         self.worktree_base = self.home / "worktrees" / self.repo_name
         self._children: list[subprocess.Popen[bytes]] = []
+        self._orphan_managers: list[subprocess.Popen[bytes]] = []
 
     def tearDown(self) -> None:
-        for child in self._children:
-            if child.poll() is None:
-                child.send_signal(signal.SIGTERM)
-        for child in self._children:
-            try:
-                child.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                child.kill()
-        self.temp.cleanup()
+        failures: list[str] = []
+        try:
+            # The isolated subreaper owns the intentionally orphaned process
+            # from the Cursor-group test and can reap it without affecting
+            # unrelated children of the test runner.
+            for manager in self._orphan_managers:
+                try:
+                    if manager.poll() is None and manager.stdin is not None:
+                        manager.stdin.write(b"cleanup\n")
+                        manager.stdin.flush()
+                    stdout, _ = manager.communicate(timeout=5)
+                    if manager.returncode != 0 or b"cleaned" not in stdout:
+                        failures.append(f"orphan manager PID {manager.pid} did not confirm child reaping")
+                except (BrokenPipeError, subprocess.TimeoutExpired) as exc:
+                    failures.append(f"orphan manager PID {manager.pid} cleanup failed: {exc}")
+                    if manager.poll() is None:
+                        manager.kill()
+                        try:
+                            manager.communicate(timeout=3)
+                        except subprocess.TimeoutExpired:
+                            failures.append(f"orphan manager PID {manager.pid} did not exit after SIGKILL")
+            for child in self._children:
+                if child.poll() is None:
+                    try:
+                        child.send_signal(signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+            for child in self._children:
+                if child.poll() is None:
+                    try:
+                        child.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        child.kill()
+                        try:
+                            child.wait(timeout=3)
+                        except subprocess.TimeoutExpired:
+                            failures.append(f"child PID {child.pid} did not exit after SIGKILL")
+                if child.poll() is None:
+                    failures.append(f"child PID {child.pid} is still running after cleanup")
+        finally:
+            self.temp.cleanup()
+        if failures:
+            self.fail("Process cleanup failed: " + "; ".join(failures))
 
     def _init_fixture_repo(self) -> None:
         scripts = self.fixture_repo / "scripts"
@@ -349,32 +385,103 @@ class WorktreeRemoveGuardTests(unittest.TestCase):
         outside.mkdir()
         marker = "11111111-2222-4333-8444-555555555555"
         env = {**os.environ, CURSOR.MARKER: marker}
-        leader_script = f"""
-import os, signal, subprocess, sys
-outside = {repr(str(outside))}
-subprocess.Popen(["sleep", "300"], cwd=outside, env=os.environ)
-signal.pause()
-"""
-        leader = subprocess.Popen(
-            [sys.executable, "-c", leader_script],
-            cwd=path,
-            env=env,
-            start_new_session=True,
-        )
-        self._children.append(leader)
-        identity = CURSOR.process_identity(leader.pid)
-        assert identity is not None
-        deadline = time.monotonic() + 5
-        child_pid = None
+        # Keep a dedicated Linux subreaper as the sleep process's eventual
+        # parent. This lets the test verify the orphaned process group and then
+        # reap exactly its own child, without changing the test runner's
+        # process-wide child-reaping behavior.
+        manager_script = r"""
+import ctypes, json, os, signal, subprocess, sys, time
+libc = ctypes.CDLL(None, use_errno=True)
+if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
+    raise OSError(ctypes.get_errno(), "cannot enable isolated child reaper")
+outside, target, marker = sys.argv[1:]
+leader_code = (
+    "import os,signal,subprocess; "
+    f"p=subprocess.Popen(['sleep','300'],cwd={outside!r},env=os.environ); "
+    "print(p.pid, flush=True); signal.pause()"
+)
+leader = subprocess.Popen([sys.executable, '-c', leader_code], cwd=target,
+                          env={**os.environ, marker: os.environ[marker]},
+                          start_new_session=True, stdout=subprocess.PIPE,
+                          text=True)
+line = leader.stdout.readline()
+if not line:
+    raise RuntimeError("leader did not report its child PID")
+child_pid = int(line)
+child_stat = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
+fields = child_stat[child_stat.rfind(')') + 2:].split()
+identity = {"pid": child_pid, "starttime": int(fields[19]),
+            "pgid": int(fields[2]), "sid": int(fields[3]), "leader": leader.pid}
+print(json.dumps(identity), flush=True)
+for command in sys.stdin:
+    command = command.strip()
+    if command == "orphan":
+        leader.send_signal(signal.SIGTERM)
+        leader.wait(timeout=3)
+        print("orphaned", flush=True)
+    elif command == "cleanup":
+        try:
+            current = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
+            current_fields = current[current.rfind(')') + 2:].split()
+            same = (int(current_fields[19]) == identity['starttime'] and
+                    int(current_fields[2]) == identity['pgid'] and
+                    int(current_fields[3]) == identity['sid'])
+        except FileNotFoundError:
+            same = False
+        if same:
+            os.kill(child_pid, signal.SIGTERM)
+        deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
-            for member in CURSOR.group_members(leader.pid):
-                if member != leader.pid:
-                    child_pid = member
-                    break
-            if child_pid is not None:
+            try:
+                waited, _ = os.waitpid(child_pid, os.WNOHANG)
+            except ChildProcessError:
+                waited = 0
+            if waited == child_pid:
                 break
-            time.sleep(0.05)
-        self.assertIsNotNone(child_pid)
+            try:
+                raw = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
+                fields = raw[raw.rfind(')') + 2:].split()
+            except FileNotFoundError:
+                break
+            if fields[0] == 'Z':
+                os.waitpid(child_pid, 0)
+                break
+            time.sleep(0.02)
+        else:
+            try:
+                raw = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
+                fields = raw[raw.rfind(')') + 2:].split()
+                same = (int(fields[19]) == identity['starttime'] and
+                        int(fields[2]) == identity['pgid'] and
+                        int(fields[3]) == identity['sid'])
+            except FileNotFoundError:
+                same = False
+            if same:
+                os.kill(child_pid, signal.SIGKILL)
+            waited, _ = os.waitpid(child_pid, 0)
+            if waited != child_pid:
+                raise RuntimeError("could not reap owned child")
+        print("cleaned", flush=True)
+        break
+"""
+        manager = subprocess.Popen(
+            [sys.executable, "-c", manager_script, str(outside), str(path), CURSOR.MARKER],
+            cwd=self.base,
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self._children.append(manager)
+        self._orphan_managers.append(manager)
+        assert manager.stdout is not None and manager.stdin is not None
+        record = json.loads(manager.stdout.readline())
+        child_pid = record["pid"]
+        leader_pid = record["leader"]
+        identity = CURSOR.process_identity(leader_pid)
+        self.assertIsNotNone(identity)
+        self.assertEqual(record["pgid"], leader_pid)
+        self.assertEqual(record["sid"], leader_pid)
         dev = CURSOR.Devserver(path, state_base=self.state_base)
         session = {
             "version": CURSOR.VERSION,
@@ -387,9 +494,9 @@ signal.pause()
             "ports": dev.ports,
             "processes": {
                 "backend": {
-                    "pid": leader.pid,
-                    "pgid": leader.pid,
-                    "sid": leader.pid,
+                    "pid": leader_pid,
+                    "pgid": leader_pid,
+                    "sid": leader_pid,
                     "starttime": identity["starttime"],
                 }
             },
@@ -398,15 +505,23 @@ signal.pause()
         }
         dev.save_session(session)
         session_before = dev.session_file.read_bytes()
-        leader.send_signal(signal.SIGTERM)
-        leader.wait(timeout=3)
-        self._children.remove(leader)
+        manager.stdin.write(b"orphan\n")
+        manager.stdin.flush()
+        self.assertEqual(manager.stdout.readline().strip(), b"orphaned")
         outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
         self.assertFalse(outcome.ok)
         blocked = set(outcome.blocked_pids)
-        self.assertNotIn(leader.pid, blocked)
+        self.assertNotIn(leader_pid, blocked)
         self.assertIn(child_pid, blocked)
         self.assertEqual(dev.session_file.read_bytes(), session_before)
+        manager.stdin.write(b"cleanup\n")
+        manager.stdin.flush()
+        self.assertEqual(manager.stdout.readline().strip(), b"cleaned")
+        manager.communicate(timeout=3)
+        self.assertEqual(manager.returncode, 0)
+        self._children.remove(manager)
+        self._orphan_managers.remove(manager)
+        self.assertFalse(Path(f"/proc/{child_pid}").exists(), "owned orphan must be reaped")
 
     def test_unrelated_unreadable_cwd_does_not_block(self) -> None:
         path = self._create_worktree("unreadable-unrelated", "feature/unreadable-unrelated")
