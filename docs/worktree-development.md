@@ -130,6 +130,8 @@ What is inspected:
   and valid. If a recorded live process cannot be inspected, removal is refused.
   An unreadable `cwd` on a PID with no evidence linking it to the target does
   not block removal, since Linux restricts some unrelated process inspection.
+  When a recorded PID or matching process-group member cannot be inspected,
+  removal is refused.
 
 Removal is refused when:
 

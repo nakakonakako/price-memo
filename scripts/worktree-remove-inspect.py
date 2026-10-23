@@ -80,9 +80,8 @@ def _proc_cwd(pid: int) -> Path | None:
         return Path(os.readlink(PROC / str(pid) / "cwd")).resolve(strict=True)
     except FileNotFoundError:
         return None
-    except (OSError, RuntimeError):
-        # For an unrelated PID this is an expected Linux ptrace/Yama limitation.
-        return None
+    except (OSError, RuntimeError) as exc:
+        raise InspectionError(f"PID {pid} working directory inspection failed") from exc
 
 
 def _proc_marker(pid: int) -> str | None:
@@ -197,7 +196,11 @@ def inspect_worktree(worktree_path: Path, *, state_base: Path | None = None) -> 
 
     # Direct cwd ownership is path-component based, after canonicalization.
     for pid in stats:
-        cwd = _proc_cwd(pid)
+        try:
+            cwd = _proc_cwd(pid)
+        except InspectionError:
+            # Unrelated processes may be protected by Linux ptrace/Yama policy.
+            continue
         if _inside(cwd, root):
             blocked.add(pid)
 
@@ -233,7 +236,14 @@ def inspect_worktree(worktree_path: Path, *, state_base: Path | None = None) -> 
             except InspectionError as exc:
                 errors.append(str(exc))
                 continue
+            try:
+                cwd = _proc_cwd(pid)
+            except InspectionError as exc:
+                errors.append(str(exc))
+                continue
             if marker == nonce:
+                blocked.add(pid)
+            elif _inside(cwd, root):
                 blocked.add(pid)
 
     # Provisional launch records lack a start time. Require a live, genuine session
@@ -247,7 +257,14 @@ def inspect_worktree(worktree_path: Path, *, state_base: Path | None = None) -> 
         except InspectionError as exc:
             errors.append(str(exc))
             continue
+        try:
+            cwd = _proc_cwd(pid)
+        except InspectionError as exc:
+            errors.append(str(exc))
+            continue
         if marker == nonce and stat.pgid == pid and stat.sid == pid:
+            blocked.add(pid)
+        elif _inside(cwd, root):
             blocked.add(pid)
 
     if errors:
