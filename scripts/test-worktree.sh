@@ -14,6 +14,8 @@ command_log="$test_root/setup-commands.log"
 mkdir -p "$fixture_repo/scripts" "$fixture_config/frontend" "$fixture_config/backend" "$fixture_bin"
 mkdir -p "$fixture_config/secrets/ai-quota-ca"
 cp "$source_root/scripts/worktree.sh" "$fixture_repo/scripts/worktree.sh"
+cp "$source_root/scripts/worktree-remove-inspect.py" "$fixture_repo/scripts/worktree-remove-inspect.py"
+cp "$source_root/scripts/cursor-devserver.py" "$fixture_repo/scripts/cursor-devserver.py"
 cp "$source_root/scripts/backend-venv.sh" "$fixture_repo/scripts/backend-venv.sh"
 chmod +x "$fixture_repo/scripts/backend-venv.sh"
 
@@ -238,5 +240,7 @@ if "$fixture_repo/scripts/worktree.sh" setup "$venv_worktree" >"$test_root/broke
 fi
 [[ "$(cat "$test_root/broken-symlink-setup.log")" == *'symlink'* ]]
 [[ -L "$venv_worktree/backend/.venv" ]]
+
+python3 "$source_root/scripts/test-worktree-remove-guard.py"
 
 echo "Worktree workflow tests passed."

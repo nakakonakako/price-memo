@@ -105,8 +105,58 @@ credentials into a worker workspace.
 
 `remove` only accepts a clean, registered worktree below
 `~/worktrees/price-memo/`, prompts for the literal word `remove`, and uses
-non-forced `git worktree remove`. It does not delete the branch. Check for active
-workers and dev servers first. It never runs automatically after a PR is merged.
+non-forced `git worktree remove`. It does not delete the branch. It never runs
+automatically after a PR is merged.
+
+Before the confirmation prompt and again immediately before `git worktree remove`,
+`scripts/worktree-remove-inspect.py` scans for processes still using the target
+worktree. The check is fail-closed: it never kills or changes processes, never
+reads or prints environment values or full command lines, and refuses removal
+when inspection is incomplete.
+
+What is inspected:
+
+- Any live process whose resolved working directory lies inside the canonical
+  worktree path (boundary-safe `realpath` comparison; similar path prefixes do
+  not match).
+- A Cursor Playwright `devserver` session record for the same worktree, when
+  present and structurally valid. A file alone does not count as “running”.
+  Process IDs, process groups, session IDs, and process start times are checked
+  against live `/proc` entries. A matching live group member carrying the
+  session marker is detected even after its recorded leader exits or its `cwd`
+  moves outside the worktree. A PID whose start time differs from the recorded
+  leader is treated as reused; its old group record is not trusted.
+- `/proc` enumeration and the target's Cursor session record must be readable
+  and valid. If a recorded live process cannot be inspected, removal is refused.
+  An unreadable `cwd` on a PID with no evidence linking it to the target does
+  not block removal, since Linux restricts some unrelated process inspection.
+
+Removal is refused when:
+
+- staged, unstaged, or untracked changes remain;
+- any inspected process is still active in the worktree;
+- `/proc` cannot be enumerated or the Cursor session JSON cannot be read and
+  validated;
+- a process linked by the target session cannot be inspected safely.
+
+What to do when removal is refused:
+
+- Stop development servers and other work started in that worktree (`npm run
+  devserver:stop` for a verified Cursor session, or stop `npm run dev` /
+  supervisors you started there), end shells or jobs whose working directory is
+  inside the worktree, then run `scripts/worktree.sh remove` again.
+- When inspection itself fails, confirm manually that no listener or job still
+  uses the worktree before retrying. Do not delete or edit Cursor session files
+  to bypass the guard.
+
+The scan cannot establish whether an otherwise unrelated PID with unreadable
+`stat` or `cwd` data is using files in the target worktree. A short race also
+remains between the final inspection and `git worktree remove`; a process
+started in that window may not be detected.
+Conversely, a process that exits immediately after inspection may still leave
+the worktree removable even though work was active moments earlier. The guard
+reduces accidental removal; it does not replace checking active workers and
+servers yourself.
 
 ## Cursor delegation
 
