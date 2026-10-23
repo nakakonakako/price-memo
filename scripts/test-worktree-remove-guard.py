@@ -67,15 +67,10 @@ class WorktreeRemoveGuardTests(unittest.TestCase):
             # The isolated subreaper owns the intentionally orphaned process
             # from the Cursor-group test and can reap it without affecting
             # unrelated children of the test runner.
-            for manager in self._orphan_managers:
+            for manager in list(self._orphan_managers):
                 try:
-                    if manager.poll() is None and manager.stdin is not None:
-                        manager.stdin.write(b"cleanup\n")
-                        manager.stdin.flush()
-                    stdout, _ = manager.communicate(timeout=5)
-                    if manager.returncode != 0 or b"cleaned" not in stdout:
-                        failures.append(f"orphan manager PID {manager.pid} did not confirm child reaping")
-                except (BrokenPipeError, subprocess.TimeoutExpired) as exc:
+                    self._cleanup_orphan_manager(manager)
+                except Exception as exc:
                     failures.append(f"orphan manager PID {manager.pid} cleanup failed: {exc}")
                     if manager.poll() is None:
                         manager.kill()
@@ -105,6 +100,19 @@ class WorktreeRemoveGuardTests(unittest.TestCase):
             self.temp.cleanup()
         if failures:
             self.fail("Process cleanup failed: " + "; ".join(failures))
+
+    def _cleanup_orphan_manager(self, manager: subprocess.Popen[bytes]) -> bytes:
+        if manager.poll() is None and manager.stdin is not None:
+            manager.stdin.write(b"cleanup\n")
+            manager.stdin.flush()
+        stdout, _ = manager.communicate(timeout=15)
+        if manager.returncode != 0 or b"cleaned" not in stdout:
+            self.fail(f"orphan manager PID {manager.pid} did not confirm leader and child cleanup")
+        if manager in self._orphan_managers:
+            self._orphan_managers.remove(manager)
+        if manager in self._children:
+            self._children.remove(manager)
+        return stdout
 
     def _init_fixture_repo(self) -> None:
         scripts = self.fixture_repo / "scripts"
@@ -379,7 +387,7 @@ class WorktreeRemoveGuardTests(unittest.TestCase):
         self.assertFalse(outcome.ok)
         self.assertEqual(dev.session_file.read_text(encoding="utf-8"), before)
 
-    def test_orphaned_cursor_group_child_with_moved_cwd(self) -> None:
+    def _run_orphaned_cursor_group_child(self, *, orphan: bool, simulate_exception: bool = False) -> None:
         path = self._create_worktree("cursor-child", "feature/cursor-child")
         outside = self.base / "outside-cwd"
         outside.mkdir()
@@ -412,55 +420,85 @@ child_stat = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
 fields = child_stat[child_stat.rfind(')') + 2:].split()
 identity = {"pid": child_pid, "starttime": int(fields[19]),
             "pgid": int(fields[2]), "sid": int(fields[3]), "leader": leader.pid}
+leader_stat = open(f"/proc/{leader.pid}/stat", encoding="ascii").read()
+leader_fields = leader_stat[leader_stat.rfind(')') + 2:].split()
+identity.update({"leader_starttime": int(leader_fields[19]),
+                 "leader_pgid": int(leader_fields[2]),
+                 "leader_sid": int(leader_fields[3])})
 print(json.dumps(identity), flush=True)
+def identity_matches(pid, starttime, pgid, sid):
+    try:
+        raw = open(f"/proc/{pid}/stat", encoding="ascii").read()
+        fields = raw[raw.rfind(')') + 2:].split()
+        return (int(fields[19]) == starttime and int(fields[2]) == pgid and
+                int(fields[3]) == sid and fields[0] != 'Z')
+    except FileNotFoundError:
+        return False
+def stop_leader():
+    if identity_matches(leader.pid, identity['leader_starttime'],
+                        identity['leader_pgid'], identity['leader_sid']):
+        leader.send_signal(signal.SIGTERM)
+    try:
+        leader.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        if not identity_matches(leader.pid, identity['leader_starttime'],
+                                identity['leader_pgid'], identity['leader_sid']):
+            raise RuntimeError("leader identity changed before forced cleanup")
+        leader.kill()
+        leader.wait(timeout=3)
+    if identity_matches(leader.pid, identity['leader_starttime'],
+                        identity['leader_pgid'], identity['leader_sid']):
+        raise RuntimeError("leader remained alive after cleanup")
+def cleanup_child():
+    if identity_matches(child_pid, identity['starttime'], identity['pgid'], identity['sid']):
+        os.kill(child_pid, signal.SIGTERM)
+    deadline = time.monotonic() + 3
+    reaped = False
+    while time.monotonic() < deadline:
+        try:
+            waited, _ = os.waitpid(child_pid, os.WNOHANG)
+            reaped = waited == child_pid
+        except ChildProcessError:
+            reaped = False  # The exited leader may not have been adopted yet.
+        if reaped:
+            return
+        if not identity_matches(child_pid, identity['starttime'], identity['pgid'], identity['sid']):
+            try:
+                raw = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
+                fields = raw[raw.rfind(')') + 2:].split()
+            except FileNotFoundError:
+                # It may be our exited child awaiting waitpid after adoption.
+                try:
+                    os.waitpid(child_pid, os.WNOHANG)
+                except ChildProcessError:
+                    pass
+                return
+            if fields[0] == 'Z' and int(fields[19]) == identity['starttime']:
+                os.waitpid(child_pid, 0)
+                return
+            raise RuntimeError("child identity changed; refusing to signal or reap another process")
+        time.sleep(0.02)
+    if not identity_matches(child_pid, identity['starttime'], identity['pgid'], identity['sid']):
+        raise RuntimeError("child identity changed before SIGKILL")
+    os.kill(child_pid, signal.SIGKILL)
+    deadline = time.monotonic() + 3
+    while time.monotonic() < deadline:
+        try:
+            waited, _ = os.waitpid(child_pid, os.WNOHANG)
+            if waited == child_pid:
+                return
+        except ChildProcessError:
+            pass
+        time.sleep(0.02)
+    raise RuntimeError("child did not exit and reap after SIGKILL")
 for command in sys.stdin:
     command = command.strip()
     if command == "orphan":
-        leader.send_signal(signal.SIGTERM)
-        leader.wait(timeout=3)
+        stop_leader()
         print("orphaned", flush=True)
     elif command == "cleanup":
-        try:
-            current = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
-            current_fields = current[current.rfind(')') + 2:].split()
-            same = (int(current_fields[19]) == identity['starttime'] and
-                    int(current_fields[2]) == identity['pgid'] and
-                    int(current_fields[3]) == identity['sid'])
-        except FileNotFoundError:
-            same = False
-        if same:
-            os.kill(child_pid, signal.SIGTERM)
-        deadline = time.monotonic() + 3
-        while time.monotonic() < deadline:
-            try:
-                waited, _ = os.waitpid(child_pid, os.WNOHANG)
-            except ChildProcessError:
-                waited = 0
-            if waited == child_pid:
-                break
-            try:
-                raw = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
-                fields = raw[raw.rfind(')') + 2:].split()
-            except FileNotFoundError:
-                break
-            if fields[0] == 'Z':
-                os.waitpid(child_pid, 0)
-                break
-            time.sleep(0.02)
-        else:
-            try:
-                raw = open(f"/proc/{child_pid}/stat", encoding="ascii").read()
-                fields = raw[raw.rfind(')') + 2:].split()
-                same = (int(fields[19]) == identity['starttime'] and
-                        int(fields[2]) == identity['pgid'] and
-                        int(fields[3]) == identity['sid'])
-            except FileNotFoundError:
-                same = False
-            if same:
-                os.kill(child_pid, signal.SIGKILL)
-            waited, _ = os.waitpid(child_pid, 0)
-            if waited != child_pid:
-                raise RuntimeError("could not reap owned child")
+        stop_leader()
+        cleanup_child()
         print("cleaned", flush=True)
         break
 """
@@ -505,23 +543,35 @@ for command in sys.stdin:
         }
         dev.save_session(session)
         session_before = dev.session_file.read_bytes()
-        manager.stdin.write(b"orphan\n")
-        manager.stdin.flush()
-        self.assertEqual(manager.stdout.readline().strip(), b"orphaned")
-        outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
-        self.assertFalse(outcome.ok)
-        blocked = set(outcome.blocked_pids)
-        self.assertNotIn(leader_pid, blocked)
-        self.assertIn(child_pid, blocked)
-        self.assertEqual(dev.session_file.read_bytes(), session_before)
-        manager.stdin.write(b"cleanup\n")
-        manager.stdin.flush()
-        self.assertEqual(manager.stdout.readline().strip(), b"cleaned")
-        manager.communicate(timeout=3)
-        self.assertEqual(manager.returncode, 0)
-        self._children.remove(manager)
-        self._orphan_managers.remove(manager)
+        try:
+            if orphan:
+                manager.stdin.write(b"orphan\n")
+                manager.stdin.flush()
+                self.assertEqual(manager.stdout.readline().strip(), b"orphaned")
+                outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
+                self.assertFalse(outcome.ok)
+                blocked = set(outcome.blocked_pids)
+                self.assertNotIn(leader_pid, blocked)
+                self.assertIn(child_pid, blocked)
+                self.assertEqual(dev.session_file.read_bytes(), session_before)
+            if simulate_exception:
+                raise RuntimeError("simulated test interruption")
+        finally:
+            # This is the same path used by tearDown, including when the
+            # leader has not yet been orphaned or an assertion raises.
+            self._cleanup_orphan_manager(manager)
         self.assertFalse(Path(f"/proc/{child_pid}").exists(), "owned orphan must be reaped")
+        self.assertFalse(Path(f"/proc/{leader_pid}").exists(), "owned leader must be reaped")
+
+    def test_orphaned_cursor_group_child_with_moved_cwd(self) -> None:
+        self._run_orphaned_cursor_group_child(orphan=True)
+
+    def test_orphan_manager_cleanup_before_orphan(self) -> None:
+        self._run_orphaned_cursor_group_child(orphan=False)
+
+    def test_orphan_manager_cleanup_after_test_body_exception(self) -> None:
+        with self.assertRaisesRegex(RuntimeError, "simulated test interruption"):
+            self._run_orphaned_cursor_group_child(orphan=False, simulate_exception=True)
 
     def test_unrelated_unreadable_cwd_does_not_block(self) -> None:
         path = self._create_worktree("unreadable-unrelated", "feature/unreadable-unrelated")
