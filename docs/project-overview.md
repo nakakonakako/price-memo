@@ -338,6 +338,7 @@ price-memo/
 | 2026-10-10 | S1-03: バックエンドの CORS ミドルウェアを除去。ブラウザ API は同一オリジン `/api`（Vite / nginx）のみ |
 | 2026-10-10 | S1-07: 本番 deploy の `.env` から未使用の `GEMINI_API_KEY` 注入を除去。必須 Secrets 一覧を現行利用に合わせて更新 |
 | 2026-10-19 | worktreeの`backend/.venv`管理・移動後のstale修復、起動前バックエンドruntime検証を追加 |
+| 2026-10-27 | 新規worktree作成時の`origin/main`鮮度fetchを`worktree.sh`に集約し、delegate側の二重fetchを除去 |
 | 2026-10-19 | Git worktree環境設定の明示移行、起動前検証、`origin/main`基準のCursor worktree作成を追加 |
 | 2026-10-23 | 開発サーバーの所有プロセス群について、SIGKILL後の終了確認とcleanup失敗の報告を追加 |
 | 2026-10-08 | 認証済み画面状態と店舗キャッシュをユーザーIDで分離し、切替前の非同期結果を破棄 |

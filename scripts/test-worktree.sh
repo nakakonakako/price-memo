@@ -99,6 +99,25 @@ fi
 EOF
 chmod +x "$fixture_bin/npm" "$fixture_bin/uv"
 
+real_git="$(command -v git)"
+cat > "$fixture_bin/git" <<EOF
+#!/usr/bin/env bash
+if [[ "\${WORKTREE_TEST_FETCH_FAIL:-}" == 1 ]]; then
+  for arg in "\$@"; do
+    if [[ "\$arg" == "fetch" ]]; then
+      exit 1
+    fi
+  done
+fi
+if [[ -n "\${WORKTREE_TEST_LOG:-}" ]]; then
+  if [[ "\$*" == *" fetch "* && "\$*" == *refs/heads/main:refs/remotes/origin/main* ]]; then
+    printf 'git fetch origin-main\n' >> "\$WORKTREE_TEST_LOG"
+  fi
+fi
+exec "$real_git" "\$@"
+EOF
+chmod +x "$fixture_bin/git"
+
 write_stale_managed_venv() {
   local target_backend="$1"
   local bin_dir="$target_backend/.venv/bin"
@@ -124,6 +143,62 @@ export WORKTREE_TEST_LOG="$command_log"
 default_base_path="$fixture_home/worktrees/$repository_name/default-base"
 [[ "$(git -C "$default_base_path" rev-parse HEAD)" == "$(git -C "$fixture_repo" rev-parse origin/main)" ]]
 [[ "$(git -C "$default_base_path" rev-parse HEAD)" != "$(git -C "$fixture_repo" rev-parse HEAD)" ]]
+
+stale_origin_main="$(git -C "$fixture_repo" rev-parse origin/main)"
+git -C "$fixture_repo" push origin main >/dev/null 2>&1
+latest_origin_main="$(git -C "$fixture_repo" rev-parse main)"
+[[ "$stale_origin_main" != "$latest_origin_main" ]]
+git -C "$fixture_repo" update-ref refs/remotes/origin/main "$stale_origin_main"
+: > "$command_log"
+"$fixture_repo/scripts/worktree.sh" create fresh-remote --branch feature/fresh-remote --no-setup >/dev/null
+fresh_remote_path="$fixture_home/worktrees/$repository_name/fresh-remote"
+[[ "$(git -C "$fresh_remote_path" rev-parse HEAD)" == "$latest_origin_main" ]]
+grep -Fq 'git fetch origin-main' "$command_log" || {
+  echo "Expected origin/main fetch when creating from a stale remote-tracking ref." >&2
+  exit 1
+}
+
+: > "$command_log"
+"$fixture_repo/scripts/worktree.sh" create fresh-local-main --branch feature/fresh-local-main --base main --no-setup >/dev/null
+fresh_local_main_path="$fixture_home/worktrees/$repository_name/fresh-local-main"
+[[ "$(git -C "$fresh_local_main_path" rev-parse HEAD)" == "$(git -C "$fixture_repo" rev-parse main)" ]]
+if grep -Fq 'git fetch origin-main' "$command_log"; then
+  echo "Expected no origin/main fetch for explicit --base main." >&2
+  exit 1
+fi
+
+export WORKTREE_TEST_FETCH_FAIL=1
+if "$fixture_repo/scripts/worktree.sh" create fetch-fail-task --branch feature/fetch-fail --no-setup >/dev/null 2>&1; then
+  echo "Expected worktree create to fail when origin/main fetch fails." >&2
+  exit 1
+fi
+unset WORKTREE_TEST_FETCH_FAIL
+if git -C "$fixture_repo" show-ref --verify --quiet refs/heads/feature/fetch-fail; then
+  echo "Expected no branch after fetch failure." >&2
+  exit 1
+fi
+[[ ! -d "$fixture_home/worktrees/$repository_name/fetch-fail-task" ]]
+
+git -C "$fixture_repo" remote rename origin origin-backup
+if "$fixture_repo/scripts/worktree.sh" create no-origin-task --branch feature/no-origin --no-setup >/dev/null 2>&1; then
+  echo "Expected worktree create to fail when origin remote is missing." >&2
+  exit 1
+fi
+if git -C "$fixture_repo" show-ref --verify --quiet refs/heads/feature/no-origin; then
+  echo "Expected no branch when origin is unavailable." >&2
+  exit 1
+fi
+[[ ! -d "$fixture_home/worktrees/$repository_name/no-origin-task" ]]
+git -C "$fixture_repo" remote rename origin-backup origin
+
+git -C "$fixture_repo" update-ref refs/remotes/origin/main "$stale_origin_main"
+: > "$command_log"
+"$fixture_repo/scripts/worktree.sh" create fresh-local-main --branch feature/fresh-local-main --base main --no-setup >/dev/null
+if grep -Fq 'git fetch origin-main' "$command_log"; then
+  echo "Expected no fetch when reusing an existing worktree path." >&2
+  exit 1
+fi
+[[ "$(git -C "$fixture_repo" rev-parse main)" == "$latest_origin_main" ]]
 
 create_output="$("$fixture_repo/scripts/worktree.sh" create review-task --branch feature/review-task --base main)"
 worktree_path="$fixture_home/worktrees/$repository_name/review-task"
@@ -242,5 +317,40 @@ fi
 [[ -L "$venv_worktree/backend/.venv" ]]
 
 python3 "$source_root/scripts/test-worktree-remove-guard.py"
+
+cat > "$fixture_bin/agent" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"session_id":"worktree-test"}'
+exit 0
+EOF
+chmod +x "$fixture_bin/agent"
+
+git -C "$fixture_repo" update-ref refs/remotes/origin/main "$stale_origin_main"
+: > "$command_log"
+cd "$fixture_repo"
+if ! "$source_root/scripts/delegate-cursor.sh" --prompt "worktree fixture" --worktree delegate-fresh >"$test_root/delegate-create.log" 2>&1; then
+  echo "Expected delegate-cursor to create a worktree." >&2
+  cat "$test_root/delegate-create.log" >&2
+  exit 1
+fi
+delegate_workspace="$fixture_home/worktrees/$repository_name/delegate-fresh"
+[[ -d "$delegate_workspace" ]]
+git -C "$fixture_repo" show-ref --verify --quiet refs/heads/codex/delegate-fresh
+grep -Fq 'git fetch origin-main' "$command_log" || {
+  echo "Expected delegate-cursor new worktree path to fetch via worktree.sh." >&2
+  exit 1
+}
+[[ "$(git -C "$delegate_workspace" rev-parse HEAD)" == "$latest_origin_main" ]]
+
+: > "$command_log"
+if ! "$source_root/scripts/delegate-cursor.sh" --prompt "worktree fixture" --worktree delegate-fresh >"$test_root/delegate-reuse.log" 2>&1; then
+  echo "Expected delegate-cursor to reuse an existing worktree." >&2
+  cat "$test_root/delegate-reuse.log" >&2
+  exit 1
+fi
+if grep -Fq 'git fetch origin-main' "$command_log"; then
+  echo "Expected delegate-cursor reuse not to fetch origin/main." >&2
+  exit 1
+fi
 
 echo "Worktree workflow tests passed."
