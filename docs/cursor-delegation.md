@@ -78,34 +78,59 @@ delegation is inconvenient.
 
 ### Delegation run evidence
 
-`scripts/delegate-cursor.sh` records the selected tier/model, worktree, and UTC
-start time before launching Cursor with `agent --trust --approve-mcps`. It runs
-print mode with `stream-json`,
-relays stdout and stderr to the Codex terminal, and saves each stream under a
-temporary log directory printed at launch. On completion, it reports the
-process exit code and the final `result` event status (`success`, `error`, or
-`missing`), along with the finish time and outcome. After successful completion,
-the temporary log directory is removed. On failure or incomplete results, logs
-are retained and their location is reported. Treat a run as complete only when
-the process exits successfully and the final result event reports success.
+`scripts/delegate-cursor.sh` records the selected route/tier/model and UTC start
+time before launching Cursor with `agent --trust --approve-mcps`. It passes
+`stream-json` directly to `scripts/delegate-cursor-monitor.py`; raw stdout,
+stderr, prompts, tool arguments/results, and file contents are not relayed or
+persisted. The monitor displays bounded event types, tool categories and
+phases, timing, process/result status, byte counts, and fixed error categories.
+It does not display command text, paths emitted by tools, or free-form stderr.
+Progress output is capped at 300 lines, and oversized stream records are
+discarded.
 
-When a run fails, the script classifies recognizable worktree creation and
-setup failures separately from Cursor agent failures. Review the printed logs
-and actual process/result status before concluding that delegation failed;
-the diagnostic classification is based on Cursor CLI output and may be
-`cursor_agent_unclassified` when the CLI does not emit a recognizable phase marker.
+The final `result` text is kept in memory only, limited to 64 KiB of input,
+sanitized for common credential formats and matching secret-like environment
+variable values, then displayed with a 4 KiB total output cap. The report is
+untrusted free-form content; review the Git diff and tests independently.
+Sanitization is best-effort and cannot identify every unknown secret format.
+Avoid asking the worker to include credentials or sensitive data in its report.
+Treat a run as complete only when the process exits successfully and the final
+`result` event reports success.
+
+On failure or interruption, the monitor saves only allowlisted metadata (times,
+route/tier/model, process/result state, counts, outcome, and categorized stderr
+signals) under `$XDG_STATE_HOME/price-memo/delegate-cursor/`, defaulting to
+`~/.local/state/price-memo/delegate-cursor/`. The directory must be owned by
+the current user with mode `0700`; records are created with mode `0600`, a
+maximum size of 8 KiB, and are limited to 20 files retained for at most 7 days.
+The monitor uses no-follow/exclusive file creation and fails closed if the state
+path is unsafe. It only prunes its own named regular metadata records. Existing
+legacy logs and unrelated files are never read, overwritten, or deleted.
+Successful runs do not create a failure record. If metadata cannot be saved,
+the terminal reports that fact without exposing the underlying filesystem
+error.
+
+Failure investigation uses the displayed outcome, result state, timestamps,
+tool phases, and error categories. Categories include worktree setup/creation,
+MCP initialization, network/connection, authentication, permissions, and
+`resource_exhausted`; the latter alone is not proof of a usage quota limit.
+Unknown failures remain `cursor_agent_unclassified`. Since raw streams and
+stderr excerpts are deliberately unavailable, some failures cannot be
+diagnosed from a run record alone. Reproduce with a bounded task and inspect
+the relevant Git changes and local environment directly; do not turn on raw
+stream logging or automatically switch models to obtain more detail.
 
 Current triage boundaries:
 
 | Classification | Evidence / handling |
 |---|---|
 | `success` | Process exits 0 and the final result event reports success |
-| `worktree_setup` / `worktree_creation` | Recognized setup or Git worktree diagnostics in the retained run logs |
-| `tooling_environment_failure` | Supervisor diagnosis from the retained logs; the final result event has no stable subtype for this |
+| `worktree_setup` / `worktree_creation` | Categorized setup or Git worktree signals from stderr, when available |
+| `tooling_environment_failure` | Supervisor diagnosis from bounded event/tool metadata and categorized stderr signals |
 | `implementation_difficulty` | Explicit worker completion/failure report, if available; do not infer it from a generic CLI error |
 | `cursor_models_usage_quota_limit` | Supervisor diagnosis supported by evidence of usage/quota exhaustion; the CLI does not currently expose a verified quota-specific signal |
 | `cursor_service_model_failure` | Supervisor diagnosis of a persistent service/model-side failure, such as repeated `resource_exhausted`; this is not itself proof of quota exhaustion |
-| `cursor_agent_unclassified` | Any remaining failed or incomplete run; preserve logs and do not model-fallback automatically |
+| `cursor_agent_unclassified` | Any remaining failed or incomplete run; use bounded metadata and do not model-fallback automatically |
 
 These classifications are not safely machine-detectable from the current CLI
 result event. A single error never triggers fallback. For a suspected persistent
