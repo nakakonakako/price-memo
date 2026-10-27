@@ -14,6 +14,7 @@ command_log="$test_root/setup-commands.log"
 mkdir -p "$fixture_repo/scripts" "$fixture_config/frontend" "$fixture_config/backend" "$fixture_bin"
 mkdir -p "$fixture_config/secrets/ai-quota-ca"
 cp "$source_root/scripts/worktree.sh" "$fixture_repo/scripts/worktree.sh"
+cp "$source_root/scripts/delegate-cursor-monitor.py" "$fixture_repo/scripts/delegate-cursor-monitor.py"
 cp "$source_root/scripts/worktree-remove-inspect.py" "$fixture_repo/scripts/worktree-remove-inspect.py"
 cp "$source_root/scripts/cursor-devserver.py" "$fixture_repo/scripts/cursor-devserver.py"
 cp "$source_root/scripts/backend-venv.sh" "$fixture_repo/scripts/backend-venv.sh"
@@ -350,6 +351,16 @@ if ! "$source_root/scripts/delegate-cursor.sh" --prompt "worktree fixture" --wor
 fi
 if grep -Fq 'git fetch origin-main' "$command_log"; then
   echo "Expected delegate-cursor reuse not to fetch origin/main." >&2
+  exit 1
+fi
+
+if ! "$source_root/scripts/delegate-cursor.sh" --prompt "worktree fixture" --continue-worktree "$delegate_workspace" >"$test_root/delegate-continue.log" 2>&1; then
+  echo "Expected --continue-worktree to preserve the existing worktree path." >&2
+  cat "$test_root/delegate-continue.log" >&2
+  exit 1
+fi
+if grep -Fq 'git fetch origin-main' "$command_log"; then
+  echo "Expected --continue-worktree reuse not to fetch origin/main." >&2
   exit 1
 fi
 
