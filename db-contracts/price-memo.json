@@ -375,13 +375,6 @@
               "user_id",
               "name"
             ]
-          },
-          {
-            "kind": "unique",
-            "columns": [
-              "user_id",
-              "id"
-            ]
           }
         ],
         "rls": {
