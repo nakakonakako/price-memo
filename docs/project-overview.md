@@ -62,7 +62,7 @@
 | 決定 | 内容 |
 |------|------|
 | A と B | **同一 Supabase プロジェクト**（既存の Dev / Prod 各1）。B 用テーブルを足す |
-| マイグレーション | 共通 DB の正本は `receipt-manager/supabase/migrations/`。B 固有の schema 変更も A リポジトリへ追加し、push する |
+| マイグレーション | 共通 DB migration の正本は `shared-supabase-db/supabase/migrations/`。アプリ別DB契約の正本は各アプリの `db-contracts/`。現行のDB適用Writer経路はreceipt-managerで維持 |
 | Auth | **共有**（同じ `auth.users` / 同じ Google OAuth）。アプリ入り口（URL・SPA）は分けるが、アカウントは分けない |
 | 将来の無関係アプリ | Supabase 枠は増やさない。VPS 上の **PocketBase** などで別運営 |
 
@@ -98,14 +98,14 @@ FastAPI (uvicorn :8001 ※A は :8000) … **CORS は有効化しない**（ク�
   ▼
 Supabase（A の Dev または Prod）
   ├── A テーブル（receipts 等）… B は参照のみ
-  └── B テーブル（folders 等）… receipt-manager リポジトリの migration で追加
+  └── B テーブル（folders 等）… shared-supabase-db の migration で管理
 ```
 
 | 層 | パス | 役割 |
 |----|------|------|
 | フロントエンド | `frontend/` | SPA。機能は `src/features/` 以下 |
 | バックエンド | `backend/app/` | FastAPI |
-| DB・Auth | `supabase/` | Supabase 設定。migration は保持しない（正本は receipt-manager） |
+| DB・Auth | `supabase/` | Supabase 設定。migrationは保持せず、共通migration正本はshared-supabase-db、price-memo契約は`db-contracts/` |
 | ドキュメント | `docs/` | 本ファイルおよび仕様メモ |
 
 ---
@@ -159,7 +159,7 @@ Supabase（A の Dev または Prod）
 
 ## 5. データモデル
 
-B 固有テーブル。RLS・`user_id` 分離。マイグレーションは receipt-manager リポジトリで管理する（下表）
+B 固有テーブル。RLS・`user_id` 分離。マイグレーションは shared-supabase-db で管理する（下表）。price-memo の必要DB契約は `db-contracts/price-memo.json`
 
 | テーブル | 概要 | 主なカラム | 備考 |
 |----------|------|------------|------|
@@ -278,7 +278,7 @@ read-only の GPT-6 Sol `sol_supervisor` subagent へ早期エスカレーショ
 `scripts/delegate-cursor.sh` で委譲する。詳細は
 [cursor-delegation.md](./cursor-delegation.md) を参照。price-memo の shared
 Supabase migration は作成・保持・適用せず、正本は
-`receipt-manager/supabase/migrations/` のみとする。
+`shared-supabase-db/supabase/migrations/` を正本とする。price-memo はmigrationを保持せず、契約本文を `db-contracts/price-memo.json` に置く。
 
 ---
 

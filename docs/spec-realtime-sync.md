@@ -1,12 +1,12 @@
 # 仕様: 他端末変更のRealtime通知
 
-最終更新: 2026-10-18
+最終更新: 2026-10-28
 
 関連: [project-overview.md](./project-overview.md) / [spec-shopping-memo.md](./spec-shopping-memo.md) / [spec-folders-catalog.md](./spec-folders-catalog.md) / [spec-trends.md](./spec-trends.md)
 
 ## 1. 通知契約
 
-receipt-manager PR #24 が定義するPrivate Broadcast契約を利用する。price-memo側ではDB migrationやRealtime設定を管理しない。
+shared-supabase-db の `20261018120000_price_memo_private_broadcast.sql` が定義するPrivate Broadcast契約を利用する。price-memo側ではDB migrationやRealtime設定を管理しない。
 
 | 項目 | 契約 |
 |------|------|
@@ -43,10 +43,10 @@ receipt-manager PR #24 が定義するPrivate Broadcast契約を利用する。p
 
 購読失敗や切断は通常操作を止めない。Realtime Broadcastは履歴付き変更ログではないため、再接続時の `SUBSCRIBED` 再取得と既存の `resumeSync` を整合性回復のフォールバックとする。再取得が失敗した場合は既存データを残し、次回のBroadcast、再接続、またはアプリ復帰で再試行する。
 
-本番DBはreceipt-manager PR #24 のmigrationが未適用のため、Private channelの認可・送信設定と通知トリガーが有効になるまでは自動反映されない。適用前にprice-memoの購読コードを本番データ同期の保証として扱わない。
+2026-10-28時点でDev/Prodのmigration履歴14本はIN_SYNC。契約JSONのカタログ検査はpolicy式、trigger関数への結び付き、実際のRealtime配信を保証しないため、price-memoの購読コード単体をデータ同期の保証として扱わない。
 
 この通知機構は変更検知と再取得のみを行い、同一価格記録のCAS、楽観的排他制御、自動マージを提供しない。BL-02第3段階BのCASは未実装のまま。
 
 ## 4. 検証上の制約
 
-モックテストは通知のtopic、event、payload検証、ユーザー分離、集約、再取得対象を検証する。実際の2端末間Realtime検証にはPR #24適用済みの隔離Supabase環境が必要であり、本番DBでは検証しない。
+モックテストは通知のtopic、event、payload検証、ユーザー分離、集約、再取得対象を検証する。実際の2端末間Realtime検証にはshared migration適用済みの隔離Supabase環境が必要であり、本番DBでは検証しない。

@@ -32,4 +32,4 @@
 
 ## 4. migrationの管理
 
-共有Supabase DBのmigration正本は `receipt-manager/supabase/migrations/`。price-memo側はmigrationを保持せず、DBへのpushも行わない。
+共有Supabase DBのmigration正本は `shared-supabase-db/supabase/migrations/`。price-memoのDB契約正本は `db-contracts/price-memo.json`。price-memo側はmigrationを保持せず、DBへのpushも行わない。現行Writer経路はreceipt-managerが保持する。

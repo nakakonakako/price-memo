@@ -249,11 +249,11 @@ and Cursor implements.
 This repo remains a strict unit-price comparison and shopping memo app. Preserve
 exact weight/quantity/volume semantics; never treat guessed values as confirmed.
 Do not bring in household expense management. price-memo never creates, stores,
-or applies shared DB migrations. They are maintained only in
-`receipt-manager/supabase/migrations/`. A price-memo Cursor task may not modify
-receipt-manager or another repo. If a schema change is needed, escalate to Sol
-and Luna; any implementation must be a separate, explicitly supervised
-cross-repo task in receipt-manager.
+or applies shared DB migrations. Their canonical source is
+`shared-supabase-db/supabase/migrations/`; application DB requirements live in
+`db-contracts/price-memo.json`. A price-memo task may not modify another repo.
+If a schema change is needed, escalate to Sol and Luna; implementation belongs
+in a separate, explicitly supervised shared-supabase-db task.
 
 ## Worktree policy
 
