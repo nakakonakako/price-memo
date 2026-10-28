@@ -1,7 +1,7 @@
 {
   "format_version": 1,
   "app_id": "price-memo",
-  "contract_version": "1.0.0",
+  "contract_version": "1.1.0",
   "capabilities": {
     "tables": [
       {
@@ -64,7 +64,16 @@
         ],
         "rls": {
           "enabled": true,
-          "forced": false
+          "forced": false,
+          "policies": [
+            {
+              "name": "Enable ALL operations for users based on user_id",
+              "command": "ALL",
+              "roles": [
+                "authenticated"
+              ]
+            }
+          ]
         },
         "privileges": [
           {
@@ -78,7 +87,8 @@
             "deny": [
               "TRUNCATE",
               "REFERENCES",
-              "TRIGGER"
+              "TRIGGER",
+              "MAINTAIN"
             ]
           }
         ]
@@ -196,12 +206,24 @@
               ]
             },
             "on_delete": "set_null",
-            "validated": true
+            "validated": true,
+            "set_null_columns": [
+              "receipt_item_id"
+            ]
           }
         ],
         "rls": {
           "enabled": true,
-          "forced": false
+          "forced": false,
+          "policies": [
+            {
+              "name": "Enable ALL operations for users based on user_id",
+              "command": "ALL",
+              "roles": [
+                "authenticated"
+              ]
+            }
+          ]
         },
         "privileges": [
           {
@@ -215,7 +237,8 @@
             "deny": [
               "TRUNCATE",
               "REFERENCES",
-              "TRIGGER"
+              "TRIGGER",
+              "MAINTAIN"
             ]
           }
         ]
@@ -284,7 +307,16 @@
         ],
         "rls": {
           "enabled": true,
-          "forced": false
+          "forced": false,
+          "policies": [
+            {
+              "name": "Enable ALL operations for users based on user_id",
+              "command": "ALL",
+              "roles": [
+                "authenticated"
+              ]
+            }
+          ]
         },
         "privileges": [
           {
@@ -298,7 +330,8 @@
             "deny": [
               "TRUNCATE",
               "REFERENCES",
-              "TRIGGER"
+              "TRIGGER",
+              "MAINTAIN"
             ]
           }
         ]
@@ -353,7 +386,16 @@
         ],
         "rls": {
           "enabled": true,
-          "forced": false
+          "forced": false,
+          "policies": [
+            {
+              "name": "Enable ALL operations for users based on user_id",
+              "command": "ALL",
+              "roles": [
+                "authenticated"
+              ]
+            }
+          ]
         },
         "privileges": [
           {
@@ -367,7 +409,8 @@
             "deny": [
               "TRUNCATE",
               "REFERENCES",
-              "TRIGGER"
+              "TRIGGER",
+              "MAINTAIN"
             ]
           }
         ]
@@ -420,7 +463,37 @@
         ],
         "rls": {
           "enabled": true,
-          "forced": false
+          "forced": false,
+          "policies": [
+            {
+              "name": "Users can delete own receipts",
+              "command": "DELETE",
+              "roles": [
+                "public"
+              ]
+            },
+            {
+              "name": "Users can insert own receipts",
+              "command": "INSERT",
+              "roles": [
+                "public"
+              ]
+            },
+            {
+              "name": "Users can update own receipts",
+              "command": "UPDATE",
+              "roles": [
+                "public"
+              ]
+            },
+            {
+              "name": "Users can view own receipts",
+              "command": "SELECT",
+              "roles": [
+                "public"
+              ]
+            }
+          ]
         },
         "privileges": [
           {
@@ -431,7 +504,8 @@
             "deny": [
               "TRUNCATE",
               "REFERENCES",
-              "TRIGGER"
+              "TRIGGER",
+              "MAINTAIN"
             ]
           }
         ]
@@ -515,7 +589,37 @@
         ],
         "rls": {
           "enabled": true,
-          "forced": false
+          "forced": false,
+          "policies": [
+            {
+              "name": "Users can delete own receipt_items",
+              "command": "DELETE",
+              "roles": [
+                "public"
+              ]
+            },
+            {
+              "name": "Users can insert own receipt_items",
+              "command": "INSERT",
+              "roles": [
+                "public"
+              ]
+            },
+            {
+              "name": "Users can update own receipt_items",
+              "command": "UPDATE",
+              "roles": [
+                "public"
+              ]
+            },
+            {
+              "name": "Users can view own receipt_items",
+              "command": "SELECT",
+              "roles": [
+                "public"
+              ]
+            }
+          ]
         },
         "privileges": [
           {
@@ -526,7 +630,8 @@
             "deny": [
               "TRUNCATE",
               "REFERENCES",
-              "TRIGGER"
+              "TRIGGER",
+              "MAINTAIN"
             ]
           }
         ]
