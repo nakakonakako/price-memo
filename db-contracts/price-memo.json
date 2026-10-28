@@ -1,0 +1,725 @@
+{
+  "format_version": 1,
+  "app_id": "price-memo",
+  "contract_version": "1.0.0",
+  "capabilities": {
+    "tables": [
+      {
+        "schema": "public",
+        "name": "price_folders",
+        "relation_kind": "table",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "sort_order",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "nullable": false
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "primary_key",
+            "columns": [
+              "id"
+            ]
+          },
+          {
+            "kind": "unique",
+            "columns": [
+              "user_id",
+              "name"
+            ]
+          },
+          {
+            "kind": "unique",
+            "columns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ],
+        "rls": {
+          "enabled": true,
+          "forced": false
+        },
+        "privileges": [
+          {
+            "role": "authenticated",
+            "allow": [
+              "SELECT",
+              "INSERT",
+              "UPDATE",
+              "DELETE"
+            ],
+            "deny": [
+              "TRUNCATE",
+              "REFERENCES",
+              "TRIGGER"
+            ]
+          }
+        ]
+      },
+      {
+        "schema": "public",
+        "name": "price_records",
+        "relation_kind": "table",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "folder_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "recorded_at",
+            "type": "date",
+            "nullable": false
+          },
+          {
+            "name": "store_name",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "price",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "amount",
+            "type": "numeric",
+            "nullable": false
+          },
+          {
+            "name": "unit",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "note",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "receipt_item_id",
+            "type": "uuid",
+            "nullable": true
+          },
+          {
+            "name": "label_image_path",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "sort_order",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "timestamp with time zone",
+            "nullable": false
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "primary_key",
+            "columns": [
+              "id"
+            ]
+          },
+          {
+            "kind": "foreign_key",
+            "columns": [
+              "user_id",
+              "folder_id"
+            ],
+            "references": {
+              "table": "public.price_folders",
+              "columns": [
+                "user_id",
+                "id"
+              ]
+            },
+            "on_delete": "cascade",
+            "validated": true
+          },
+          {
+            "kind": "foreign_key",
+            "columns": [
+              "user_id",
+              "receipt_item_id"
+            ],
+            "references": {
+              "table": "public.receipt_items",
+              "columns": [
+                "user_id",
+                "id"
+              ]
+            },
+            "on_delete": "set_null",
+            "validated": true
+          }
+        ],
+        "rls": {
+          "enabled": true,
+          "forced": false
+        },
+        "privileges": [
+          {
+            "role": "authenticated",
+            "allow": [
+              "SELECT",
+              "INSERT",
+              "UPDATE",
+              "DELETE"
+            ],
+            "deny": [
+              "TRUNCATE",
+              "REFERENCES",
+              "TRIGGER"
+            ]
+          }
+        ]
+      },
+      {
+        "schema": "public",
+        "name": "price_memo_items",
+        "relation_kind": "table",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "folder_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "sort_order",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "primary_key",
+            "columns": [
+              "id"
+            ]
+          },
+          {
+            "kind": "unique",
+            "columns": [
+              "user_id",
+              "folder_id"
+            ]
+          },
+          {
+            "kind": "foreign_key",
+            "columns": [
+              "user_id",
+              "folder_id"
+            ],
+            "references": {
+              "table": "public.price_folders",
+              "columns": [
+                "user_id",
+                "id"
+              ]
+            },
+            "on_delete": "cascade",
+            "validated": true
+          }
+        ],
+        "rls": {
+          "enabled": true,
+          "forced": false
+        },
+        "privileges": [
+          {
+            "role": "authenticated",
+            "allow": [
+              "SELECT",
+              "INSERT",
+              "UPDATE",
+              "DELETE"
+            ],
+            "deny": [
+              "TRUNCATE",
+              "REFERENCES",
+              "TRIGGER"
+            ]
+          }
+        ]
+      },
+      {
+        "schema": "public",
+        "name": "price_stores",
+        "relation_kind": "table",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "primary_key",
+            "columns": [
+              "id"
+            ]
+          },
+          {
+            "kind": "unique",
+            "columns": [
+              "user_id",
+              "name"
+            ]
+          },
+          {
+            "kind": "unique",
+            "columns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ],
+        "rls": {
+          "enabled": true,
+          "forced": false
+        },
+        "privileges": [
+          {
+            "role": "authenticated",
+            "allow": [
+              "SELECT",
+              "INSERT",
+              "UPDATE",
+              "DELETE"
+            ],
+            "deny": [
+              "TRUNCATE",
+              "REFERENCES",
+              "TRIGGER"
+            ]
+          }
+        ]
+      },
+      {
+        "schema": "public",
+        "name": "receipts",
+        "relation_kind": "table",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "date",
+            "type": "date",
+            "nullable": false
+          },
+          {
+            "name": "store_name",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "total_amount",
+            "type": "integer",
+            "nullable": false
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "primary_key",
+            "columns": [
+              "id"
+            ]
+          },
+          {
+            "kind": "unique",
+            "columns": [
+              "user_id",
+              "id"
+            ]
+          }
+        ],
+        "rls": {
+          "enabled": true,
+          "forced": false
+        },
+        "privileges": [
+          {
+            "role": "authenticated",
+            "allow": [
+              "SELECT"
+            ],
+            "deny": [
+              "TRUNCATE",
+              "REFERENCES",
+              "TRIGGER"
+            ]
+          }
+        ]
+      },
+      {
+        "schema": "public",
+        "name": "receipt_items",
+        "relation_kind": "table",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "receipt_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "nullable": false
+          },
+          {
+            "name": "item_name",
+            "type": "text",
+            "nullable": false
+          },
+          {
+            "name": "price",
+            "type": "integer",
+            "nullable": false
+          },
+          {
+            "name": "main_category",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "sub_category",
+            "type": "text",
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp with time zone",
+            "nullable": false
+          }
+        ],
+        "constraints": [
+          {
+            "kind": "primary_key",
+            "columns": [
+              "id"
+            ]
+          },
+          {
+            "kind": "unique",
+            "columns": [
+              "user_id",
+              "id"
+            ]
+          },
+          {
+            "kind": "foreign_key",
+            "columns": [
+              "user_id",
+              "receipt_id"
+            ],
+            "references": {
+              "table": "public.receipts",
+              "columns": [
+                "user_id",
+                "id"
+              ]
+            },
+            "on_delete": "cascade",
+            "validated": true
+          }
+        ],
+        "rls": {
+          "enabled": true,
+          "forced": false
+        },
+        "privileges": [
+          {
+            "role": "authenticated",
+            "allow": [
+              "SELECT"
+            ],
+            "deny": [
+              "TRUNCATE",
+              "REFERENCES",
+              "TRIGGER"
+            ]
+          }
+        ]
+      }
+    ],
+    "functions": [
+      {
+        "signature": "public.rename_price_store(uuid, text)",
+        "returns": "price_stores",
+        "returns_set": false,
+        "arguments": [
+          {
+            "name": "p_store_id",
+            "mode": "IN",
+            "type": "uuid"
+          },
+          {
+            "name": "p_name",
+            "mode": "IN",
+            "type": "text"
+          }
+        ],
+        "security": "invoker",
+        "search_path": "",
+        "execute": {
+          "allow": [
+            "authenticated"
+          ],
+          "deny": [
+            "public",
+            "anon"
+          ]
+        }
+      },
+      {
+        "signature": "public.reorder_price_memo_items(uuid[], uuid[])",
+        "returns": "void",
+        "returns_set": false,
+        "arguments": [
+          {
+            "name": "p_expected_folder_ids",
+            "mode": "IN",
+            "type": "uuid[]"
+          },
+          {
+            "name": "p_folder_ids",
+            "mode": "IN",
+            "type": "uuid[]"
+          }
+        ],
+        "security": "invoker",
+        "search_path": "",
+        "execute": {
+          "allow": [
+            "authenticated"
+          ],
+          "deny": [
+            "public",
+            "anon"
+          ]
+        }
+      },
+      {
+        "signature": "public.delete_my_price_memo_data()",
+        "returns": "void",
+        "returns_set": false,
+        "arguments": [],
+        "security": "invoker",
+        "search_path": "",
+        "execute": {
+          "allow": [
+            "authenticated"
+          ],
+          "deny": [
+            "public",
+            "anon",
+            "service_role"
+          ]
+        }
+      },
+      {
+        "signature": "public.broadcast_price_memo_invalidation()",
+        "returns": "trigger",
+        "returns_set": false,
+        "arguments": [],
+        "security": "definer",
+        "search_path": "",
+        "execute": {
+          "allow": [],
+          "deny": [
+            "public",
+            "anon",
+            "authenticated",
+            "service_role"
+          ]
+        }
+      }
+    ],
+    "auth": {
+      "foreign_keys": [
+        {
+          "table": "public.price_folders",
+          "columns": [
+            "user_id"
+          ],
+          "references": "auth.users",
+          "on_delete": "cascade",
+          "validated": true
+        },
+        {
+          "table": "public.price_records",
+          "columns": [
+            "user_id"
+          ],
+          "references": "auth.users",
+          "on_delete": "cascade",
+          "validated": true
+        },
+        {
+          "table": "public.price_memo_items",
+          "columns": [
+            "user_id"
+          ],
+          "references": "auth.users",
+          "on_delete": "cascade",
+          "validated": true
+        },
+        {
+          "table": "public.price_stores",
+          "columns": [
+            "user_id"
+          ],
+          "references": "auth.users",
+          "on_delete": "cascade",
+          "validated": true
+        },
+        {
+          "table": "public.receipts",
+          "columns": [
+            "user_id"
+          ],
+          "references": "auth.users",
+          "on_delete": "no_action",
+          "validated": true
+        },
+        {
+          "table": "public.receipt_items",
+          "columns": [
+            "user_id"
+          ],
+          "references": "auth.users",
+          "on_delete": "no_action",
+          "validated": true
+        }
+      ],
+      "functions": [
+        "auth.uid()"
+      ]
+    },
+    "realtime": {
+      "relations": [
+        {
+          "schema": "realtime",
+          "name": "messages",
+          "rls_enabled": true
+        }
+      ],
+      "functions": [
+        "realtime.topic()",
+        "realtime.send(jsonb, text, text, boolean)"
+      ],
+      "triggers": [
+        {
+          "table": "public.price_folders",
+          "name": "price_memo_broadcast_invalidation",
+          "enabled": "enabled"
+        },
+        {
+          "table": "public.price_records",
+          "name": "price_memo_broadcast_invalidation",
+          "enabled": "enabled"
+        },
+        {
+          "table": "public.price_memo_items",
+          "name": "price_memo_broadcast_invalidation",
+          "enabled": "enabled"
+        },
+        {
+          "table": "public.price_stores",
+          "name": "price_memo_broadcast_invalidation",
+          "enabled": "enabled"
+        }
+      ]
+    }
+  }
+}
