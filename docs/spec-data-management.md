@@ -32,4 +32,6 @@
 
 ## 4. migrationの管理
 
-共有Supabase DBのmigration正本は `shared-supabase-db/supabase/migrations/`。price-memoのDB契約正本は `db-contracts/price-memo.json`。price-memo側はmigrationを保持せず、DBへのpushも行わない。現行Writer経路はreceipt-managerが保持する。
+共有Supabase DBのmigration正本は `shared-supabase-db/supabase/migrations/`。price-memoのDB契約正本は `db-contracts/price-memo.json`。price-memo側はmigrationを保持・適用せず、DBへのpushも行わない。適用が必要な場合はshared-supabase-dbの対象環境向けWriter workflowを使用する。
+
+本番deploy workflowはshared-supabase-dbのReader actionを使い、price-memoのデプロイ対象commitに対応するDB契約、Prod DB identity、shared migration履歴の`IN_SYNC`をbuild前に検証する。検証に失敗した場合はimage build/pushとdeployを行わない。詳細なEnvironment設定、実行順序、失敗時の確認手順は [project-overview.md](./project-overview.md#73-本番docker-compose--github-actions) を参照する。
