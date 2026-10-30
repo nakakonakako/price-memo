@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
@@ -39,8 +42,41 @@ jobs:
       - name: Run quality checks
         run: npm run check
 
-  build-and-push:
+  production-db-preflight:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: quality
+    runs-on: ubuntu-latest
+    environment: production-db-check
+    permissions:
+      contents: read
+
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Git and PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends git postgresql-client
+          command -v python3
+          command -v git
+          command -v psql
+
+      - name: Verify production DB compatibility with the deployed app revision
+        uses: nakakonakako/shared-supabase-db/.github/actions/consumer-production-db-check@c06454f78cc3db27964829fd0e357cbb0d3536f8
+        with:
+          app-id: price-memo
+          app-commit-sha: ${{ github.sha }}
+          reader-pooler-host: ${{ vars.PROD_SUPABASE_POOLER_HOST }}
+          reader-project-ref: ${{ vars.PROD_SUPABASE_PROJECT_REF }}
+          reader-username: migration_preflight_login.${{ vars.PROD_SUPABASE_PROJECT_REF }}
+          reader-password: ${{ secrets.MIGRATION_READER_PASSWORD }}
+
+  build-and-push:
+    needs: [quality, production-db-preflight]
+    if: ${{ needs.quality.result == 'success' && needs.production-db-preflight.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -85,11 +121,20 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
 
   deploy:
-    needs: build-and-push
+    needs: [quality, production-db-preflight, build-and-push]
+    if: ${{ needs.quality.result == 'success' && needs.production-db-preflight.result == 'success' && needs.build-and-push.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify this deployment is still the latest main commit
+        run: python3 scripts/assert_latest_deploy_main.py
 
       - name: SCP Transfer
         uses: appleboy/scp-action@v0.1.7
@@ -99,6 +144,9 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           source: "docker-compose.production.yml, nginx-config"
           target: "~/price-memo"
+
+      - name: Recheck current main immediately before deployment
+        run: python3 scripts/assert_latest_deploy_main.py
 
       - name: SSH Deploy
         uses: appleboy/ssh-action@v1.0.3
