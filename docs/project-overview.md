@@ -62,7 +62,7 @@
 | 決定 | 内容 |
 |------|------|
 | A と B | **同一 Supabase プロジェクト**（既存の Dev / Prod 各1）。B 用テーブルを足す |
-| マイグレーション | 共通 DB migration の正本・適用主体は `shared-supabase-db`。アプリ別DB契約の正本は各アプリの `db-contracts/`。各環境のReader/Writer workflow設定に従う |
+| マイグレーション | migration inventoryの正本は `shared-supabase-db/supabase/migrations/`。本番Writerの運用移管は未完了で、receipt-managerの旧Writer workflowが残る。旧Writerを無効化するまでshared Prod Writerによる実適用を開始しない。price-memoはmigrationを適用しない。アプリ別DB契約の正本は各アプリの `db-contracts/` |
 | Auth | **共有**（同じ `auth.users` / 同じ Google OAuth）。アプリ入り口（URL・SPA）は分けるが、アカウントは分けない |
 | 将来の無関係アプリ | Supabase 枠は増やさない。VPS 上の **PocketBase** などで別運営 |
 
@@ -98,7 +98,7 @@ FastAPI (uvicorn :8001 ※A は :8000) … **CORS は有効化しない**（ク�
   ▼
 Supabase（A の Dev または Prod）
   ├── A テーブル（receipts 等）… B は参照のみ
-  └── B テーブル（folders 等）… shared-supabase-db の migration で管理
+  └── B テーブル（folders 等）… migration inventoryの正本は shared-supabase-db
 ```
 
 | 層 | パス | 役割 |
@@ -159,7 +159,7 @@ Supabase（A の Dev または Prod）
 
 ## 5. データモデル
 
-B 固有テーブル。RLS・`user_id` 分離。マイグレーションは shared-supabase-db で管理する（下表）。price-memo の必要DB契約は `db-contracts/price-memo.json`
+B 固有テーブル。RLS・`user_id` 分離。migration inventoryの正本はshared-supabase-db（下表）。本番Writerの運用移管は未完了で、price-memoはmigrationを適用しない。price-memo の必要DB契約は `db-contracts/price-memo.json`
 
 | テーブル | 概要 | 主なカラム | 備考 |
 |----------|------|------------|------|
@@ -229,7 +229,7 @@ cd .. && npm run dev
 - Cursor / Playwright MCP のローカル UI 確認は `npm run devserver:ensure` で `:8001` / `:5273` を起動し、ブラウザーは `http://localhost:5273` に固定する（Vite `strictPort`）。同一worktreeの起動時Dev検証記録、PID/PGID/session/starttime、worktree識別子、実listener所有者、現在の接続設定を照合できた完全なセッションだけ再利用する。起動直後の所有権未確認プロセスは検証前記録として扱い、所有者を証明できない場合はkillせず記録を保持して停止する。停止時はpidfd取得・シグナル送信の失敗を成功扱いせず、プロセス群とポートの消滅を確認できた場合だけセッション記録を削除する。所有者不明・別worktree・旧形式・片側停止・接続設定変更時は再利用せず、別プロセスを終了しない。ensure/stopは全worktree共通ロックで直列化し、通常の `npm run dev:playwright` は `:5273` / `:8001` を使い、別の競合検査・プロセス終了管理を行う
 - Playwright MCP はユーザー home 配下の共通 persistent profile を利用する。初回 Google OAuth はブラウザー上で手動実施し、main checkout と worktree からの確認は逐次実行する。詳細は [cursor-delegation.md](./cursor-delegation.md)
 - Playwright MCP / Playwright / Chromium revision は `.cursor/playwright-mcp.sh` で固定し、browser binary はユーザー共通 cache を利用する。更新手順は [cursor-delegation.md](./cursor-delegation.md)
-- DB: A と同じ Supabase プロジェクトを利用。schema migration は `shared-supabase-db` が管理し、price-memoはmigrationを保持・適用しない
+- DB: A と同じ Supabase プロジェクトを利用。migration inventoryの正本は `shared-supabase-db`。本番Writerの運用移管は未完了で、receipt-managerの旧Writer workflowが残る。price-memoはmigrationを保持・適用しない
 
 ### 7.2 環境変数
 
@@ -260,13 +260,13 @@ A（`receipt-manager`）と同型。
 | Deploy | SCP → `~/price-memo`、compose pull & up |
 | Network | frontend はアプリ専用 `default` と外部 `edge`、backend は `default` のみ。前段 `edge-proxy` が Docker DNS の `price-frontend:80` に接続 |
 | Host ポート | frontend / backend ともに公開しない。前段 reverse proxy は外部 `edge` network 経由で接続 |
-| Migration | **本パイプラインではしない**。適用が必要な場合はshared-supabase-dbのWriter workflowを使用 |
+| Migration | **本パイプラインではしない**。migration inventoryの正本はshared-supabase-db。本番Writerの運用移管は未完了で、receipt-managerの旧Writer workflowが残る。旧Writerを無効化するまでshared Prod Writerによる実適用を開始しない |
 
-DBゲートはshared-supabase-dbのcomposite actionを完全SHA固定で呼び、デプロイ対象commitのprice-memo契約、Prod DB identity、shared migration履歴`IN_SYNC`をReaderで検証する。不一致・接続/設定エラー・migration履歴が`IN_SYNC`以外ならbuildとdeployへ進まない。actionはmigration適用や業務データ読取をしない。
+DBゲートはshared-supabase-dbのcomposite actionを完全SHA固定で呼び、デプロイ対象commitのprice-memo契約、Prod DB identity、shared migration履歴`IN_SYNC`をReaderで検証する。不一致・接続/設定エラー・migration履歴が`IN_SYNC`以外ならbuildとdeployへ進まない。actionはmigration適用や業務データ読取をしない。migration inventoryの正本がsharedにあることと、本番Writerの運用移管は別の状態であり、Writer移管は未完了。receipt-managerの旧Writerを無効化するまではshared Prod Writerによる実適用を開始しない。price-memo自身はmigrationを保持・適用しない。
 
 本番DBゲートを有効にする前に、GitHub Settings → Environmentsで`production-db-check`を作成し、deployment branchを`main`だけに制限する。Environment Variablesには`PROD_SUPABASE_POOLER_HOST`（本番Supabaseのpooler hostname）と`PROD_SUPABASE_PROJECT_REF`（`fsrbddgyysssqzyullrc`）、Environment Secretには専用Reader LOGIN `migration_preflight_login.<project-ref>`の`MIGRATION_READER_PASSWORD`を設定する。Writer資格情報は登録・参照しない。Reader LOGINとSecretの対応、pooler接続設定、identity markerは別途承認された運用記録で確認し、値をworkflow logへ出さない。EnvironmentのRequired reviewersを利用する場合は既存の本番承認運用に従って設定する。初回のEnvironment設定後、main pushは検証から通常の自動デプロイまで継続するため、マージ前に設定とReader接続準備を完了する。未設定ならDBゲートがfail-closedし、build/deployはskipされる。
 
-actionを更新する場合は、shared-supabase-dbへの変更がmainにマージされた後、そのmerge commitの完全40桁SHAでdeploy workflowの`uses`を更新してPR CIで検証する。検証失敗時はworkflow runの`production-db-check`ログを上から確認し、契約取得/形式、Reader設定不足、DB identity marker、shared migration履歴（`IN_SYNC`必須）、price-memo契約の`STATIC PASS`のどの段階かを切り分ける。DB契約不一致はprice-memo側の契約とアプリcommitを確認し、履歴不一致はshared側のread-only migration checkを使う。migration適用が必要ならshared-supabase-dbの対象環境向けWriter workflowだけを使い、price-memoのdeploy workflowやローカルSupabase CLIから適用しない。資格情報値をログへ貼り付けたり、price-memoからWriter接続を試したりしない。
+actionを更新する場合は、shared-supabase-dbへの変更がmainにマージされた後、そのmerge commitの完全40桁SHAでdeploy workflowの`uses`を更新してPR CIで検証する。検証失敗時はworkflow runの`production-db-preflight`ログを上から確認し、契約取得/形式、Reader設定不足、DB identity marker、shared migration履歴（`IN_SYNC`必須）、price-memo契約の`STATIC PASS`のどの段階かを切り分ける。DB契約不一致はprice-memo側の契約とアプリcommitを確認し、履歴不一致はshared側のread-only migration checkを使う。本番Writerの運用移管は未完了で、receipt-managerの旧Writer workflowが残っている。旧Writerの無効化と運用移管が完了するまではshared Prod Writerによる実適用を開始しない。price-memoからmigrationを適用せず、資格情報値をログへ貼り付けたり、price-memoからWriter接続を試したりしない。
 
 必要な GitHub Secrets（A と共用できるものは同じ値でよい）:
 
@@ -283,8 +283,8 @@ read-only の GPT-6 Sol `sol_supervisor` subagent へ早期エスカレーショ
 最終判断と実装委譲は Luna が行う。通常実装は Cursor CLI worker に
 `scripts/delegate-cursor.sh` で委譲する。詳細は
 [cursor-delegation.md](./cursor-delegation.md) を参照。price-memo の shared
-Supabase migration は作成・保持・適用せず、正本は
-`shared-supabase-db/supabase/migrations/` を正本とする。price-memo はmigrationを保持せず、契約本文を `db-contracts/price-memo.json` に置く。
+Supabase migration は作成・保持・適用しない。migration inventoryの正本は
+`shared-supabase-db/supabase/migrations/`。本番Writerの運用移管は未完了で、receipt-managerの旧Writerが残るため、無効化前にshared Prod Writerによる実適用を開始しない。契約本文は `db-contracts/price-memo.json` に置く。
 
 ---
 
@@ -303,7 +303,7 @@ price-memo/
 ├── nginx-config/          # 本番 SPA + /api プロキシ
 ├── docker-compose.production.yml
 ├── .github/workflows/deploy.yml
-├── supabase/              # Supabase CLI 設定（migration 正本・適用は shared-supabase-db）
+├── supabase/              # Supabase CLI 設定（migration inventoryの正本は shared-supabase-db）
 ├── docs/
 └── package.json           # concurrently で FE+BE
 ```
