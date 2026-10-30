@@ -42,8 +42,9 @@ jobs:
       - name: Run quality checks
         run: npm run check
 
-  production-db-check:
+  production-db-preflight:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: quality
     runs-on: ubuntu-latest
     environment: production-db-check
     permissions:
@@ -74,8 +75,8 @@ jobs:
           reader-password: ${{ secrets.MIGRATION_READER_PASSWORD }}
 
   build-and-push:
-    needs: [quality, production-db-check]
-    if: ${{ needs.quality.result == 'success' && needs.production-db-check.result == 'success' }}
+    needs: [quality, production-db-preflight]
+    if: ${{ needs.quality.result == 'success' && needs.production-db-preflight.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -120,8 +121,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
 
   deploy:
-    needs: [quality, production-db-check, build-and-push]
-    if: ${{ needs.quality.result == 'success' && needs.production-db-check.result == 'success' && needs.build-and-push.result == 'success' }}
+    needs: [quality, production-db-preflight, build-and-push]
+    if: ${{ needs.quality.result == 'success' && needs.production-db-preflight.result == 'success' && needs.build-and-push.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout

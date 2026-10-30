@@ -24,7 +24,7 @@ class ProductionDeployGateTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.workflow = (ROOT / ".github/workflows/deploy.yml").read_text()
-        cls.preflight = cls.workflow.split("  production-db-check:\n", 1)[1].split(
+        cls.preflight = cls.workflow.split("  production-db-preflight:\n", 1)[1].split(
             "\n  build-and-push:", 1
         )[0]
         cls.build = cls.workflow.split("  build-and-push:\n", 1)[1].split(
@@ -35,45 +35,17 @@ class ProductionDeployGateTests(unittest.TestCase):
     def test_workflow_preserves_main_push_and_requires_all_gate_results(self) -> None:
         self.assertIn("  push:\n    branches:\n      - main", self.workflow)
         self.assertNotIn("pull_request:", self.workflow)
-        self.assertIn("needs: [quality, production-db-check]", self.build)
+        self.assertIn("needs: quality", self.preflight)
+        self.assertIn("needs: [quality, production-db-preflight]", self.build)
         self.assertIn("needs.quality.result == 'success'", self.build)
-        self.assertIn("needs.production-db-check.result == 'success'", self.build)
+        self.assertIn("needs.production-db-preflight.result == 'success'", self.build)
         self.assertIn(
-            "needs: [quality, production-db-check, build-and-push]", self.deploy
+            "needs: [quality, production-db-preflight, build-and-push]", self.deploy
         )
-        for dependency in ("quality", "production-db-check", "build-and-push"):
+        for dependency in ("quality", "production-db-preflight", "build-and-push"):
             self.assertIn(f"needs.{dependency}.result == 'success'", self.deploy)
         self.assertNotIn("always()", self.build + self.deploy)
         self.assertNotIn("continue-on-error", self.build + self.deploy)
-
-        db_gate_outcomes = {
-            "STATIC PASS with IN_SYNC and matching identity": "success",
-            "contract mismatch": "failure",
-            "migration history mismatch": "failure",
-            "identity mismatch": "failure",
-            "missing Reader credential": "failure",
-            "connection or verification error": "failure",
-            "verification job cancelled": "cancelled",
-            "verification job skipped": "skipped",
-        }
-        statuses = ("success", "failure", "cancelled", "skipped")
-        for outcome, db_check in db_gate_outcomes.items():
-            with self.subTest(outcome=outcome):
-                self.assertEqual(db_check == "success", db_check == "success")
-                self.assertEqual(
-                    db_check == "success",
-                    all(value == "success" for value in ("success", db_check)),
-                )
-        for quality in statuses:
-            for db_check in statuses:
-                build_allowed = quality == "success" and db_check == "success"
-                self.assertEqual(build_allowed, quality == db_check == "success")
-                for build in statuses:
-                    deploy_allowed = quality == db_check == build == "success"
-                    self.assertEqual(
-                        deploy_allowed,
-                        all(value == "success" for value in (quality, db_check, build)),
-                    )
 
     def test_reader_action_is_pinned_and_uses_only_price_memo_reader_inputs(
         self,

@@ -251,7 +251,7 @@ cd .. && npm run dev
 
 A（`receipt-manager`）と同型。
 
-`main` 向け Pull Request では `.github/workflows/ci.yml` が `npm run check` を実行する。本番 Secrets、Docker image の push、デプロイ、DB 接続・migration は行わない。本番の `.github/workflows/deploy.yml` は`main` push時にqualityと`production-db-check`を並行実行し、両方の成功後だけimageをbuild/pushする。deployはquality、DB検証、buildの全成功を要求し、SCP直前にも対象SHAが最新mainであることを確認する。
+`main` 向け Pull Request では `.github/workflows/ci.yml` が `npm run check` を実行する。本番 Secrets、Docker image の push、デプロイ、DB 接続・migration は行わない。本番の `.github/workflows/deploy.yml` は`main` push時にquality成功後、`production-db-preflight`を実行し、両方の成功後だけimageをbuild/pushする。deployはquality、DB検証、buildの全成功を要求し、SCP直前にも対象SHAが最新mainであることを確認する。
 
 | 項目 | 内容 |
 |------|------|
