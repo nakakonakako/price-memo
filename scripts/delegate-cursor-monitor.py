@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 from datetime import datetime, timezone
+import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -308,6 +310,41 @@ def save_failure_record(data: dict[str, object]) -> bool:
             os.close(fd)
 
 
+def acquire_workspace_lock(checkout: Path) -> int:
+    """Hold a per-canonical-workspace advisory lock for the worker lifetime."""
+    canonical = checkout.resolve(strict=True)
+    if not canonical.is_dir():
+        raise OSError("workspace is not a directory")
+    identity = hashlib.sha256(os.fsencode(canonical)).hexdigest()
+    state_root = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state")))
+    state_dir = state_root / "price-memo" / "delegate-cursor"
+    dir_fd = _open_state_directory(state_dir)
+    lock_fd: int | None = None
+    try:
+        name = f"workspace-lock-{identity}.lock"
+        flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+        lock_fd = os.open(name, flags, 0o600, dir_fd=dir_fd)
+        info = os.fstat(lock_fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) != 0o600 or info.st_nlink != 1):
+            raise OSError("unsafe workspace lock file")
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise WorkspaceAlreadyLocked from exc
+        return lock_fd
+    except Exception:
+        if lock_fd is not None:
+            os.close(lock_fd)
+        raise
+    finally:
+        os.close(dir_fd)
+
+
+class WorkspaceAlreadyLocked(Exception):
+    """Another delegate currently owns the workspace lock."""
+
+
 class StreamMonitor:
     def __init__(self, args: argparse.Namespace, command: list[str]) -> None:
         self.args = args
@@ -337,6 +374,7 @@ class StreamMonitor:
         self._stderr_discard = False
         self._child: subprocess.Popen[bytes] | None = None
         self.received_signal: int | None = None
+        self._workspace_lock_fd: int | None = None
 
     def _print_progress(self, line: str) -> None:
         if self.progress_lines >= MAX_PROGRESS_LINES:
@@ -471,6 +509,14 @@ class StreamMonitor:
 
     def run(self) -> int:
         global interrupted_signal
+        try:
+            self._workspace_lock_fd = acquire_workspace_lock(Path(self.args.checkout))
+        except WorkspaceAlreadyLocked:
+            print("[delegate-cursor] duplicate delegation rejected for this workspace", flush=True)
+            return 73
+        except OSError:
+            print("[delegate-cursor] workspace lock unavailable or unsafe; Cursor was not started", flush=True)
+            return 73
         print(f"[delegate-cursor] started_at: {self.started_at}", flush=True)
         print(f"[delegate-cursor] route: {self.args.route}", flush=True)
         print(f"[delegate-cursor] tier/model: {self.args.tier}/{self.args.model}", flush=True)
@@ -588,6 +634,9 @@ class StreamMonitor:
                 selector.close()
             for sig, handler in old_handlers.items():
                 signal.signal(sig, handler)
+            if self._workspace_lock_fd is not None:
+                os.close(self._workspace_lock_fd)
+                self._workspace_lock_fd = None
 
 
 def main() -> int:
