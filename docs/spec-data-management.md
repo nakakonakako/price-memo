@@ -1,6 +1,6 @@
 # 仕様: データ管理
 
-最終更新: 2026-10-16
+最終更新: 2026-10-31
 
 関連: [project-overview.md](./project-overview.md) / [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md)
 
@@ -32,6 +32,10 @@
 
 ## 4. migrationの管理
 
-共有Supabase DBのmigration inventoryの正本は `shared-supabase-db/supabase/migrations/`。これはmigration本文と履歴を照合する基準であり、本番Writerの運用移管完了を意味しない。receipt-managerの本番deploy.ymlには旧Writer apply jobが残っており、運用移管は未完了。旧Writerを無効化するまではshared-supabase-dbのProd Writerによる実適用を開始しない。price-memo側はmigrationを保持・適用せず、DBへのpushも行わない。
+共有DBのmigration inventoryとSQLの正本は `shared-supabase-db/supabase/migrations/`、price-memoのDB契約正本は `db-contracts/price-memo.json`。hosted Dev/Prodへのmigration適用は、shared-supabase-dbの保護された手動Writer workflowだけが担当する。receipt-managerに旧Writer経路は残っておらず、price-memoにもhosted DB Writer経路はない。price-memo側はmigrationを作成・保持・適用せず、DBへのpushも行わない。
 
-本番deploy workflowはshared-supabase-dbのReader actionを使い、price-memoのデプロイ対象commitに対応するDB契約、Prod DB identity、shared migration履歴の`IN_SYNC`をbuild前に検証する。検証に失敗した場合はimage build/pushとdeployを行わない。詳細なEnvironment設定、実行順序、失敗時の確認手順は [project-overview.md](./project-overview.md#73-本番docker-compose--github-actions) を参照する。
+Dev/Prod Writer資格情報のread-only接続・identity検証は成功済みだが、保護Writer workflowによる`PENDING` migrationの実適用は未検証。Writerの接続確認はmigration適用の証明ではない。
+
+本番deploy workflowはshared-supabase-dbのReader gateを使い、price-memoのデプロイ対象commitに対応するDB契約、Prod DB identity、shared migration履歴の`IN_SYNC`をbuild前に検証する。検証に失敗した場合はimage build/pushとdeployを行わない。このgateはReader専用で、migration適用や業務データ読取を行わない。詳細なEnvironment設定、実行順序、失敗時の確認手順は [project-overview.md](./project-overview.md#73-本番docker-compose--github-actions) を参照する。
+
+ローカルSQL検証には隔離された使い捨てPostgreSQL database/clusterを使用し、共有DBやhosted DBには接続しない。
