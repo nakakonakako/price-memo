@@ -197,7 +197,7 @@ echo "[delegate-cursor] repository: $(basename "$repo_root")" >&2
 echo "[delegate-cursor] route: $route" >&2
 echo "[delegate-cursor] tier: $tier" >&2
 echo "[delegate-cursor] model: $model" >&2
-cmd=(agent --approve-mcps --trust --model "$model")
+cmd=(agent --trust --model "$model")
 if [[ -n "$workspace" ]]; then
   cmd+=(--workspace "$workspace")
 fi

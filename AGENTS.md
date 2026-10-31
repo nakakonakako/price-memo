@@ -182,6 +182,13 @@ one MCP browser may use the profile at a time.
 
 ### MCP and authentication policy
 
+- `scripts/delegate-cursor.sh` must not pass `--approve-mcps` or automatically
+  approve MCP servers. If the Cursor CLI reports missing approval, stop and ask
+  the supervisor to have the operator review and run `agent mcp enable playwright`
+  from the price-memo repository, then retry. This approves only
+  the named project MCP in Cursor's local approved-server list; do not enable
+  other servers or edit global MCP configuration. MCP approval is separate
+  from `--trust`, sandbox settings, and the shell command allowlist.
 - If Playwright MCP tools are unavailable, repair the MCP environment and retry
   the official path. Do not fall back to another browser route.
 - Never automate Google OAuth. Never read, inspect, print, copy into the
