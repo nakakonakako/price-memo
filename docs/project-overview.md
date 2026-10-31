@@ -333,6 +333,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-31 | worktree環境リンク検証をreceipt-managerと共通の直接絶対symlink・全親階層検査へ統一 |
 | 2026-10-31 | worktree依存セットアップ前・完了後とCursor起動直前に開発環境リンクを検証 |
 | 2026-10-31 | shared-supabase-dbをmigration正本・唯一のhosted Writer経路として明記し、Reader deploy gateと未検証のPENDING実適用状態を反映 |
 | 2026-10-22 | Cursor検証サーバーの起動直後プロセスを追跡し、所有権未確認プロセスのkill禁止と停止完了確認を強化 |

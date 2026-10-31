@@ -379,6 +379,27 @@ fi
 grep -Fq 'Unexpected .env-related path' "$test_root/delegate-invalid-env.log"
 rm "$unexpected_env"
 
+managed_link="$delegate_workspace/frontend/.env"
+environment_alias="$test_root/environment-alias"
+ln -s "$fixture_config/frontend/.env" "$environment_alias"
+rm "$managed_link"
+ln -s "$environment_alias" "$managed_link"
+worker_started_indirect_link="$test_root/worker-started-indirect-link"
+if WORKER_STARTED_FILE="$worker_started_indirect_link" "$source_root/scripts/delegate-cursor.sh" \
+  --prompt 'indirect environment link fixture' --workspace "$delegate_workspace" \
+  >"$test_root/delegate-indirect-env.log" 2>&1; then
+  echo "Expected Cursor delegation to reject an indirect environment link." >&2
+  exit 1
+fi
+[[ ! -e "$worker_started_indirect_link" ]]
+if grep -Fq 'TEST_SECRET_MARKER=fixture-only' "$test_root/delegate-indirect-env.log"; then
+  echo "Environment values must not be printed during delegation validation." >&2
+  exit 1
+fi
+grep -Fq 'does not directly target selected settings' "$test_root/delegate-indirect-env.log"
+rm "$managed_link"
+ln -s "$fixture_config/frontend/.env" "$managed_link"
+
 real_worktree_script="$fixture_repo/scripts/worktree-real.sh"
 mv "$fixture_repo/scripts/worktree.sh" "$real_worktree_script"
 cat > "$fixture_repo/scripts/worktree.sh" <<'EOF'
