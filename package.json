@@ -9,7 +9,7 @@
     "devserver:status": "bash scripts/cursor-devserver.sh status",
     "worktree": "bash scripts/worktree.sh",
     "check": "npm run check:worktree && npm run check:frontend && npm run check:backend",
-    "check:worktree": "bash scripts/test-worktree.sh && python3 scripts/test-delegate-cursor-monitor.py && bash scripts/test-dev-env.sh && python3 scripts/test-dev-supervisor.py && python3 scripts/test-cursor-devserver.py",
+    "check:worktree": "bash scripts/test-worktree.sh && python3 scripts/test-worktree-env.py && python3 scripts/test-delegate-cursor-monitor.py && bash scripts/test-dev-env.sh && python3 scripts/test-dev-supervisor.py && python3 scripts/test-cursor-devserver.py",
     "check:frontend": "npm run lint --prefix frontend && npm run test --prefix frontend && npm run build --prefix frontend",
     "check:backend": "uv run --directory backend ruff check . && uv run --directory backend ruff format --check . && uv run --directory backend python -m unittest discover -s tests -v",
     "format": "npm run format --prefix frontend && uv run --directory backend ruff format ."

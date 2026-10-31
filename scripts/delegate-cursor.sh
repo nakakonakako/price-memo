@@ -114,14 +114,14 @@ origin_root="$repo_root"
 if [[ -n "$worktree" ]]; then
   repo_name="$(basename "$(dirname "$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)")")"
   workspace="$HOME/worktrees/$repo_name/$worktree"
-  "$repo_root/scripts/worktree.sh" create "$worktree" --branch "codex/$worktree" --base origin/main
+  "$repo_root/scripts/worktree.sh" create "$worktree" --branch "codex/$worktree" --base origin/main --environment development
 elif [[ -n "$workspace" ]]; then
   if [[ ! -d "$workspace" ]]; then
     echo "Existing worktree not found: $workspace" >&2
     exit 2
   fi
   workspace="$(cd "$workspace" && pwd -P)"
-  "$repo_root/scripts/worktree.sh" reuse "$workspace"
+  "$repo_root/scripts/worktree.sh" reuse "$workspace" --environment development
 fi
 if [[ -n "$workspace" ]]; then
   origin_common="$(git -C "$origin_root" rev-parse --path-format=absolute --git-common-dir)"
@@ -134,6 +134,9 @@ if [[ -n "$workspace" ]]; then
 fi
 if [[ -n "$workspace" ]]; then
   workspace="$(cd "$workspace" && pwd -P)"
+  monitor_workspace="$workspace"
+else
+  monitor_workspace="$repo_root"
 fi
 repo_root="$(cd "$repo_root" && pwd -P)"
 cd "$repo_root"
@@ -238,4 +241,7 @@ monitor_args=(
 if [[ -n "$workspace" ]]; then
   monitor_args+=(--workspace-mode)
 fi
+# Validate the actual Cursor workspace immediately before starting the
+# monitored subprocess. This check reads filesystem metadata only.
+"$origin_root/scripts/worktree.sh" validate-env "$monitor_workspace" --environment development
 exec "${monitor_args[@]}" -- "${cmd[@]}"

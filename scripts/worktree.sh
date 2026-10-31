@@ -8,6 +8,7 @@ Usage:
   scripts/worktree.sh create <task-name> --branch <branch> [--base <ref>] [--environment <name>] [--no-setup]
   scripts/worktree.sh reuse <path> [--environment <name>] [--no-setup]
   scripts/worktree.sh setup [path] [--environment <name>] [--env-only]
+  scripts/worktree.sh validate-env <path> [--environment <name>]
   scripts/worktree.sh remove <path>
 
 Worktrees are stored under ~/worktrees/<repository-name>/<task-name>.
@@ -138,10 +139,14 @@ setup_worktree() {
   done
   validate_environment_name "$environment_name"
   target_path="$(canonical_worktree "$target_path")"
+  python3 "$script_directory/worktree-env-validate.py" pre "$target_path" \
+    --environment "$environment_name" --repository "$repo_name"
   if [[ "$run_deps" -eq 1 ]]; then
     setup_dependencies "$target_path"
   fi
   setup_environment "$target_path"
+  python3 "$script_directory/worktree-env-validate.py" strict "$target_path" \
+    --environment "$environment_name" --repository "$repo_name"
 }
 
 command_name="${1:-}"
@@ -244,6 +249,21 @@ case "$command_name" in
       shift
     fi
     setup_worktree "$target_path" "$@"
+    ;;
+  validate-env)
+    [[ $# -ge 1 ]] || die "validate-env requires a worktree path."
+    target_path="$1"
+    shift
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --environment) environment_name="${2:?missing value for --environment}"; shift 2 ;;
+        *) die "Unknown validate-env option: $1" ;;
+      esac
+    done
+    validate_environment_name "$environment_name"
+    target_path="$(canonical_worktree "$target_path")"
+    python3 "$script_directory/worktree-env-validate.py" strict "$target_path" \
+      --environment "$environment_name" --repository "$repo_name"
     ;;
   remove)
     [[ $# -eq 1 ]] || die "remove requires exactly one path."
