@@ -87,11 +87,8 @@ def validate(mode: str, workspace_arg: Path, environment: str, repository: str) 
         workspace = workspace_arg.resolve(strict=True)
     except (OSError, RuntimeError):
         raise ValidationError("Workspace path could not be resolved.") from None
-    try:
-        if not workspace.is_dir():
-            raise ValidationError("Workspace path is not a directory.")
-    except OSError:
-        raise ValidationError("Workspace path could not be inspected.") from None
+    if not workspace.is_dir():
+        raise ValidationError("Workspace path is not a directory.")
 
     home = Path(os.path.abspath(Path.home()))
     config = validate_environment_config(home, repository, environment)
@@ -104,14 +101,14 @@ def validate(mode: str, workspace_arg: Path, environment: str, repository: str) 
         except OSError:
             raise ValidationError("Cannot inspect workspace dotenv lookup directory.") from None
         for entry in entries:
-            if entry.name.startswith(".env"):
-                relative = entry.relative_to(workspace).as_posix()
-                if relative not in allowed:
-                    raise ValidationError(f"Unexpected .env-related path in workspace: {relative}")
+            if not entry.name.startswith(".env"):
+                continue
+            relative = entry.relative_to(workspace).as_posix()
+            if relative not in allowed:
+                raise ValidationError(f"Unexpected .env-related path in workspace: {relative}")
 
-    config_path = config or home / ".config" / repository / environment
     for relative in MANAGED:
-        source = config_path / relative
+        source = (config or (home / ".config" / repository / environment)) / relative
         target = workspace / relative
 
         if config is not None:
@@ -188,11 +185,10 @@ def main() -> int:
 
     if not args.environment.replace("-", "").replace("_", "").isalnum():
         fail("Invalid environment name.")
-    repository = args.repository or args.workspace.name
-    if not repository.replace("-", "").replace("_", "").isalnum():
+    if not args.repository or not args.repository.replace("-", "").replace("_", "").isalnum():
         fail("Invalid repository name.")
     try:
-        validate(args.mode, args.workspace, args.environment, repository)
+        validate(args.mode, args.workspace, args.environment, args.repository)
     except ValidationError as error:
         fail(str(error))
     except OSError:

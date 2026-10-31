@@ -46,7 +46,16 @@ class WorktreeEnvironmentValidationTests(unittest.TestCase):
 
     def validate(self, mode: str, expected: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
-            ["python3", str(VALIDATOR), mode, str(self.workspace), "--environment", "development"],
+            [
+                "python3",
+                str(VALIDATOR),
+                mode,
+                str(self.workspace),
+                "--environment",
+                "development",
+                "--repository",
+                "price-memo",
+            ],
             env=self.environment,
             text=True,
             capture_output=True,
