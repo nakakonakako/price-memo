@@ -199,6 +199,11 @@ servers yourself.
 
 `scripts/delegate-cursor.sh --worktree <task-name>` creates or reuses the
 standard Git worktree and invokes Cursor with `--workspace <absolute-path>`.
+Worktree operations, environment-link validation, and monitor execution use the
+physical absolute path of the checkout that invoked the delegate. The monitor
+locks and reports the canonical path of the actual worker workspace. This
+remains true when the invoking checkout is a non-main worktree; choosing the
+harness source does not change the existing worktree base policy.
 Freshness of `origin/main` for new branches is handled only by
 `scripts/worktree.sh create` (default `--base origin/main`); the delegate script
 does not fetch. Existing worktrees are reused without fetch or branch changes.

@@ -90,10 +90,20 @@ delegation is inconvenient.
 
 ### Delegation run evidence
 
-`scripts/delegate-cursor.sh` records the selected route/tier/model and UTC start
-time before launching Cursor with `agent --trust` by default. With `--no-trust`,
-the `--trust` argument is omitted. It passes
-`stream-json` directly to `scripts/delegate-cursor-monitor.py`; raw stdout,
+`scripts/delegate-cursor.sh` captures the invoking checkout's physical absolute
+path as `origin_root` before selecting a worker workspace. Worktree creation
+and reuse, final environment-link validation, and monitor code all come from
+that checkout, including when it is itself a non-main worktree. The harness
+does not switch to or force-run the latest-main scripts; fresh worker-worktree
+base selection remains the existing `scripts/worktree.sh` policy. Cursor still
+receives `--workspace` for a selected worker worktree, while the monitor's
+`--checkout` is the canonical absolute path Cursor actually edits. For direct
+checkout runs those paths both identify `origin_root`.
+
+The delegate records the selected route/tier/model and UTC start time before
+launching Cursor with `agent --trust` by default. With `--no-trust`, the
+`--trust` argument is omitted. It runs the origin checkout's
+`scripts/delegate-cursor-monitor.py`; raw stdout,
 stderr, prompts, tool arguments/results, and file contents are not relayed or
 persisted. The monitor displays bounded event types, tool categories and
 phases, timing, process/result status, byte counts, and fixed error categories.

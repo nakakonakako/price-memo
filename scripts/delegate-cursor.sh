@@ -127,8 +127,8 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "Not inside a Git repository." >&2
   exit 2
 }
-origin_root="$repo_root"
-repo_root="$(cd "$repo_root" && pwd -P)"
+origin_root="$(cd "$repo_root" && pwd -P)"
+repo_root="$origin_root"
 cd "$repo_root"
 
 if [[ -n "$task_file" ]]; then
@@ -147,14 +147,14 @@ fi
 if [[ -n "$worktree" ]]; then
   repo_name="$(basename "$(dirname "$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)")")"
   workspace="$HOME/worktrees/$repo_name/$worktree"
-  "$repo_root/scripts/worktree.sh" create "$worktree" --branch "codex/$worktree" --base origin/main --environment development
+  "$origin_root/scripts/worktree.sh" create "$worktree" --branch "codex/$worktree" --base origin/main --environment development
 elif [[ -n "$workspace" ]]; then
   if [[ ! -d "$workspace" ]]; then
     echo "Existing worktree not found: $workspace" >&2
     exit 2
   fi
   workspace="$(cd "$workspace" && pwd -P)"
-  "$repo_root/scripts/worktree.sh" reuse "$workspace" --environment development
+  "$origin_root/scripts/worktree.sh" reuse "$workspace" --environment development
 fi
 if [[ -n "$workspace" ]]; then
   origin_common="$(git -C "$origin_root" rev-parse --path-format=absolute --git-common-dir)"
@@ -259,8 +259,8 @@ fi
 cmd+=(--output-format stream-json -p "$full_prompt")
 
 monitor_args=(
-  python3 "$repo_root/scripts/delegate-cursor-monitor.py"
-  --checkout "$repo_root"
+  python3 "$origin_root/scripts/delegate-cursor-monitor.py"
+  --checkout "$monitor_workspace"
   --route "$route"
   --tier "$tier"
   --model "$model"

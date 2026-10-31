@@ -333,6 +333,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-10-31 | Cursor委譲元のハーネスとWorker対象workspaceを分離し、monitorを委譲元checkoutから実行 |
 | 2026-10-31 | Cursor委譲CLIの重複route指定、workspace trust、task-file解決仕様を統一 |
 | 2026-10-31 | worktree環境リンク検証をreceipt-managerと共通の直接絶対symlink・全親階層検査へ統一 |
 | 2026-10-31 | worktree依存セットアップ前・完了後とCursor起動直前に開発環境リンクを検証 |
