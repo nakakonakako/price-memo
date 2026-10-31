@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter
-from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import selectors
 import signal
@@ -18,6 +15,10 @@ import subprocess
 import sys
 import time
 import uuid
+from collections import Counter
+from collections.abc import Iterator
+from datetime import datetime, timezone
+from pathlib import Path
 
 HEARTBEAT_SECONDS = 30
 MAX_EVENT_BYTES = 256 * 1024
@@ -36,14 +37,16 @@ EVENT_SUBTYPES = {
     "completed", "failed", "running",
 }
 TOOL_CATEGORIES = {
-    "shellToolCall": "Shellコマンド", "shell_tool_call": "Shellコマンド",
-    "bashToolCall": "Shellコマンド", "bash_tool_call": "Shellコマンド",
-    "mcpToolCall": "MCPツール", "mcp_tool_call": "MCPツール",
+    "readToolCall": "ファイル読み取り", "read_tool_call": "ファイル読み取り",
     "editToolCall": "ファイル作成・編集", "edit_tool_call": "ファイル作成・編集",
     "writeToolCall": "ファイル作成・編集", "write_tool_call": "ファイル作成・編集",
     "deleteToolCall": "ファイル作成・編集", "delete_tool_call": "ファイル作成・編集",
-    "readToolCall": "ファイル読み取り", "read_tool_call": "ファイル読み取り",
+    "shellToolCall": "Shellコマンド", "shell_tool_call": "Shellコマンド",
+    "bashToolCall": "Shellコマンド", "bash_tool_call": "Shellコマンド",
+    "mcpToolCall": "MCPツール", "mcp_tool_call": "MCPツール",
 }
+TOOL_CATEGORY_PRIORITY = tuple(TOOL_CATEGORIES)
+FAILURE_MARKER_KEYS = {"error", "failure", "failed"}
 
 ERROR_PATTERNS = {
     "resource_exhausted": re.compile(r"resource[_ -]?exhausted|insufficient (?:model )?capacity", re.I),
@@ -117,6 +120,80 @@ def _signal_handler(signum: int, _frame: object) -> None:
     interrupted_signal = signum
 
 
+class BoundedStdoutLines:
+    """Yield newline-delimited records without retaining oversized rows."""
+
+    def __init__(self, max_bytes: int = MAX_EVENT_BYTES) -> None:
+        self.max_bytes = max_bytes
+        self.buffer = bytearray()
+        self.discarding = False
+        self.pending_cr = False
+        self.oversized_lines = 0
+
+    @property
+    def buffered_bytes(self) -> int:
+        return len(self.buffer)
+
+    def feed(self, chunk: bytes) -> Iterator[bytes]:
+        remaining = chunk
+        while remaining:
+            if self.discarding:
+                newline = remaining.find(b"\n")
+                if newline < 0:
+                    return
+                remaining = remaining[newline + 1 :]
+                self.discarding = False
+                continue
+
+            newline = remaining.find(b"\n")
+            end = len(remaining) if newline < 0 else newline
+            segment = remaining[:end]
+            has_newline = newline >= 0
+            if self.pending_cr:
+                if not (has_newline and not segment):
+                    segment = b"\r" + segment
+                self.pending_cr = False
+            if has_newline and segment.endswith(b"\r"):
+                segment = segment[:-1]
+            elif not has_newline and segment.endswith(b"\r"):
+                segment = segment[:-1]
+                self.pending_cr = True
+            if len(self.buffer) + len(segment) > self.max_bytes:
+                self.buffer.clear()
+                self.pending_cr = False
+                self.oversized_lines += 1
+                self.discarding = not has_newline
+                if has_newline:
+                    remaining = remaining[newline + 1 :]
+                    continue
+                return
+
+            self.buffer.extend(segment)
+            if not has_newline:
+                return
+            yield bytes(self.buffer)
+            self.buffer.clear()
+            self.pending_cr = False
+            remaining = remaining[newline + 1 :]
+
+    def finish(self) -> Iterator[bytes]:
+        if self.discarding:
+            self.discarding = False
+            return
+        if self.pending_cr:
+            if len(self.buffer) == self.max_bytes:
+                self.buffer.clear()
+                self.pending_cr = False
+                self.oversized_lines += 1
+                return
+            self.buffer.extend(b"\r")
+            self.pending_cr = False
+        if self.buffer:
+            if self.buffer.strip():
+                yield bytes(self.buffer)
+            self.buffer.clear()
+
+
 def safe_event_name(event: object) -> tuple[str, str | None]:
     if not isinstance(event, dict):
         return "unparsed_output", None
@@ -128,31 +205,78 @@ def safe_event_name(event: object) -> tuple[str, str | None]:
             subtype if isinstance(subtype, str) and subtype in EVENT_SUBTYPES else None)
 
 
-def tool_category(event: dict[str, object]) -> str:
+def _tool_containers(event: dict[str, object]) -> list[dict[str, object]]:
     containers = [event]
-    value = event.get("tool_call", event.get("toolCall"))
-    if isinstance(value, dict):
-        containers.append(value)
-    elif isinstance(value, list):
-        containers.extend(item for item in value if isinstance(item, dict))
-    for container in containers:
-        for key, label in TOOL_CATEGORIES.items():
-            if key in container:
-                return label
+    for key in ("tool_call", "toolCall"):
+        value = event.get(key)
+        if isinstance(value, dict):
+            containers.append(value)
+        elif isinstance(value, list):
+            containers.extend(item for item in value if isinstance(item, dict))
+    return containers
+
+
+def tool_category(event: dict[str, object]) -> str:
+    found = {
+        key
+        for container in _tool_containers(event)
+        for key in container
+        if isinstance(key, str) and key in TOOL_CATEGORIES
+    }
+    for key in TOOL_CATEGORY_PRIORITY:
+        if key in found:
+            return TOOL_CATEGORIES[key]
     return "その他"
 
 
-def tool_phase(event: dict[str, object], subtype: str | None) -> str | None:
-    if event.get("type") != "tool_call" or subtype == "delta":
+def _has_failure_marker(node: object, depth: int = 0, budget: int = 200) -> bool:
+    if budget <= 0 or depth > 8:
+        return False
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if isinstance(key, str) and key in FAILURE_MARKER_KEYS:
+                return True
+            if isinstance(value, (dict, list)) and _has_failure_marker(
+                value, depth + 1, budget - 1
+            ):
+                return True
+    elif isinstance(node, list):
+        for item in node[:50]:
+            if isinstance(item, (dict, list)) and _has_failure_marker(
+                item, depth + 1, budget - 1
+            ):
+                return True
+    return False
+
+
+def tool_payload_failed(event: dict[str, object]) -> bool:
+    if event.get("is_error") is True:
+        return True
+    return any(
+        key in event and _has_failure_marker(event.get(key))
+        for key in ("tool_call", "toolCall")
+    )
+
+
+def tool_phase(event: object, subtype: str | None) -> str | None:
+    if not isinstance(event, dict) or event.get("type") != "tool_call":
         return None
-    failed = subtype in {"failed", "error"} or event.get("is_error") is True
-    if failed:
-        return "failed"
-    if subtype in {"start", "started"}:
+    if subtype == "delta":
+        return None
+    if subtype == "started":
         return "started"
-    if subtype in {"complete", "completed"}:
+    failed = subtype in {"failed", "error"} or tool_payload_failed(event)
+    if failed and subtype in {None, "completed", "failed", "error"}:
+        return "failed"
+    if subtype == "completed":
         return "completed"
     return None
+
+
+def is_coalesced_event(event: object, subtype: str | None) -> bool:
+    if subtype == "delta":
+        return True
+    return isinstance(event, dict) and event.get("type") in {"assistant", "thinking"}
 
 
 def redact_report(text: str) -> str:
@@ -578,8 +702,8 @@ class StreamMonitor:
         self.result_truncated = False
         self.progress_lines = 0
         self.suppressed_progress = 0
-        self._stdout_buffer = bytearray()
-        self._stdout_discard = False
+        self.stdout_lines = BoundedStdoutLines()
+        self.assistant_updates_reported = 0
         self._stderr_buffer = bytearray()
         self._stderr_discard = False
         self._child: subprocess.Popen[bytes] | None = None
@@ -593,6 +717,14 @@ class StreamMonitor:
         print(line, flush=True)
         self.progress_lines += 1
 
+    def _flush_assistant_summary(self) -> None:
+        if self.assistant_updates == self.assistant_updates_reported:
+            return
+        self._print_progress(
+            f"[delegate-cursor] assistant_updates: {self.assistant_updates}"
+        )
+        self.assistant_updates_reported = self.assistant_updates
+
     def _record_error_line(self, raw: bytes) -> None:
         text = raw[:MAX_STDERR_LINE_BYTES].decode("utf-8", errors="ignore").lower()
         for category, pattern in ERROR_PATTERNS.items():
@@ -600,22 +732,17 @@ class StreamMonitor:
                 self.error_categories[category] += 1
 
     def _stdout_line(self, raw: bytes) -> None:
-        if not raw.strip():
-            return
         try:
             event = json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError):
             self.malformed_lines += 1
-            return
+            event = None
         self.last_event_type, self.last_event_subtype = safe_event_name(event)
         self.last_event_at = utc_now()
         self.last_event_mono = time.monotonic()
-        if not isinstance(event, dict):
-            return
-        if event.get("type") == "assistant":
-            self.assistant_updates += 1
-            return
-        if event.get("type") == "result":
+        quiet = is_coalesced_event(event, self.last_event_subtype)
+        phase = tool_phase(event, self.last_event_subtype)
+        if isinstance(event, dict) and event.get("type") == "result":
             subtype = event.get("subtype")
             if subtype == "success":
                 self.result_status = "success"
@@ -630,48 +757,28 @@ class StreamMonitor:
                 encoded = report.encode("utf-8")
                 self.result_truncated = len(encoded) > MAX_REPORT_INPUT_BYTES
                 self.result_text = encoded[:MAX_REPORT_INPUT_BYTES].decode("utf-8", errors="ignore")
-            return
-        if event.get("type") == "tool_call":
-            phase = tool_phase(event, self.last_event_subtype)
-            if phase:
-                category = tool_category(event)
-                self.last_operation = category
-                self._print_progress(f"[delegate-cursor] tool: {category} {phase} at {self.last_event_at}")
-            return
-        if self.last_event_type in {"system", "other", "unparsed_output"}:
+        if quiet:
+            self.assistant_updates += 1
+        if phase is not None:
+            self._flush_assistant_summary()
+            category = tool_category(event) if isinstance(event, dict) else "その他"
+            self.last_operation = category
+            self._print_progress(
+                f"[delegate-cursor] tool: {category} {phase} at {self.last_event_at}"
+            )
+        elif not quiet:
+            if self.last_event_type in {"system", "result"}:
+                self._flush_assistant_summary()
             name = self.last_event_type
             subtype = f"/{self.last_event_subtype}" if self.last_event_subtype else ""
-            self._print_progress(f"[delegate-cursor] event: {name}{subtype} at {self.last_event_at}")
+            self._print_progress(
+                f"[delegate-cursor] event: {name}{subtype} at {self.last_event_at}"
+            )
 
     def _feed_stdout(self, chunk: bytes) -> None:
-        remaining = chunk
-        while remaining:
-            if self._stdout_discard:
-                newline = remaining.find(b"\n")
-                if newline < 0:
-                    return
-                self._stdout_discard = False
-                self.oversized_lines += 1
-                remaining = remaining[newline + 1:]
-                continue
-            newline = remaining.find(b"\n")
-            if newline >= 0:
-                segment = remaining[:newline]
-                if len(self._stdout_buffer) + len(segment) > MAX_EVENT_BYTES:
-                    self._stdout_buffer.clear()
-                    self.oversized_lines += 1
-                else:
-                    self._stdout_buffer.extend(segment)
-                    self._stdout_line(bytes(self._stdout_buffer))
-                    self._stdout_buffer.clear()
-                remaining = remaining[newline + 1:]
-                continue
-            if len(self._stdout_buffer) + len(remaining) > MAX_EVENT_BYTES:
-                self._stdout_buffer.clear()
-                self._stdout_discard = True
-            else:
-                self._stdout_buffer.extend(remaining)
-            break
+        for raw_line in self.stdout_lines.feed(chunk):
+            self._stdout_line(raw_line)
+        self.oversized_lines = self.stdout_lines.oversized_lines
 
     def _feed_stderr(self, chunk: bytes) -> None:
         remaining = chunk
@@ -746,7 +853,10 @@ class StreamMonitor:
                         os.killpg(self._child.pid, self.received_signal)
                     except ProcessLookupError:
                         pass
-                    self._print_progress(f"[delegate-cursor] interruption requested: signal {self.received_signal}")
+                    print(
+                        f"[delegate-cursor] interruption requested: signal {self.received_signal}",
+                        flush=True,
+                    )
                     interrupted_signal = None
                 now = time.monotonic()
                 for key, _ in selector.select(timeout=min(1.0, max(0.0, next_heartbeat - now))):
@@ -773,12 +883,9 @@ class StreamMonitor:
                     next_heartbeat = now + HEARTBEAT_SECONDS
                 if self._child.poll() is not None and not selector.get_map():
                     break
-            if self._stdout_buffer:
-                if self._stdout_discard:
-                    self.oversized_lines += 1
-                else:
-                    self._stdout_line(bytes(self._stdout_buffer))
-                self._stdout_buffer.clear()
+            for raw_line in self.stdout_lines.finish():
+                self._stdout_line(raw_line)
+            self.oversized_lines = self.stdout_lines.oversized_lines
             if self._stderr_buffer:
                 self._record_error_line(bytes(self._stderr_buffer))
                 self._stderr_buffer.clear()
@@ -806,7 +913,7 @@ class StreamMonitor:
                 )
             print(f"[delegate-cursor] malformed_stream_lines: {self.malformed_lines}", flush=True)
             print(f"[delegate-cursor] oversized_stream_lines: {self.oversized_lines}", flush=True)
-            print(f"[delegate-cursor] assistant_updates: {self.assistant_updates}", flush=True)
+            self._flush_assistant_summary()
             print(f"[delegate-cursor] progress_lines_suppressed: {self.suppressed_progress}", flush=True)
             if outcome != "success":
                 record = {
