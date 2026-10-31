@@ -14,6 +14,7 @@ command_log="$test_root/setup-commands.log"
 mkdir -p "$fixture_repo/scripts" "$fixture_config/frontend" "$fixture_config/backend" "$fixture_bin"
 mkdir -p "$fixture_config/secrets/ai-quota-ca"
 cp "$source_root/scripts/worktree.sh" "$fixture_repo/scripts/worktree.sh"
+cp "$source_root/scripts/worktree-env-validate.py" "$fixture_repo/scripts/worktree-env-validate.py"
 cp "$source_root/scripts/delegate-cursor-monitor.py" "$fixture_repo/scripts/delegate-cursor-monitor.py"
 cp "$source_root/scripts/worktree-remove-inspect.py" "$fixture_repo/scripts/worktree-remove-inspect.py"
 cp "$source_root/scripts/cursor-devserver.py" "$fixture_repo/scripts/cursor-devserver.py"
@@ -321,6 +322,9 @@ python3 "$source_root/scripts/test-worktree-remove-guard.py"
 
 cat > "$fixture_bin/agent" <<'EOF'
 #!/usr/bin/env bash
+if [[ -n "${WORKER_STARTED_FILE:-}" ]]; then
+  : > "$WORKER_STARTED_FILE"
+fi
 printf '%s\n' '{"type":"result","subtype":"success","is_error":false,"session_id":"worktree-test"}'
 exit 0
 EOF
@@ -363,5 +367,44 @@ if grep -Fq 'git fetch origin-main' "$command_log"; then
   echo "Expected --continue-worktree reuse not to fetch origin/main." >&2
   exit 1
 fi
+
+worker_started="$test_root/worker-started-invalid-env"
+unexpected_env="$delegate_workspace/.env.ai-quota"
+touch "$unexpected_env"
+if WORKER_STARTED_FILE="$worker_started" "$source_root/scripts/delegate-cursor.sh" --prompt 'invalid environment fixture' --workspace "$delegate_workspace" >"$test_root/delegate-invalid-env.log" 2>&1; then
+  echo "Expected Cursor delegation to reject an unexpected dotenv path." >&2
+  exit 1
+fi
+[[ ! -e "$worker_started" ]]
+grep -Fq 'Unexpected .env-related path' "$test_root/delegate-invalid-env.log"
+rm "$unexpected_env"
+
+real_worktree_script="$fixture_repo/scripts/worktree-real.sh"
+mv "$fixture_repo/scripts/worktree.sh" "$real_worktree_script"
+cat > "$fixture_repo/scripts/worktree.sh" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+real_script="${WORKTREE_TEST_REAL_WORKTREE:?}"
+if [[ "${1:-}" == reuse ]]; then
+  workspace="${2:?missing workspace}"
+  "$real_script" "$@"
+  touch "$workspace/.env.injected-after-setup"
+else
+  exec "$real_script" "$@"
+fi
+EOF
+chmod +x "$fixture_repo/scripts/worktree.sh"
+worker_started_after_setup="$test_root/worker-started-after-setup"
+if WORKTREE_TEST_REAL_WORKTREE="$real_worktree_script" WORKER_STARTED_FILE="$worker_started_after_setup" \
+  "$source_root/scripts/delegate-cursor.sh" --prompt 'post-setup dotenv fixture' --workspace "$delegate_workspace" \
+  >"$test_root/delegate-post-setup-env.log" 2>&1; then
+  echo "Expected the final environment validation to reject a path added after setup." >&2
+  exit 1
+fi
+[[ ! -e "$worker_started_after_setup" ]]
+grep -Fq 'Unexpected .env-related path' "$test_root/delegate-post-setup-env.log"
+rm "$delegate_workspace/.env.injected-after-setup"
+mv "$real_worktree_script" "$fixture_repo/scripts/worktree.sh"
+chmod +x "$fixture_repo/scripts/worktree.sh"
 
 echo "Worktree workflow tests passed."

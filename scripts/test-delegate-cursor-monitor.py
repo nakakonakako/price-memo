@@ -563,8 +563,13 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         (fixture / "scripts").mkdir(parents=True)
         (fixture / "scripts/delegate-cursor.sh").write_bytes(DELEGATE.read_bytes())
         (fixture / "scripts/delegate-cursor-monitor.py").write_bytes(MONITOR.read_bytes())
+        (fixture / "scripts/worktree.sh").write_bytes((REPO_ROOT / "scripts/worktree.sh").read_bytes())
+        (fixture / "scripts/worktree-env-validate.py").write_bytes(
+            (REPO_ROOT / "scripts/worktree-env-validate.py").read_bytes()
+        )
         (fixture / "scripts/delegate-cursor.sh").chmod(0o755)
         (fixture / "scripts/delegate-cursor-monitor.py").chmod(0o755)
+        (fixture / "scripts/worktree.sh").chmod(0o755)
         subprocess.run(["git", "init", "-b", "main", str(fixture)], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(fixture), "config", "user.name", "Test"], check=True)
         subprocess.run(["git", "-C", str(fixture), "config", "user.email", "test@example.invalid"], check=True)
