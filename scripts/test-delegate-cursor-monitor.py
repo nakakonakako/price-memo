@@ -36,8 +36,9 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         return path
 
     def monitor_command(self, agent: Path, *, route: str = "cursor", tier: str = "light",
-                        model: str = "composer-2.5", workspace_mode: bool = False) -> list[str]:
-        command = [sys.executable, str(MONITOR), "--checkout", str(self.checkout),
+                        model: str = "composer-2.5", workspace_mode: bool = False,
+                        checkout: Path | None = None) -> list[str]:
+        command = [sys.executable, str(MONITOR), "--checkout", str(checkout or self.checkout),
                    "--route", route, "--tier", tier, "--model", model]
         if workspace_mode:
             command.append("--workspace-mode")
@@ -218,10 +219,88 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         outside = self.root / "outside-state"
         outside.mkdir(mode=0o700)
         (app_dir / "delegate-cursor").symlink_to(outside, target_is_directory=True)
-        result = self.run_agent(self.fake_agent("raise SystemExit(2)\n"))
+        marker = self.root / "child-started"
+        agent = self.fake_agent("from pathlib import Path\nimport os\nPath(os.environ['CHILD_MARKER']).touch()\nraise SystemExit(2)\n")
+        result = self.run_agent(agent, env_extra={"CHILD_MARKER": str(marker)})
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("metadata not saved", result.stdout)
+        self.assertIn("workspace lock unavailable or unsafe", result.stdout)
+        self.assertFalse(marker.exists())
         self.assertEqual(list(outside.iterdir()), [])
+
+    def test_same_workspace_and_symlink_alias_are_exclusive_but_other_workspaces_run(self) -> None:
+        marker = self.root / "first-started"
+        agent = self.fake_agent(
+            "import json,os,time\nfrom pathlib import Path\n"
+            "Path(os.environ['CHILD_MARKER']).touch()\ntime.sleep(1.2)\n"
+            "print(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n"
+        )
+        alias = self.root / "checkout-alias"
+        alias.symlink_to(self.checkout, target_is_directory=True)
+        first = subprocess.Popen(
+            self.monitor_command(agent), cwd=REPO_ROOT, env=self.env({"CHILD_MARKER": str(marker)}),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(marker.exists(), "first Cursor subprocess did not start")
+        duplicate = subprocess.run(
+            self.monitor_command(agent, checkout=alias), cwd=REPO_ROOT,
+            env=self.env({"CHILD_MARKER": str(self.root / "duplicate-started")}),
+            capture_output=True, text=True, timeout=5,
+        )
+        self.assertEqual(duplicate.returncode, 73)
+        self.assertIn("duplicate delegation rejected", duplicate.stdout)
+        self.assertFalse((self.root / "duplicate-started").exists())
+
+        other_checkout = self.root / "other-checkout"
+        other_checkout.mkdir()
+        other_marker = self.root / "other-started"
+        other = subprocess.Popen(
+            self.monitor_command(agent, checkout=other_checkout), cwd=REPO_ROOT,
+            env=self.env({"CHILD_MARKER": str(other_marker)}),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        deadline = time.monotonic() + 5
+        while not other_marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(other_marker.exists(), "different workspace was blocked")
+        first_out, first_err = first.communicate(timeout=8)
+        other_out, other_err = other.communicate(timeout=8)
+        self.assertEqual(first.returncode, 0, first_out + first_err)
+        self.assertEqual(other.returncode, 0, other_out + other_err)
+
+        retry = self.run_agent(self.fake_agent(
+            "import json\nprint(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n"
+        ))
+        self.assertEqual(retry.returncode, 0, retry.stdout + retry.stderr)
+
+    def test_main_checkout_duplicate_delegation_is_rejected(self) -> None:
+        # Direct checkout invocations pass the checkout root as --checkout too.
+        marker = self.root / "main-started"
+        agent = self.fake_agent(
+            "import json,os,time\nfrom pathlib import Path\n"
+            "Path(os.environ['CHILD_MARKER']).touch()\ntime.sleep(1)\n"
+            "print(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n"
+        )
+        first = subprocess.Popen(
+            self.monitor_command(agent, checkout=self.checkout), cwd=REPO_ROOT,
+            env=self.env({"CHILD_MARKER": str(marker)}), stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, text=True,
+        )
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(marker.exists())
+        second = subprocess.run(
+            self.monitor_command(agent, checkout=self.checkout), cwd=REPO_ROOT,
+            env=self.env({"CHILD_MARKER": str(self.root / "main-duplicate-started")}),
+            capture_output=True, text=True, timeout=5,
+        )
+        self.assertEqual(second.returncode, 73)
+        self.assertFalse((self.root / "main-duplicate-started").exists())
+        out, err = first.communicate(timeout=8)
+        self.assertEqual(first.returncode, 0, out + err)
 
     def test_sigint_and_sigterm_are_forwarded_to_only_the_child_group(self) -> None:
         agent = self.fake_agent("import time\ntime.sleep(30)\n")
@@ -240,6 +319,10 @@ class DelegateCursorMonitorTests(unittest.TestCase):
                 self.assertEqual(proc.returncode, expected, out + err)
                 self.assertIn("outcome: interrupted", out)
                 self.assertNotIn("sleep(30)", out + err)
+                retry = self.run_agent(self.fake_agent(
+                    "import json\nprint(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n"
+                ))
+                self.assertEqual(retry.returncode, 0, retry.stdout + retry.stderr)
 
     def test_all_model_routes_and_allow_dirty_gate_are_preserved(self) -> None:
         fixture = self.root / "repo"

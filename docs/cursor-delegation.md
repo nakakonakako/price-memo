@@ -90,6 +90,17 @@ It does not display command text, paths emitted by tools, or free-form stderr.
 Progress output is capped at 300 lines, and oversized stream records are
 discarded.
 
+Before starting Cursor, the monitor takes a nonblocking advisory lock for the
+canonical path of the actual checkout/workspace passed to Cursor. This also
+covers direct use of the main checkout. A concurrent delegation to the same
+workspace is rejected before Cursor starts; different worktrees can run in
+parallel. The lock is held for the monitor process lifetime and is released by
+the operating system on normal exit, handled interruption, or process exit.
+Lock files contain no workspace path or task data and live in the same
+user-owned mode-0700 state directory as failure metadata, with mode 0600.
+Unsafe state directories or lock files fail closed. MCP approval remains an
+independent manual action; workspace trust does not approve MCP servers.
+
 The final `result` text is kept in memory only, limited to 64 KiB of input,
 sanitized for common credential formats and matching secret-like environment
 variable values, then displayed with a 4 KiB total output cap. The report is

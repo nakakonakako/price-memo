@@ -132,6 +132,10 @@ if [[ -n "$workspace" ]]; then
   fi
   repo_root="$(git -C "$workspace" rev-parse --show-toplevel)"
 fi
+if [[ -n "$workspace" ]]; then
+  workspace="$(cd "$workspace" && pwd -P)"
+fi
+repo_root="$(cd "$repo_root" && pwd -P)"
 cd "$repo_root"
 
 if [[ -n "$task_file" ]]; then
