@@ -205,6 +205,8 @@ does not fetch. Existing worktrees are reused without fetch or branch changes.
 Use `--workspace <path>` to continue work in a listed worktree. Cursor's own
 `--worktree` option is not used because it controls a separate storage root.
 The retained `--continue-worktree` option is an alias for `--workspace`.
+Relative `--task-file` paths are resolved from the invoking repository root
+before switching to a target worktree; absolute task-file paths are preserved.
 
 `npm run devserver:ensure`, Playwright MCP, the shared browser profile, and
 Tailscale Serve keep their existing behavior. `npm run dev` and
