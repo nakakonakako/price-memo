@@ -66,6 +66,11 @@ class DelegateCursorMonitorTests(unittest.TestCase):
             return []
         return sorted(self.failure_dir().glob("safe-failure-*.json"))
 
+    def report_block(self, stdout: str) -> str:
+        begin = "[delegate-cursor] ----- worker completion report begin -----"
+        end = "[delegate-cursor] ----- worker completion report end -----"
+        return stdout[stdout.index(begin):stdout.index(end) + len(end)]
+
     def test_success_prints_allowlisted_progress_and_bounded_sanitized_report(self) -> None:
         report = "\n".join([
             "1. root cause / implementation intent", "intent retained",
@@ -185,6 +190,114 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("[delegate-cursor] report: [truncated]", result.stdout)
         self.assertLessEqual(len(result.stdout.encode()), 5000)
+
+    def test_late_verification_results_are_prioritized_within_four_kib(self) -> None:
+        report = "\n".join(
+            [*(f"Long background detail {index}" for index in range(500)),
+             "VERIFICATION RESULTS", "COVERAGE: COMPLETE",
+             "PASS: app display — heading 'Price Memo' was visible",
+             "FAIL: tab operation — click returned but selected tab did not change",
+             "UNCONFIRMED: console errors — console was not inspected"]
+        )
+        source = (
+            "import json\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        block = self.report_block(result.stdout)
+        self.assertLessEqual(len((block + "\n").encode()), 4096)
+        self.assertIn("verification_coverage: INCOMPLETE", block)
+        self.assertIn("verification_counts: PASS=1 FAIL=1 UNCONFIRMED=1", block)
+        self.assertIn("verification FAIL: tab operation", block)
+        self.assertIn("verification UNCONFIRMED: console errors", block)
+        self.assertIn("verification PASS: app display", block)
+        self.assertLess(block.index("verification FAIL:"), block.index("verification UNCONFIRMED:"))
+        self.assertLess(block.index("verification UNCONFIRMED:"), block.index("verification PASS:"))
+        self.assertNotIn("Long background detail 499", block)
+
+    def test_report_over_64_kib_is_unconfirmed_even_when_captured_prefix_says_pass(self) -> None:
+        report = (
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+            "PASS: page — title was observed\n"
+            + ("verbose background details\n" * 4000)
+            + "FAIL: late check — an error occurred after the captured input\n"
+        )
+        source = (
+            "import json\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        block = self.report_block(result.stdout)
+        self.assertIn("verification_coverage: UNCONFIRMED", block)
+        self.assertIn("verification UNCONFIRMED: final report exceeded 64 KiB", block)
+        self.assertIn("report: input truncated at 64 KiB", block)
+        self.assertIn("verification PASS: page", block)
+        self.assertNotIn("verification FAIL: late check", block)
+        self.assertLessEqual(len((block + "\n").encode()), 4096)
+
+    def test_missing_and_malformed_verification_reports_are_unconfirmed(self) -> None:
+        reports = (
+            "A page was opened, but no structured verification summary was given.",
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETELY\nPASS: page was visible",
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\nPASS: page —",
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\nPASS: <criterion> — <observable result>",
+        )
+        for index, report in enumerate(reports):
+            with self.subTest(index=index):
+                source = (
+                    "import json\n"
+                    f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+                )
+                result = self.run_agent(self.fake_agent(source, f"invalid-report-{index}.py"))
+                block = self.report_block(result.stdout)
+                self.assertIn("verification_coverage: UNCONFIRMED", block)
+                self.assertIn("verification UNCONFIRMED:", block)
+
+    def test_secrets_in_prioritized_findings_remain_masked(self) -> None:
+        report = (
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+            "PASS: auth screen — token=REPORT_SECRET_SENTINEL was received\n"
+            "FAIL: request — Authorization: Bearer BEARER_SECRET_SENTINEL was rejected\n"
+        )
+        source = (
+            "import json\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+        )
+        result = self.run_agent(
+            self.fake_agent(source),
+            env_extra={"DELEGATE_TEST_TOKEN": "REPORT_SECRET_SENTINEL"},
+        )
+        block = self.report_block(result.stdout)
+        self.assertIn("verification_coverage: COMPLETE", block)
+        self.assertIn("verification FAIL: request", block)
+        self.assertIn("verification PASS: auth screen", block)
+        self.assertNotIn("REPORT_SECRET_SENTINEL", result.stdout + result.stderr)
+        self.assertNotIn("BEARER_SECRET_SENTINEL", result.stdout + result.stderr)
+
+    def test_missing_final_result_event_keeps_process_result_and_verification_separate(self) -> None:
+        result = self.run_agent(self.fake_agent("print('worker finished without a result event')\n"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("result_event_status: missing", result.stdout)
+        self.assertIn("verification_coverage: UNCONFIRMED", result.stdout)
+        self.assertIn("verification UNCONFIRMED:", self.report_block(result.stdout))
+
+    def test_mcp_tool_completion_does_not_create_a_pass_finding(self) -> None:
+        source = (
+            "import json\n"
+            "print(json.dumps({'type':'tool_call','subtype':'completed',"
+            "'tool_call':{'mcpToolCall':{'result':{'success':True}}}}),flush=True)\n"
+            "print(json.dumps({'type':'result','subtype':'success','is_error':False,"
+            "'result':'Playwright MCP was called.'}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("tool: MCPツール completed", result.stdout)
+        block = self.report_block(result.stdout)
+        self.assertIn("verification_coverage: UNCONFIRMED", block)
+        self.assertIn("verification UNCONFIRMED:", block)
+        self.assertNotIn("verification PASS:", block)
 
     def test_failure_retention_prunes_only_own_regular_records(self) -> None:
         agent = self.fake_agent("raise SystemExit(7)\n")
@@ -379,6 +492,9 @@ class DelegateCursorMonitorTests(unittest.TestCase):
                 self.assertNotIn("PROMPT_ARG_SENTINEL", result.stdout + result.stderr)
                 self.assertIn(f"route: {route}", result.stdout)
                 self.assertIn(f"tier/model: {tier}/{model}", result.stdout)
+                args_text = " ".join(args)
+                self.assertIn("VERIFICATION RESULTS", args_text)
+                self.assertIn("tool/MCP call by itself is not evidence", args_text)
 
         failed = subprocess.run(
             [str(fixture / "scripts/delegate-cursor.sh"), "--allow-dirty", "--prompt", "MCP failure test"],

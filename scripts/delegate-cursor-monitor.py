@@ -88,6 +88,21 @@ REPORT_END = "[delegate-cursor] ----- worker completion report end -----"
 REPORT_PREFIX = "[delegate-cursor] report: "
 REPORT_TRUNCATED = "[delegate-cursor] report: [truncated]"
 REPORT_OMITTED = "[delegate-cursor] report: omitted (result text absent)"
+REPORT_INPUT_TRUNCATED = (
+    "[delegate-cursor] verification UNCONFIRMED: final report exceeded 64 KiB; "
+    "the omitted tail may contain additional results"
+)
+REPORT_MISSING_VERIFICATION = (
+    "[delegate-cursor] verification UNCONFIRMED: structured verification results "
+    "or coverage declaration are missing or invalid"
+)
+REPORT_PREFIX_UNTRUSTED = (
+    "[delegate-cursor] report: untrusted free-form text; review the diff"
+)
+MAX_REPORT_FINDING_BYTES = 600
+MAX_REPORT_CONTEXT_BYTES = 320
+REPORT_STATUS_RE = re.compile(r"^(PASS|FAIL|UNCONFIRMED):\s*(.*)$", re.I)
+REPORT_COVERAGE_RE = re.compile(r"^COVERAGE:\s*(COMPLETE|INCOMPLETE)\s*$", re.I)
 interrupted_signal: int | None = None
 
 
@@ -158,27 +173,144 @@ def redact_report(text: str) -> str:
     return scrubbed
 
 
+def _bounded_report_line(line: str, limit: int) -> str:
+    raw = line.encode("utf-8")
+    if len(raw) <= limit:
+        return line
+    suffix = " [line truncated]"
+    budget = max(0, limit - len(suffix.encode("utf-8")))
+    return raw[:budget].decode("utf-8", errors="ignore").rstrip() + suffix
+
+
+def _verification_report_lines(
+    text: str, input_truncated: bool
+) -> tuple[str, list[str], list[str]]:
+    findings: dict[str, list[str]] = {"FAIL": [], "UNCONFIRMED": [], "PASS": []}
+    context: list[str] = []
+    coverage_claims: list[str] = []
+    malformed_status = False
+
+    for line in text.splitlines():
+        candidate = line.strip()
+        candidate = re.sub(r"^[-*+]\s+", "", candidate)
+        coverage = REPORT_COVERAGE_RE.fullmatch(candidate)
+        if coverage:
+            coverage_claims.append(coverage.group(1).upper())
+            continue
+        if candidate.upper().startswith("COVERAGE:"):
+            malformed_status = True
+            continue
+        status = REPORT_STATUS_RE.fullmatch(candidate)
+        if status:
+            label = status.group(1).upper()
+            value = status.group(2).strip()
+            if "—" not in value:
+                malformed_status = True
+                continue
+            criterion, evidence = (part.strip() for part in value.split("—", 1))
+            if (
+                not criterion
+                or not evidence
+                or (criterion.startswith("<") and criterion.endswith(">"))
+                or (evidence.startswith("<") and evidence.endswith(">"))
+                or criterion in {"...", "TBD"}
+                or evidence in {"...", "TBD"}
+            ):
+                malformed_status = True
+                continue
+            findings[label].append(
+                _bounded_report_line(
+                    f"[delegate-cursor] verification {label}: {criterion} — {evidence}",
+                    MAX_REPORT_FINDING_BYTES,
+                )
+            )
+            continue
+        if candidate.upper().startswith(("PASS:", "FAIL:", "UNCONFIRMED:")):
+            malformed_status = True
+            continue
+        if line.strip():
+            context.append(_bounded_report_line(line.strip(), MAX_REPORT_CONTEXT_BYTES))
+
+    valid_coverage = len(coverage_claims) == 1
+    has_findings = any(findings.values())
+    if input_truncated:
+        coverage_status = "UNCONFIRMED"
+        findings["UNCONFIRMED"].insert(0, REPORT_INPUT_TRUNCATED)
+    elif not valid_coverage or malformed_status or not has_findings:
+        coverage_status = "UNCONFIRMED"
+        findings["UNCONFIRMED"].insert(0, REPORT_MISSING_VERIFICATION)
+    elif coverage_claims[0] == "INCOMPLETE" or findings["UNCONFIRMED"]:
+        coverage_status = "INCOMPLETE"
+        if coverage_claims[0] == "INCOMPLETE" and not findings["UNCONFIRMED"]:
+            findings["UNCONFIRMED"].append(
+                "[delegate-cursor] verification UNCONFIRMED: worker marked coverage "
+                "incomplete but did not identify the unchecked criterion"
+            )
+    else:
+        coverage_status = "COMPLETE"
+
+    prioritized: list[str] = []
+    for label in ("FAIL", "UNCONFIRMED", "PASS"):
+        if findings[label]:
+            prioritized.append(findings[label][0])
+    for label in ("FAIL", "UNCONFIRMED", "PASS"):
+        prioritized.extend(findings[label][1:])
+    return coverage_status, prioritized, context
+
+
+def _report_output_lines(body: list[str]) -> list[str]:
+    def output_size(candidate: list[str]) -> int:
+        return len(("\n".join(candidate) + "\n").encode("utf-8"))
+
+    lines = [REPORT_BEGIN, *body, REPORT_END]
+    if output_size(lines) <= MAX_REPORT_BYTES:
+        return lines
+
+    kept = [REPORT_BEGIN]
+    omitted = False
+    for line in body:
+        if output_size([*kept, line, REPORT_TRUNCATED, REPORT_END]) <= MAX_REPORT_BYTES:
+            kept.append(line)
+        else:
+            omitted = True
+    if omitted:
+        while output_size([*kept, REPORT_TRUNCATED, REPORT_END]) > MAX_REPORT_BYTES and len(kept) > 1:
+            kept.pop()
+        kept.append(REPORT_TRUNCATED)
+    kept.append(REPORT_END)
+    return kept
+
+
 def emit_report(value: object, truncated: bool) -> None:
     report = value if isinstance(value, str) else ""
     raw = report.encode("utf-8")
     input_truncated = truncated or len(raw) > MAX_REPORT_INPUT_BYTES
     report = raw[:MAX_REPORT_INPUT_BYTES].decode("utf-8", errors="ignore")
+    if input_truncated:
+        report = report.rsplit("\n", 1)[0] if "\n" in report else ""
     report = redact_report(report)
-    prefix = REPORT_BEGIN + "\n"
-    suffix = "\n" + REPORT_END
+    coverage, findings, context = _verification_report_lines(report, input_truncated)
+    counts = {"PASS": 0, "FAIL": 0, "UNCONFIRMED": 0}
+    for line in findings:
+        match = re.match(r"\[delegate-cursor\] verification (PASS|FAIL|UNCONFIRMED):", line)
+        if match:
+            counts[match.group(1)] += 1
+    body = [
+        f"[delegate-cursor] verification_coverage: {coverage}",
+        (
+            "[delegate-cursor] verification_counts: "
+            f"PASS={counts['PASS']} FAIL={counts['FAIL']} UNCONFIRMED={counts['UNCONFIRMED']}"
+        ),
+        *findings,
+    ]
+    if input_truncated:
+        body.extend((REPORT_TRUNCATED, "[delegate-cursor] report: input truncated at 64 KiB"))
+    body.append(REPORT_PREFIX_UNTRUSTED)
     if not report.strip():
-        body = REPORT_OMITTED
+        body.append(REPORT_OMITTED)
     else:
-        body = "[delegate-cursor] report: untrusted free-form text; review the diff\n"
-        body += "\n".join(REPORT_PREFIX + line for line in report.splitlines())
-    content = prefix + body + suffix
-    encoded = content.encode("utf-8")
-    if input_truncated or len(encoded) > MAX_REPORT_BYTES:
-        budget = MAX_REPORT_BYTES - len((prefix + "\n" + REPORT_TRUNCATED + suffix).encode("utf-8"))
-        clipped = encoded[len(prefix.encode("utf-8")):len(prefix.encode("utf-8")) + max(0, budget)]
-        body_clip = clipped.decode("utf-8", errors="ignore").rstrip()
-        content = prefix + body_clip + "\n" + REPORT_TRUNCATED + suffix
-    for line in content.splitlines():
+        body.extend(f"{REPORT_PREFIX}{line}" for line in context)
+    for line in _report_output_lines(body):
         print(line, flush=True)
 
 

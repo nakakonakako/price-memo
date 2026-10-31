@@ -182,6 +182,25 @@ or an undocumented architecture decision, stop that part and report it for super
 After implementation, run the repository-standard verification (normally `npm run check`).
 For UI/browser behavior, use Playwright MCP when it materially verifies the acceptance criteria.
 
+The final report's verification block is prioritized by the Supervisor monitor.
+Report every acceptance criterion using this exact short format, even when a
+check could not be completed:
+VERIFICATION RESULTS
+Choose exactly one coverage line:
+COVERAGE: COMPLETE
+COVERAGE: INCOMPLETE
+PASS: <criterion> — <observable result>
+FAIL: <criterion> — <expected and observed result>
+UNCONFIRMED: <criterion> — <why it could not be verified>
+Mark coverage COMPLETE only when every acceptance criterion has one status.
+Keep this block concise (preferably under 1200 UTF-8 bytes) and near the start
+of the final report. A tool/MCP call by itself is not evidence of success; PASS
+requires an observed resulting state or result. Do not infer a clean console
+unless it was explicitly checked. Missing, malformed, or unavailable evidence
+must be UNCONFIRMED, never inferred as PASS. The monitor reports these explicit
+status lines ahead of other report text, while preserving secret masking and
+the 4 KiB output limit.
+
 End with:
 1. root cause / implementation intent
 2. changed files
