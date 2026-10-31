@@ -192,7 +192,9 @@ COVERAGE: INCOMPLETE
 PASS: <criterion> — <observable result>
 FAIL: <criterion> — <expected and observed result>
 UNCONFIRMED: <criterion> — <why it could not be verified>
+END VERIFICATION RESULTS
 Mark coverage COMPLETE only when every acceptance criterion has one status.
+List each criterion exactly once; never report conflicting statuses for it.
 Keep this block concise (preferably under 1200 UTF-8 bytes) and near the start
 of the final report. A tool/MCP call by itself is not evidence of success; PASS
 requires an observed resulting state or result. Do not infer a clean console

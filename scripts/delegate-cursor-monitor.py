@@ -93,8 +93,8 @@ REPORT_INPUT_TRUNCATED = (
     "the omitted tail may contain additional results"
 )
 REPORT_MISSING_VERIFICATION = (
-    "[delegate-cursor] verification UNCONFIRMED: structured verification results "
-    "or coverage declaration are missing or invalid"
+    "[delegate-cursor] verification UNCONFIRMED: verification block or coverage "
+    "declaration is missing, malformed, repeated, or contradictory"
 )
 REPORT_PREFIX_UNTRUSTED = (
     "[delegate-cursor] report: untrusted free-form text; review the diff"
@@ -103,6 +103,8 @@ MAX_REPORT_FINDING_BYTES = 600
 MAX_REPORT_CONTEXT_BYTES = 320
 REPORT_STATUS_RE = re.compile(r"^(PASS|FAIL|UNCONFIRMED):\s*(.*)$", re.I)
 REPORT_COVERAGE_RE = re.compile(r"^COVERAGE:\s*(COMPLETE|INCOMPLETE)\s*$", re.I)
+REPORT_BLOCK_START_RE = re.compile(r"^#{0,6}\s*VERIFICATION RESULTS\s*:?\s*$", re.I)
+REPORT_BLOCK_END_RE = re.compile(r"^#{0,6}\s*END VERIFICATION RESULTS\s*$", re.I)
 interrupted_signal: int | None = None
 
 
@@ -189,16 +191,61 @@ def _verification_report_lines(
     context: list[str] = []
     coverage_claims: list[str] = []
     malformed_status = False
+    in_block = False
+    start_count = 0
+    end_count = 0
+    criteria: set[str] = set()
 
     for line in text.splitlines():
         candidate = line.strip()
         candidate = re.sub(r"^[-*+]\s+", "", candidate)
+        if REPORT_BLOCK_START_RE.fullmatch(candidate):
+            if in_block:
+                malformed_status = True
+            start_count += 1
+            if start_count > 1:
+                malformed_status = True
+            in_block = True
+            continue
+        if REPORT_BLOCK_END_RE.fullmatch(candidate):
+            if not in_block:
+                malformed_status = True
+            else:
+                end_count += 1
+                if end_count > 1:
+                    malformed_status = True
+                in_block = False
+            continue
+
+        if not in_block:
+            outside_status = REPORT_STATUS_RE.fullmatch(candidate)
+            outside_coverage = candidate.upper().startswith("COVERAGE:")
+            if outside_status or outside_coverage:
+                malformed_status = True
+                context.append(
+                    _bounded_report_line(
+                        f"unscoped status-like text: {line.strip()}",
+                        MAX_REPORT_CONTEXT_BYTES,
+                    )
+                )
+            elif line.strip():
+                context.append(
+                    _bounded_report_line(line.strip(), MAX_REPORT_CONTEXT_BYTES)
+                )
+            continue
+
         coverage = REPORT_COVERAGE_RE.fullmatch(candidate)
         if coverage:
             coverage_claims.append(coverage.group(1).upper())
             continue
         if candidate.upper().startswith("COVERAGE:"):
             malformed_status = True
+            context.append(
+                _bounded_report_line(
+                    f"unscoped coverage-like text in malformed block: {line.strip()}",
+                    MAX_REPORT_CONTEXT_BYTES,
+                )
+            )
             continue
         status = REPORT_STATUS_RE.fullmatch(candidate)
         if status:
@@ -206,6 +253,12 @@ def _verification_report_lines(
             value = status.group(2).strip()
             if "—" not in value:
                 malformed_status = True
+                context.append(
+                    _bounded_report_line(
+                        f"unscoped status-like text in malformed block: {line.strip()}",
+                        MAX_REPORT_CONTEXT_BYTES,
+                    )
+                )
                 continue
             criterion, evidence = (part.strip() for part in value.split("—", 1))
             if (
@@ -217,7 +270,17 @@ def _verification_report_lines(
                 or evidence in {"...", "TBD"}
             ):
                 malformed_status = True
+                context.append(
+                    _bounded_report_line(
+                        f"unscoped status-like text in malformed block: {line.strip()}",
+                        MAX_REPORT_CONTEXT_BYTES,
+                    )
+                )
                 continue
+            criterion_key = re.sub(r"\s+", " ", criterion).casefold()
+            if criterion_key in criteria:
+                malformed_status = True
+            criteria.add(criterion_key)
             findings[label].append(
                 _bounded_report_line(
                     f"[delegate-cursor] verification {label}: {criterion} — {evidence}",
@@ -231,12 +294,27 @@ def _verification_report_lines(
         if line.strip():
             context.append(_bounded_report_line(line.strip(), MAX_REPORT_CONTEXT_BYTES))
 
+    if in_block:
+        malformed_status = True
+    valid_block = start_count == 1 and end_count == 1 and not in_block
+    if not valid_block:
+        for label in findings:
+            for finding in findings[label]:
+                unscoped = finding.partition("] verification ")[2] or finding
+                context.append(
+                    _bounded_report_line(
+                        f"unscoped status-like text from malformed block: {unscoped}",
+                        MAX_REPORT_CONTEXT_BYTES,
+                    )
+                )
+            findings[label].clear()
+    context.sort(key=lambda line: not line.startswith("unscoped status-like text"))
     valid_coverage = len(coverage_claims) == 1
     has_findings = any(findings.values())
     if input_truncated:
         coverage_status = "UNCONFIRMED"
         findings["UNCONFIRMED"].insert(0, REPORT_INPUT_TRUNCATED)
-    elif not valid_coverage or malformed_status or not has_findings:
+    elif not valid_block or not valid_coverage or malformed_status or not has_findings:
         coverage_status = "UNCONFIRMED"
         findings["UNCONFIRMED"].insert(0, REPORT_MISSING_VERIFICATION)
     elif coverage_claims[0] == "INCOMPLETE" or findings["UNCONFIRMED"]:

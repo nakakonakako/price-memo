@@ -104,18 +104,19 @@ independent manual action; workspace trust does not approve MCP servers.
 The final `result` text is kept in memory only, limited to 64 KiB of input,
 sanitized for common credential formats and matching secret-like environment
 variable values, then displayed with a 4 KiB total output cap. The worker must
-include a concise `VERIFICATION RESULTS` block with `COVERAGE: COMPLETE` or
-`INCOMPLETE` and one `PASS`, `FAIL`, or `UNCONFIRMED` line for every acceptance
-criterion. Each status line includes the criterion and observed evidence or
-reason. A tool/MCP call alone is not evidence of a successful operation. The
-monitor extracts these explicit status lines from the full captured report and
-prints verification findings before other report text, showing at least one
-finding from each reported status in `FAIL`, `UNCONFIRMED`, `PASS` order before
-the remaining findings. Counts make omitted details visible when the 4 KiB cap
-is reached, so long introductory sections do not hide verification results.
-Missing, malformed, conflicting, or incomplete status data is shown as
-unconfirmed; a 64 KiB input truncation also makes overall verification coverage
-unconfirmed.
+include a concise block delimited by `VERIFICATION RESULTS` and
+`END VERIFICATION RESULTS`, with `COVERAGE: COMPLETE` or `INCOMPLETE` and one
+`PASS`, `FAIL`, or `UNCONFIRMED` line for every acceptance criterion. Each
+status line includes the criterion and observed evidence or reason. Status
+lines outside this block are shown only as unscoped report text. A tool/MCP call
+alone is not evidence of a successful operation. The monitor extracts these
+explicit status lines from the full captured report and prints verification
+findings before other report text, showing at least one finding from each
+reported status in `FAIL`, `UNCONFIRMED`, `PASS` order before the remaining
+findings. Counts make omitted details visible when the 4 KiB cap is reached, so
+long introductory sections do not hide verification results. Missing,
+malformed, conflicting, or incomplete status data is shown as unconfirmed; a
+64 KiB input truncation also makes overall verification coverage unconfirmed.
 The process/result event outcome remains separate from verification coverage:
 a successful CLI result does not imply that the acceptance criteria passed.
 

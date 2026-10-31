@@ -197,7 +197,8 @@ class DelegateCursorMonitorTests(unittest.TestCase):
              "VERIFICATION RESULTS", "COVERAGE: COMPLETE",
              "PASS: app display — heading 'Price Memo' was visible",
              "FAIL: tab operation — click returned but selected tab did not change",
-             "UNCONFIRMED: console errors — console was not inspected"]
+             "UNCONFIRMED: console errors — console was not inspected",
+             "END VERIFICATION RESULTS"]
         )
         source = (
             "import json\n"
@@ -220,6 +221,7 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         report = (
             "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
             "PASS: page — title was observed\n"
+            "END VERIFICATION RESULTS\n"
             + ("verbose background details\n" * 4000)
             + "FAIL: late check — an error occurred after the captured input\n"
         )
@@ -240,9 +242,9 @@ class DelegateCursorMonitorTests(unittest.TestCase):
     def test_missing_and_malformed_verification_reports_are_unconfirmed(self) -> None:
         reports = (
             "A page was opened, but no structured verification summary was given.",
-            "VERIFICATION RESULTS\nCOVERAGE: COMPLETELY\nPASS: page was visible",
-            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\nPASS: page —",
-            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\nPASS: <criterion> — <observable result>",
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETELY\nPASS: page was visible\nEND VERIFICATION RESULTS",
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\nPASS: page —\nEND VERIFICATION RESULTS",
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\nPASS: <criterion> — <observable result>\nEND VERIFICATION RESULTS",
         )
         for index, report in enumerate(reports):
             with self.subTest(index=index):
@@ -255,11 +257,130 @@ class DelegateCursorMonitorTests(unittest.TestCase):
                 self.assertIn("verification_coverage: UNCONFIRMED", block)
                 self.assertIn("verification UNCONFIRMED:", block)
 
+    def test_verification_heading_is_required(self) -> None:
+        report = (
+            "COVERAGE: COMPLETE\n"
+            "PASS: page — heading was visible\n"
+            "FAIL: tab — selected panel did not change\n"
+        )
+        source = (
+            "import json\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        block = self.report_block(result.stdout)
+        self.assertIn("verification_coverage: UNCONFIRMED", block)
+        self.assertIn("verification_counts: PASS=0 FAIL=0", block)
+        self.assertNotIn("verification PASS: page", block)
+        self.assertNotIn("verification FAIL: tab", block)
+        self.assertIn("unscoped status-like text: PASS: page", block)
+        self.assertIn("unscoped status-like text: FAIL: tab", block)
+
+    def test_status_lines_outside_verification_block_are_not_formal_results(self) -> None:
+        report = (
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+            "PASS: page — heading was visible\n"
+            "END VERIFICATION RESULTS\n"
+            "FAIL: tab — selected panel did not change\n"
+        )
+        source = (
+            "import json\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        block = self.report_block(result.stdout)
+        self.assertIn("verification_coverage: UNCONFIRMED", block)
+        self.assertIn("verification PASS: page", block)
+        self.assertNotIn("verification FAIL: tab", block)
+        self.assertIn("unscoped status-like text: FAIL: tab", block)
+
+    def test_duplicate_and_conflicting_criteria_make_coverage_unconfirmed(self) -> None:
+        reports = (
+            (
+                "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+                "PASS: tab selection — selected tab changed\n"
+                "FAIL: tab selection — selected tab stayed the same\n"
+                "END VERIFICATION RESULTS"
+            ),
+            (
+                "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+                "PASS: tab selection — selected tab changed\n"
+                "PASS: tab   selection — selected tab changed after retry\n"
+                "END VERIFICATION RESULTS"
+            ),
+        )
+        for index, report in enumerate(reports):
+            with self.subTest(index=index):
+                source = (
+                    "import json\n"
+                    f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+                )
+                result = self.run_agent(self.fake_agent(source, f"duplicate-report-{index}.py"))
+                block = self.report_block(result.stdout)
+                self.assertIn("verification_coverage: UNCONFIRMED", block)
+                self.assertIn("verification UNCONFIRMED:", block)
+                self.assertIn("verification PASS: tab", block)
+                if index == 0:
+                    self.assertIn("verification FAIL: tab", block)
+                else:
+                    self.assertIn("verification_counts: PASS=2", block)
+
+    def test_normal_single_verification_block_reports_complete_coverage(self) -> None:
+        report = (
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+            "PASS: page display — title 'Price Memo' was visible\n"
+            "END VERIFICATION RESULTS"
+        )
+        source = (
+            "import json\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        block = self.report_block(result.stdout)
+        self.assertIn("verification_coverage: COMPLETE", block)
+        self.assertIn("verification PASS: page display", block)
+
+    def test_unclosed_verification_block_keeps_statuses_unscoped(self) -> None:
+        report = (
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+            "PASS: page — heading was visible\n"
+            "FAIL: tab — selected panel did not change"
+        )
+        source = (
+            "import json\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        block = self.report_block(result.stdout)
+        self.assertIn("verification_coverage: UNCONFIRMED", block)
+        self.assertNotIn("verification PASS: page", block)
+        self.assertNotIn("verification FAIL: tab", block)
+        self.assertIn("unscoped status-like text from malformed block: PASS: page", block)
+        self.assertIn("unscoped status-like text from malformed block: FAIL: tab", block)
+
+    def test_malformed_fail_row_is_preserved_as_unscoped_context(self) -> None:
+        report = (
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+            "FAIL: tab did not change after click\n"
+            "END VERIFICATION RESULTS"
+        )
+        source = (
+            "import json\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        block = self.report_block(result.stdout)
+        self.assertIn("verification_coverage: UNCONFIRMED", block)
+        self.assertNotIn("verification FAIL:", block)
+        self.assertIn("unscoped status-like text in malformed block: FAIL: tab", block)
+
     def test_secrets_in_prioritized_findings_remain_masked(self) -> None:
         report = (
             "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
             "PASS: auth screen — token=REPORT_SECRET_SENTINEL was received\n"
             "FAIL: request — Authorization: Bearer BEARER_SECRET_SENTINEL was rejected\n"
+            "END VERIFICATION RESULTS\n"
         )
         source = (
             "import json\n"
