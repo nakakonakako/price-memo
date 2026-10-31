@@ -61,9 +61,11 @@ compatibility alias `--continue-worktree` has the same behavior and is no longer
 limited to an Other Models route. The continuation prompt requires the worker
 to inspect status, staged and unstaged diffs, and relevant untracked files
 before editing, then preserve and continue existing work in place. The standard
-`--trust`, `--approve-mcps`,
-worktree, `stream-json`, Playwright MCP, shared profile, and dev server flows
-apply to both routes.
+`--trust`, worktree, `stream-json`, Playwright MCP, shared profile, and dev
+server flows apply to both routes. The delegate does not pass
+`--approve-mcps`: that option approves every discovered MCP server and is not
+used. MCP server approval is independent of workspace trust, sandbox settings,
+and the shell command allowlist.
 
 Do not take over implementation merely because the checkout is dirty. Use a
 direct checkout only when it is clean and has no concurrent work; otherwise
@@ -79,7 +81,7 @@ delegation is inconvenient.
 ### Delegation run evidence
 
 `scripts/delegate-cursor.sh` records the selected route/tier/model and UTC start
-time before launching Cursor with `agent --trust --approve-mcps`. It passes
+time before launching Cursor with `agent --trust`. It passes
 `stream-json` directly to `scripts/delegate-cursor-monitor.py`; raw stdout,
 stderr, prompts, tool arguments/results, and file contents are not relayed or
 persisted. The monitor displays bounded event types, tool categories and
@@ -325,6 +327,13 @@ prestarted for them.
   authentication is restored manually.
 - Only one MCP browser may use the profile at a time; perform UI checks
   sequentially and close the browser before another worker starts one.
+
+If a delegation reports that an MCP approval is missing, stop the run. Review
+the configured project MCP in `.cursor/mcp.json`, then manually run
+`agent mcp enable playwright` from the price-memo repository and retry the
+delegation. This approves only the `playwright` server in Cursor's local
+approved-server list; the delegate never enables MCPs, and no global MCP
+configuration is changed. Do not approve other servers to resolve this error.
 
 The MCP launcher pins `@playwright/mcp` 0.0.83, its exact `playwright` /
 `playwright-core` dependency 1.64.0-alpha-1790635538000, and Chromium revision

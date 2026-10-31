@@ -132,6 +132,21 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE(self.failure_dir().stat().st_mode), 0o700)
         self.assertEqual(stat.S_IMODE(records[0].stat().st_mode), 0o600)
 
+    def test_missing_mcp_approval_is_categorized_and_manual_action_is_shown(self) -> None:
+        source = (
+            "import sys\n"
+            "print('MCP server playwright is not approved; approval required', file=sys.stderr, flush=True)\n"
+            "raise SystemExit(1)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("mcp_approval_required", result.stdout)
+        self.assertIn("agent mcp enable playwright", result.stdout)
+        self.assertIn("No MCP was enabled automatically", result.stdout)
+        self.assertEqual(len(self.failure_records()), 1)
+        record = json.loads(self.failure_records()[0].read_text(encoding="utf-8"))
+        self.assertEqual(record["stderr_categories"]["mcp_approval_required"], 1)
+
     def test_missing_result_and_invalid_json_are_failures(self) -> None:
         for index, source in enumerate((
             "print('plain output contains NO_RAW_OUTPUT_SENTINEL', flush=True)\n",
@@ -247,6 +262,9 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         agent.write_text(
             "#!/usr/bin/env python3\nimport json,os,sys\n"
             "open(os.environ['FAKE_AGENT_ARGS'],'w').write(json.dumps(sys.argv[1:]))\n"
+            "if os.environ.get('FAKE_MCP_FAILURE'):\n"
+            " print('MCP server playwright is not approved; approval required',file=sys.stderr,flush=True)\n"
+            " raise SystemExit(1)\n"
             "print(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n",
             encoding="utf-8",
         )
@@ -272,12 +290,24 @@ class DelegateCursorMonitorTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 args = json.loads(args_file.read_text(encoding="utf-8"))
-                self.assertIn("--approve-mcps", args)
+                self.assertNotIn("--approve-mcps", args)
                 self.assertIn("--trust", args)
                 self.assertEqual(args[args.index("--model") + 1], model)
                 self.assertNotIn("PROMPT_ARG_SENTINEL", result.stdout + result.stderr)
                 self.assertIn(f"route: {route}", result.stdout)
                 self.assertIn(f"tier/model: {tier}/{model}", result.stdout)
+
+        failed = subprocess.run(
+            [str(fixture / "scripts/delegate-cursor.sh"), "--allow-dirty", "--prompt", "MCP failure test"],
+            cwd=fixture, env={**env, "FAKE_MCP_FAILURE": "1"},
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertIn("agent mcp enable playwright", failed.stdout)
+        self.assertIn("No MCP was enabled automatically", failed.stdout)
+        failed_args = json.loads(args_file.read_text(encoding="utf-8"))
+        self.assertNotIn("--approve-mcps", failed_args)
+        self.assertNotIn("mcp", failed_args)
 
 
 if __name__ == "__main__":

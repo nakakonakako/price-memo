@@ -57,6 +57,9 @@ ERROR_PATTERNS = {
     "permission_denied": re.compile(r"permission denied|access denied|not permitted|\beacces\b|\beperm\b", re.I),
     "mcp_initialization": re.compile(
         r"\bmcp\b.{0,80}(?:initiali[sz]|failed|error)|(?:initiali[sz]|failed|error).{0,80}\bmcp\b", re.I),
+    "mcp_approval_required": re.compile(
+        r"\bmcp\b.{0,100}(?:not approved|approval required|needs approval|not enabled)"
+        r"|(?:not approved|approval required|needs approval|not enabled).{0,100}\bmcp\b", re.I),
     "worktree_creation": re.compile(r"fatal:.*worktree|unable to create.*worktree|failed to create.*worktree", re.I),
     "worktree_setup": re.compile(r"worktree setup (?:failed|error)|setup script.*(?:failed|error)|failed.*setup", re.I),
 }
@@ -538,6 +541,13 @@ class StreamMonitor:
             if self.error_categories:
                 categories = ",".join(f"{k}={v}" for k, v in sorted(self.error_categories.items()))
                 print(f"[delegate-cursor] stderr_categories: {categories}", flush=True)
+            if self.error_categories.get("mcp_approval_required", 0):
+                print(
+                    "[delegate-cursor] MCP approval is missing. Review and run "
+                    "`agent mcp enable playwright` from the price-memo repository, "
+                    "then retry the delegation. No MCP was enabled automatically.",
+                    flush=True,
+                )
             print(f"[delegate-cursor] malformed_stream_lines: {self.malformed_lines}", flush=True)
             print(f"[delegate-cursor] oversized_stream_lines: {self.oversized_lines}", flush=True)
             print(f"[delegate-cursor] assistant_updates: {self.assistant_updates}", flush=True)
