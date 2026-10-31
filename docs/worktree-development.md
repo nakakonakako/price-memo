@@ -54,13 +54,19 @@ paths against the selected `~/.config/price-memo/<environment>/` sources.
 Missing links are allowed at this stage for a new worktree. Invalid links,
 regular files at managed paths, stale links without a source, and unexpected
 `.env*` paths in the repository root, `frontend/`, `backend/`, or
-`backend/app/` stop setup before npm or uv runs. After setup links are prepared,
-a strict check requires each configured source to have its exact symlink and
+`backend/app/` stop setup before npm or uv runs. Symlinks and non-directories
+in any parent component of the configured settings path or these dotenv lookup
+directories are rejected. `backend/app/services/` is intentionally outside
+price-memo's dotenv lookup scope. After setup links are prepared, a strict
+check requires each configured source to have its exact symlink and
 each unconfigured source to have no target. Manual `--environment` selections
 remain supported. Cursor delegation explicitly selects `development` and
 checks its actual workspace again immediately before starting the monitored
-Cursor process. These checks inspect names, file types, and symlink targets;
-they never read environment file contents or repair existing paths.
+Cursor process. A managed link must be an absolute symlink whose direct
+`readlink` target exactly equals the selected source path. Relative and
+indirect symlinks are rejected even when they resolve to the same file. These
+checks inspect names, file types, and symlink targets; they never read
+environment file contents or repair existing paths.
 
 The recognized managed paths match this repository's current dotenv use:
 root `.env`, frontend `.env` and `.env.local`, and backend `.env`. The validator
