@@ -108,8 +108,26 @@ stderr, prompts, tool arguments/results, and file contents are not relayed or
 persisted. The monitor displays bounded event types, tool categories and
 phases, timing, process/result status, byte counts, and fixed error categories.
 It does not display command text, paths emitted by tools, or free-form stderr.
-Progress output is capped at 300 lines, and oversized stream records are
-discarded.
+Known stream-json event types are `system`, `assistant`, `tool_call`, and
+`result`; malformed JSON is counted without showing its contents, and unknown
+event types are displayed only as `other`. Assistant/thinking updates and delta
+events are aggregated. Tool categories come from known payload shapes, and
+tool failures include bounded nested `error`/`failure`/`failed` markers. A run
+is successful only when the process exits 0 and the result event reports
+success without `is_error: true`.
+
+Each stdout record is limited to 256 KiB by byte count, excluding its LF or
+CRLF terminator. Exactly-at-limit records remain parseable. An oversized
+record is discarded through its next newline and counted once; parsing resumes
+with the following record. This also counts an oversized record that reaches
+EOF without a newline. An unterminated final JSON record within the limit is
+parsed. The accumulator remains bounded while stdout is discarded, and the
+monitor continues reading stderr, handling signals, and waiting for Worker exit.
+Ordinary progress output, including heartbeat, event and tool notices, is
+limited to 300 lines. Excess lines are counted in the final summary. Signal and
+other important failure notifications, final state, and the verification
+report are not suppressed. Heartbeat reports monitor liveness, not guaranteed
+Worker progress.
 
 Before starting Cursor, the monitor takes a nonblocking advisory lock for the
 canonical path of the actual checkout/workspace passed to Cursor. This also

@@ -2,9 +2,12 @@
 """Offline regression tests for safe Cursor delegation stream handling."""
 from __future__ import annotations
 
+import argparse
+import contextlib
+import importlib.util
+import io
 import json
 import os
-from pathlib import Path
 import signal
 import stat
 import subprocess
@@ -12,10 +15,15 @@ import sys
 import tempfile
 import time
 import unittest
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 MONITOR = REPO_ROOT / "scripts" / "delegate-cursor-monitor.py"
 DELEGATE = REPO_ROOT / "scripts" / "delegate-cursor.sh"
+_MONITOR_SPEC = importlib.util.spec_from_file_location("delegate_cursor_monitor", MONITOR)
+assert _MONITOR_SPEC is not None and _MONITOR_SPEC.loader is not None
+MONITOR_MODULE = importlib.util.module_from_spec(_MONITOR_SPEC)
+_MONITOR_SPEC.loader.exec_module(MONITOR_MODULE)
 
 
 class DelegateCursorMonitorTests(unittest.TestCase):
@@ -70,6 +78,127 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         begin = "[delegate-cursor] ----- worker completion report begin -----"
         end = "[delegate-cursor] ----- worker completion report end -----"
         return stdout[stdout.index(begin):stdout.index(end) + len(end)]
+
+    def test_stdout_line_boundaries_match_receipt_monitor(self) -> None:
+        limit = MONITOR_MODULE.MAX_EVENT_BYTES
+        prefix = b'{"type":"system","subtype":"init","padding":"'
+        suffix = b'"}'
+        exact = prefix + b"x" * (limit - len(prefix) - len(suffix)) + suffix
+        self.assertEqual(len(exact), limit)
+
+        reader = MONITOR_MODULE.BoundedStdoutLines()
+        parsed: list[bytes] = []
+        for offset in range(0, len(exact), 65536):
+            parsed.extend(reader.feed(exact[offset : offset + 65536]))
+            self.assertLessEqual(reader.buffered_bytes, limit)
+        self.assertEqual(parsed, [])
+        parsed.extend(reader.feed(b"\n"))
+        self.assertEqual(parsed, [exact])
+        self.assertEqual(reader.oversized_lines, 0)
+
+        exact_crlf = MONITOR_MODULE.BoundedStdoutLines()
+        self.assertEqual(list(exact_crlf.feed(exact + b"\r")), [])
+        self.assertEqual(exact_crlf.buffered_bytes, limit)
+        self.assertEqual(list(exact_crlf.feed(b"\n")), [exact])
+
+        below = MONITOR_MODULE.BoundedStdoutLines()
+        record = b'{"type":"system"}'
+        self.assertEqual(list(below.feed(record + b"\r")), [])
+        self.assertEqual(list(below.feed(b"\n")), [record])
+
+        recovery = MONITOR_MODULE.BoundedStdoutLines()
+        next_event = b'{"type":"result","subtype":"success"}'
+        self.assertEqual(
+            list(recovery.feed(b"x" * (limit + 1) + b"\n" + next_event + b"\n")),
+            [next_event],
+        )
+        self.assertEqual(recovery.oversized_lines, 1)
+
+    def test_unterminated_stdout_eof_counts_oversize_once_and_parses_small_json(self) -> None:
+        reader = MONITOR_MODULE.BoundedStdoutLines()
+        list(reader.feed(b"x" * (MONITOR_MODULE.MAX_EVENT_BYTES + 1)))
+        self.assertEqual(reader.buffered_bytes, 0)
+        self.assertEqual(reader.oversized_lines, 1)
+        self.assertEqual(list(reader.finish()), [])
+        self.assertEqual(reader.oversized_lines, 1)
+
+        partial = MONITOR_MODULE.BoundedStdoutLines()
+        final_record = b'{"type":"result","subtype":"success"}'
+        list(partial.feed(final_record))
+        self.assertEqual(list(partial.finish()), [final_record])
+
+    def test_event_and_tool_semantics_match_receipt_monitor(self) -> None:
+        agent = self.fake_agent(
+            "import json\n"
+            "print('', flush=True)\n"
+            "print('MALFORMED_STREAM_SECRET_SENTINEL {', flush=True)\n"
+            "print(json.dumps({'type':'private_unknown','body':'UNKNOWN_EVENT_SECRET_SENTINEL'}), flush=True)\n"
+            "print(json.dumps([]), flush=True)\n"
+            "print(json.dumps({'type':'thinking'}), flush=True)\n"
+            "print(json.dumps({'type':'assistant','subtype':'delta','message':'PRIVATE'}), flush=True)\n"
+            "print(json.dumps({'type':'system','subtype':'delta'}), flush=True)\n"
+            "print(json.dumps({'type':'tool_call','subtype':'completed','tool_call':{'shellToolCall':{'result':{'error':{'message':'PRIVATE_TOOL_FAILURE'}}}}}), flush=True)\n"
+            "print(json.dumps({'type':'result','subtype':'success','is_error':False}), flush=True)\n"
+        )
+        result = self.run_agent(agent)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("malformed_stream_lines: 2", result.stdout)
+        self.assertIn("event: other", result.stdout)
+        self.assertIn("event: unparsed_output", result.stdout)
+        self.assertIn("assistant_updates: 3", result.stdout)
+        self.assertIn("tool: Shellコマンド failed", result.stdout)
+        self.assertIn("event: result/success", result.stdout)
+        self.assertIn("outcome: success", result.stdout)
+        self.assertNotIn("MALFORMED_STREAM_SECRET_SENTINEL", result.stdout)
+        self.assertNotIn("UNKNOWN_EVENT_SECRET_SENTINEL", result.stdout)
+        self.assertNotIn("PRIVATE_TOOL_FAILURE", result.stdout)
+
+    def test_nested_tool_category_uses_receipt_priority(self) -> None:
+        event = {
+            "type": "tool_call",
+            "subtype": "started",
+            "tool_call": {
+                "shellToolCall": {},
+                "readToolCall": {},
+            },
+        }
+        self.assertEqual(MONITOR_MODULE.tool_category(event), "ファイル読み取り")
+        self.assertEqual(MONITOR_MODULE.tool_phase(event, "started"), "started")
+        self.assertEqual(
+            MONITOR_MODULE.tool_phase(
+                {
+                    "type": "tool_call",
+                    "subtype": "completed",
+                    "toolCall": [{"mcpToolCall": {"result": [{"failed": False}]}}],
+                },
+                "completed",
+            ),
+            "failed",
+        )
+
+    def test_progress_cap_keeps_final_report_and_signal_notifications_visible(self) -> None:
+        output = io.StringIO()
+        monitor = MONITOR_MODULE.StreamMonitor(argparse.Namespace(), [])
+        with contextlib.redirect_stdout(output):
+            for index in range(320):
+                monitor._print_progress(f"[delegate-cursor] 稼働中 heartbeat {index}")
+            print("[delegate-cursor] interruption requested: signal 15", flush=True)
+            MONITOR_MODULE.emit_report(
+                "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+                "PASS: monitor report — mock result observed\n"
+                "END VERIFICATION RESULTS",
+                False,
+            )
+            print(
+                f"[delegate-cursor] progress_lines_suppressed: {monitor.suppressed_progress}",
+                flush=True,
+            )
+        lines = output.getvalue().splitlines()
+        ordinary = [line for line in lines if "heartbeat" in line]
+        self.assertEqual(len(ordinary), 300)
+        self.assertIn("interruption requested: signal 15", output.getvalue())
+        self.assertIn("verification PASS: monitor report", output.getvalue())
+        self.assertIn("progress_lines_suppressed: 20", output.getvalue())
 
     def test_success_prints_allowlisted_progress_and_bounded_sanitized_report(self) -> None:
         report = "\n".join([
@@ -180,6 +309,115 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         self.assertIn("oversized_stream_lines: 1", result.stdout)
         self.assertNotIn("LONG_STREAM_SECRET_SENTINEL", result.stdout)
         self.assertLessEqual(len(result.stdout.encode()), 5000)
+
+    def test_unterminated_oversized_stdout_does_not_block_stderr_or_eof_cleanup(self) -> None:
+        source = (
+            "import sys\n"
+            "sys.stdout.buffer.write(b'X' * (300 * 1024) + b'EOF_STREAM_SECRET_SENTINEL')\n"
+            "sys.stdout.flush()\n"
+            "print('network connection error: ECONNRESET STDERR_PRIVATE_SENTINEL', file=sys.stderr, flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("oversized_stream_lines: 1", result.stdout)
+        self.assertIn("network_connection", result.stdout)
+        self.assertNotIn("EOF_STREAM_SECRET_SENTINEL", result.stdout + result.stderr)
+        self.assertNotIn("STDERR_PRIVATE_SENTINEL", result.stdout + result.stderr)
+        record = json.loads(self.failure_records()[0].read_text(encoding="utf-8"))
+        self.assertEqual(record["oversized_stream_lines"], 1)
+        self.assertNotIn("stderr_excerpt", record)
+
+    def test_progress_flood_keeps_final_result_and_report(self) -> None:
+        report = (
+            "VERIFICATION RESULTS\nCOVERAGE: COMPLETE\n"
+            "PASS: mock worker — result event was parsed\n"
+            "END VERIFICATION RESULTS"
+        )
+        source = (
+            "import json\n"
+            "for index in range(400):\n"
+            " print(json.dumps({'type':'tool_call','subtype':'started','tool_call':{'shellToolCall':{'call_id':str(index)}}}))\n"
+            f"print(json.dumps({{'type':'result','subtype':'success','is_error':False,'result':{report!r}}}))\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        tool_lines = [line for line in result.stdout.splitlines() if "[delegate-cursor] tool:" in line]
+        self.assertEqual(len(tool_lines), 300)
+        self.assertIn("progress_lines_suppressed: 101", result.stdout)
+        self.assertIn("outcome: success", result.stdout)
+        self.assertIn("verification PASS: mock worker", self.report_block(result.stdout))
+
+    def test_signal_notice_is_visible_after_progress_limit(self) -> None:
+        marker = self.root / "progress-flood-emitted"
+        agent = self.fake_agent(
+            "import json,os,time\nfrom pathlib import Path\n"
+            "for index in range(400):\n"
+            " print(json.dumps({'type':'tool_call','subtype':'started','tool_call':{'shellToolCall':{'call_id':str(index)}}}),flush=True)\n"
+            "Path(os.environ['FLOOD_MARKER']).touch()\n"
+            "time.sleep(30)\n"
+        )
+        proc = subprocess.Popen(
+            self.monitor_command(agent),
+            cwd=REPO_ROOT,
+            env=self.env({"FLOOD_MARKER": str(marker)}),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(marker.exists(), "mock worker did not emit progress flood")
+        time.sleep(0.2)
+        proc.send_signal(signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=10)
+        self.assertEqual(proc.returncode, 128 + signal.SIGTERM, stdout + stderr)
+        self.assertIn("interruption requested: signal", stdout)
+        self.assertIn("progress_lines_suppressed:", stdout)
+        self.assertIn("outcome: interrupted", stdout)
+
+    def test_signal_during_oversized_line_is_forwarded_and_releases_lock(self) -> None:
+        marker = self.root / "oversized-line-written"
+        agent = self.fake_agent(
+            "import os,time\nfrom pathlib import Path\n"
+            "os.write(1,b'X' * (300 * 1024))\n"
+            "Path(os.environ['OVERSIZED_MARKER']).touch()\n"
+            "time.sleep(30)\n"
+        )
+        proc = subprocess.Popen(
+            self.monitor_command(agent),
+            cwd=REPO_ROOT,
+            env=self.env({"OVERSIZED_MARKER": str(marker)}),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        deadline = time.monotonic() + 5
+        while not marker.exists() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(marker.exists(), "mock worker did not finish its oversized record")
+        proc.send_signal(signal.SIGTERM)
+        stdout, stderr = proc.communicate(timeout=10)
+        self.assertEqual(proc.returncode, 128 + signal.SIGTERM, stdout + stderr)
+        self.assertIn("oversized_stream_lines: 1", stdout)
+        self.assertIn("outcome: interrupted", stdout)
+        retry = self.run_agent(
+            self.fake_agent(
+                "import json\nprint(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n"
+            )
+        )
+        self.assertEqual(retry.returncode, 0, retry.stdout + retry.stderr)
+
+    def test_success_subtype_with_error_flag_is_not_success(self) -> None:
+        source = (
+            "import json\n"
+            "print(json.dumps({'type':'result','subtype':'success','is_error':True}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("result_event_status: success", result.stdout)
+        self.assertIn("outcome: cursor_agent_unclassified", result.stdout)
+        self.assertEqual(json.loads(self.failure_records()[0].read_text())["outcome"], "cursor_agent_unclassified")
 
     def test_oversized_completion_report_is_truncated(self) -> None:
         source = (
