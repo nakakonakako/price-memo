@@ -4,8 +4,8 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --task-file <path> [--worktree <task-name> | --workspace <path>]
-  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --prompt <text> [--worktree <task-name> | --workspace <path>]
+  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --task-file <path> [--worktree <task-name> | --workspace <path>] [--trust|--no-trust]
+  scripts/delegate-cursor.sh [--tier <light|normal|hard>] --prompt <text> [--worktree <task-name> | --workspace <path>] [--trust|--no-trust]
   scripts/delegate-cursor.sh --fallback-tier <light|normal> --task-file <path> [--worktree <task-name> | --workspace <path>]
   scripts/delegate-cursor.sh --model-override gpt-5.6-luna-medium --task-file <path>
 
@@ -19,6 +19,8 @@ Options:
   --workspace   Reuse an existing worktree after showing its changes and running setup.
   --continue-worktree  Compatibility alias for --workspace.
   --allow-dirty Allow direct execution in a dirty current checkout.
+  --trust       Trust the workspace (enabled by default).
+  --no-trust    Disable workspace trust for this invocation.
   -h, --help    Show this help.
 
 Model mapping:
@@ -41,33 +43,48 @@ prompt=""
 worktree=""
 workspace=""
 allow_dirty=0
+trust=1
 tier_was_set=0
+fallback_was_set=0
+override_was_set=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --tier) tier="${2:?missing value for --tier}"; tier_was_set=1; shift 2 ;;
-    --fallback-tier) fallback_tier="${2:?missing value for --fallback-tier}"; shift 2 ;;
-    --model-override) model_override="${2:?missing value for --model-override}"; shift 2 ;;
+    --fallback-tier)
+      [[ "$fallback_was_set" -eq 0 ]] || { echo "--fallback-tier may be specified only once." >&2; exit 2; }
+      fallback_tier="${2:?missing value for --fallback-tier}"
+      fallback_was_set=1
+      shift 2
+      ;;
+    --model-override)
+      [[ "$override_was_set" -eq 0 ]] || { echo "--model-override may be specified only once." >&2; exit 2; }
+      model_override="${2:?missing value for --model-override}"
+      override_was_set=1
+      shift 2
+      ;;
     --task-file) task_file="${2:?missing value for --task-file}"; shift 2 ;;
     --prompt) prompt="${2:?missing value for --prompt}"; shift 2 ;;
     --worktree) worktree="${2:?missing value for --worktree}"; shift 2 ;;
     --workspace|--continue-worktree) workspace="${2:?missing value for --workspace}"; shift 2 ;;
     --allow-dirty) allow_dirty=1; shift ;;
+    --trust) trust=1; shift ;;
+    --no-trust) trust=0; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
 done
 
 route="cursor"
-if [[ -n "$fallback_tier" && ( "$tier_was_set" -eq 1 || -n "$model_override" ) ]]; then
+if [[ "$fallback_was_set" -eq 1 && ( "$tier_was_set" -eq 1 || "$override_was_set" -eq 1 ) ]]; then
   echo "--fallback-tier cannot be combined with --tier or --model-override." >&2
   exit 2
 fi
-if [[ -n "$model_override" && "$tier_was_set" -eq 1 ]]; then
+if [[ "$override_was_set" -eq 1 && "$tier_was_set" -eq 1 ]]; then
   echo "--model-override cannot be combined with --tier." >&2
   exit 2
 fi
-if [[ -n "$fallback_tier" ]]; then
+if [[ "$fallback_was_set" -eq 1 ]]; then
   route="other-models"
   case "$fallback_tier" in
     light) model="gemini-3.8-flash-low" ;;
@@ -75,7 +92,7 @@ if [[ -n "$fallback_tier" ]]; then
     *) echo "Invalid fallback tier: $fallback_tier (expected light or normal)" >&2; exit 2 ;;
   esac
   tier="fallback-$fallback_tier"
-elif [[ -n "$model_override" ]]; then
+elif [[ "$override_was_set" -eq 1 ]]; then
   route="other-models-reserve"
   case "$model_override" in
     gpt-5.6-luna-medium) model="$model_override" ;;
@@ -111,6 +128,22 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   exit 2
 }
 origin_root="$repo_root"
+repo_root="$(cd "$repo_root" && pwd -P)"
+cd "$repo_root"
+
+if [[ -n "$task_file" ]]; then
+  if [[ "$task_file" != /* ]]; then
+    task_file="$repo_root/$task_file"
+  fi
+  if [[ ! -f "$task_file" ]]; then
+    echo "Task file not found: $task_file" >&2
+    exit 2
+  fi
+  work_order="$(cat "$task_file")"
+else
+  work_order="$prompt"
+fi
+
 if [[ -n "$worktree" ]]; then
   repo_name="$(basename "$(dirname "$(git -C "$repo_root" rev-parse --path-format=absolute --git-common-dir)")")"
   workspace="$HOME/worktrees/$repo_name/$worktree"
@@ -140,16 +173,6 @@ else
 fi
 repo_root="$(cd "$repo_root" && pwd -P)"
 cd "$repo_root"
-
-if [[ -n "$task_file" ]]; then
-  if [[ ! -f "$task_file" ]]; then
-    echo "Task file not found: $task_file" >&2
-    exit 2
-  fi
-  work_order="$(cat "$task_file")"
-else
-  work_order="$prompt"
-fi
 
 if [[ -z "$worktree" && -z "$workspace" && "$allow_dirty" -ne 1 && -n "$(git status --porcelain)" ]]; then
   cat >&2 <<'EOF'
@@ -225,7 +248,11 @@ echo "[delegate-cursor] repository: $(basename "$repo_root")" >&2
 echo "[delegate-cursor] route: $route" >&2
 echo "[delegate-cursor] tier: $tier" >&2
 echo "[delegate-cursor] model: $model" >&2
-cmd=(agent --trust --model "$model")
+cmd=(agent)
+if [[ "$trust" -eq 1 ]]; then
+  cmd+=(--trust)
+fi
+cmd+=(--model "$model")
 if [[ -n "$workspace" ]]; then
   cmd+=(--workspace "$workspace")
 fi

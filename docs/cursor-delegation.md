@@ -55,17 +55,27 @@ scripts/delegate-cursor.sh --model-override gpt-5.6-luna-medium --task-file /pat
 ```
 
 `--tier` and `--fallback-tier` cannot be combined. A model override cannot be
-combined with either tier. `--workspace` reuses a worktree belonging to this
-checkout, runs its setup, and passes its absolute path to Cursor. The
+combined with either tier. `--fallback-tier` and `--model-override` each accept
+one occurrence only; repeating either option is rejected. `--workspace` reuses
+a worktree belonging to this checkout, runs its setup, and passes its absolute
+path to Cursor. The
 compatibility alias `--continue-worktree` has the same behavior and is no longer
 limited to an Other Models route. The continuation prompt requires the worker
 to inspect status, staged and unstaged diffs, and relevant untracked files
 before editing, then preserve and continue existing work in place. The standard
-`--trust`, worktree, `stream-json`, Playwright MCP, shared profile, and dev
-server flows apply to both routes. The delegate does not pass
+worktree, `stream-json`, Playwright MCP, shared profile, and dev server flows
+apply to both routes. Workspace trust is enabled by default; `--no-trust` omits
+`--trust` for this invocation and a later `--trust` re-enables it. This does not
+clear an existing workspace trust decision or provide file-system isolation.
+The delegate does not pass
 `--approve-mcps`: that option approves every discovered MCP server and is not
 used. MCP server approval is independent of workspace trust, sandbox settings,
 and the shell command allowlist.
+
+Relative `--task-file` paths are resolved from the invoking repository root and
+read before worktree creation or reuse. Absolute paths keep their specified
+meaning. The contents become part of the worker prompt, so pass only reviewed
+work-order files.
 
 Do not take over implementation merely because the checkout is dirty. Use a
 direct checkout only when it is clean and has no concurrent work; otherwise
@@ -81,7 +91,8 @@ delegation is inconvenient.
 ### Delegation run evidence
 
 `scripts/delegate-cursor.sh` records the selected route/tier/model and UTC start
-time before launching Cursor with `agent --trust`. It passes
+time before launching Cursor with `agent --trust` by default. With `--no-trust`,
+the `--trust` argument is omitted. It passes
 `stream-json` directly to `scripts/delegate-cursor-monitor.py`; raw stdout,
 stderr, prompts, tool arguments/results, and file contents are not relayed or
 persisted. The monitor displays bounded event types, tool categories and
