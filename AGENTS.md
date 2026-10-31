@@ -60,9 +60,22 @@ Run individual checks additionally when needed to investigate a failure.
 
 ## Database safety
 
-Shared Supabase DB migrations are managed only in `receipt-manager/supabase/migrations/`.
-When a schema change is needed, add the migration in `receipt-manager`; do not keep
-migrations or run `db push` from this repository.
+The shared Supabase DB migration inventory and SQL source of truth are maintained
+in `shared-supabase-db/supabase/migrations/`. The matching price-memo DB
+contract is maintained in `db-contracts/price-memo.json`.
+
+Only the protected, manually dispatched Writer workflows in
+`shared-supabase-db` may apply migrations to hosted Dev/Prod databases.
+`receipt-manager` has no legacy hosted Writer path, and price-memo has no hosted
+DB Writer path. Application deploy workflows perform Reader-only compatibility
+gates; they never apply migrations. Do not create, retain, mirror, or apply
+shared DB migrations from price-memo, and do not run `db push` from this
+repository.
+
+Dev and Prod Writer credentials have passed read-only connection/identity
+verification. Applying a `PENDING` migration with the protected Writer
+workflow has not yet been verified. Local SQL validation must use an isolated,
+disposable PostgreSQL database or cluster, never a shared or hosted database.
 
 ## Git worktree and environment files
 
@@ -201,9 +214,9 @@ Escalate early for:
 
 For shared Supabase schema changes, price-memo must never create, keep, or apply
 migrations. The migration source of truth is
-`receipt-manager/supabase/migrations/`. Escalate the design to Sol and Luna;
+`shared-supabase-db/supabase/migrations/`. Escalate the design to Sol and Luna;
 if implementation is required, treat it as a separately supervised
-cross-repository task in receipt-manager. A Cursor worker delegated from
+cross-repository task in shared-supabase-db. A Cursor worker delegated from
 price-memo must not independently edit receipt-manager or any other repository.
 
 Do not escalate routine UI/CSS, understood local bugs, normal feature work,
