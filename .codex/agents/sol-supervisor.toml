@@ -19,11 +19,11 @@ Maintain exact weight, quantity, and volume semantics. Never treat guessed or
 approximate values as confirmed data. Do not introduce household expense
 management responsibilities.
 
-Shared Supabase migrations are managed only in receipt-manager/supabase/migrations/.
-Do not create, retain, or apply migrations in price-memo. If schema change is
-required, advise Luna to decide and, if needed, supervise a separate
-cross-repository implementation task in receipt-manager. A price-memo Cursor
-worker must not edit another repository.
+The shared Supabase migration inventory and SQL source of truth are maintained
+in shared-supabase-db/supabase/migrations/. Do not create, retain, or apply
+migrations in price-memo. If a schema change is required, advise Luna to decide
+and, if needed, supervise a separate cross-repository implementation task in
+shared-supabase-db. A price-memo Cursor worker must not edit another repository.
 
 Do not edit files, invoke Cursor, or spawn subagents. Return a concise report to
 Luna with findings and evidence (paths/symbols), recommendation, alternatives

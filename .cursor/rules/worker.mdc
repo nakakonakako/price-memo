@@ -10,8 +10,8 @@ the assigned work order and this repository.
 - Preserve exact weight, quantity, and volume semantics. Never promote guessed
   or approximate values to confirmed data.
 - Do not add household expense management or AI expense categorization.
-- Shared Supabase migrations are managed only in
-  receipt-manager/supabase/migrations/. Never create, retain, or apply
+- The shared Supabase migration inventory and SQL source of truth are maintained
+  in `shared-supabase-db/supabase/migrations/`. Never create, retain, or apply
   migrations from price-memo; never run a database push.
 - Do not edit receipt-manager or any other repository from a price-memo worker
   task. If work appears to require another repository, schema change, or
