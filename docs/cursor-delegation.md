@@ -114,15 +114,40 @@ delegation is inconvenient.
 
 ### Delegation run evidence
 
-`scripts/delegate-cursor.sh` captures the invoking checkout's physical absolute
-path as `origin_root` before selecting a worker workspace. Worktree creation
-and reuse, final environment-link validation, and monitor code all come from
-that checkout, including when it is itself a non-main worktree. The harness
-does not switch to or force-run the latest-main scripts; fresh worker-worktree
-base selection remains the existing `scripts/worktree.sh` policy. Cursor still
-receives `--workspace` for a selected worker worktree, while the monitor's
-`--checkout` is the canonical absolute path Cursor actually edits. For direct
-checkout runs those paths both identify `origin_root`.
+Before delegation, the Supervisor runs `git fetch origin main` and inspects the
+checkout containing the launcher that will actually run. The launcher resolves
+its physical script path and derives `origin_root` from that path, not from the
+caller cwd. It reads the local `refs/remotes/origin/main` commit without
+fetching or changing refs. That SHA is only the available local baseline; the
+Supervisor's successful fetch is what establishes that the baseline was
+refreshed for this invocation.
+
+When the source branch is `main`, an exact match or a local main that contains
+the baseline commit is allowed. A main behind the baseline, diverged/unrelated,
+or whose ancestry cannot be verified stops before Worker worktree preparation
+or Cursor startup. Missing/invalid `origin/main`, unreadable HEAD, or an
+unresolvable launcher checkout also stops safely. Feature branches and
+detached HEADs remain allowed when HEAD is valid, regardless of whether their
+SHA differs from the baseline. The launcher itself does not fetch, pull, reset,
+or switch branches.
+
+If the normal checkout's main is behind, fetch first and run the launcher from
+a dedicated harness worktree based on that main. Never update the normal
+checkout to make delegation work. The guard is present only in the launcher
+version being run: it cannot protect an invocation that directly starts an
+older launcher predating the check, so the Supervisor must inspect the actual
+launcher checkout before invoking it.
+
+The launcher reports its absolute path, `origin_root`, source branch and HEAD,
+baseline ref and SHA, Worker workspace path/branch/HEAD, monitor script path,
+and the monitor's `--checkout`. Worktree creation/reuse, final
+environment-link validation, and monitor code all come from `origin_root`,
+including when it is itself a non-main worktree. The harness does not switch to
+or force-run latest-main scripts; fresh Worker-worktree base selection remains
+the existing `scripts/worktree.sh` policy. Cursor receives `--workspace` for a
+selected Worker worktree, while the monitor's `--checkout` is the canonical
+absolute path Cursor actually edits. For direct checkout runs those paths both
+identify `origin_root`.
 
 The delegate records the selected route/tier/model and UTC start time before
 launching Cursor with `agent --trust` by default. With `--no-trust`, the
