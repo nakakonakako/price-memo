@@ -288,13 +288,38 @@ worktree with `scripts/worktree.sh` and pass its path using `--workspace`.
 A dirty checkout alone does not select Luna as implementer; apply the
 direct-implementation criteria above.
 
-Cursor CLI connects to Cursor's external API. Every Codex Supervisor invocation
-of `scripts/delegate-cursor.sh` must use network-enabled execution from the
-first attempt (`functions.exec_command` with `sandbox_permissions:
-"require_escalated"`). Do not run it once in the restricted sandbox and retry
-after `getaddrinfo EAI_AGAIN`; that failure is expected when the command lacks
-network access. Keep this permission scoped to the delegation command. Do not
-enable network access for the whole project sandbox solely to support Cursor.
+Cursor CLI connects to Cursor's external API. Before invoking
+`scripts/delegate-cursor.sh`, inspect the execution tools exposed in the current
+session and their current schemas, together with the active sandbox and approval
+policy. Use the available supported tool interface; do not assume a tool API
+name or permission option from another session.
+
+- If the current environment already permits the command's network access, run
+  the delegation command through the available execution tool without requesting
+  unnecessary privilege escalation.
+- If network access is restricted and the environment exposes a supported,
+  limited approval path for this command, request approval through that path and
+  scope it to the delegation command. Do not change the project-wide sandbox or
+  approval policy to obtain network access.
+- If the required approval path is unavailable or approval is denied, stop
+  before invoking or retrying the command. Report the concrete restriction and
+  request an approved network-enabled Codex environment or an operator-run
+  delegation in an environment that supports it.
+- Do not automatically enable `danger-full-access` for delegation. If a broad
+  permission mode is already active, do not treat it as least privilege or
+  widen it further; keep the invocation bounded to the intended task and report
+  that the environment itself is broader than the command requires.
+
+Classify failures from observed evidence: DNS/connection failures are network
+failures; missing or expired credentials are authentication failures; an
+explicit missing Playwright MCP approval follows the manual MCP approval policy
+below; an absent execution capability is an execution-tool limitation; and an
+unavailable or denied approval path is an approval-policy limitation. Do not
+infer one category from another or treat any tooling/environment failure as
+implementation difficulty. Do not change model tier in response to these
+failures or retry indefinitely; make only a bounded repair when evidence shows
+it can address the specific failure, otherwise stop and report the supported
+alternative environment.
 
 If Cursor CLI is unavailable, the delegate script fails, or another tooling
 failure prevents delegation, stop unproductive waits/retries and report the
