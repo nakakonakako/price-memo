@@ -14,14 +14,38 @@ not Sol escalation is needed. A decision to keep routine UI/CSS or a known
 local bug off the Sol path means Luna retains supervisor ownership; it does not
 mean Luna should implement the change herself.
 
-Cursor CLI must reach Cursor's external API. The Codex Supervisor must run each
-`scripts/delegate-cursor.sh` invocation with network-enabled execution from the
-start (`functions.exec_command` using `sandbox_permissions: "require_escalated"`).
-Do not first run it in the restricted sandbox and then retry after
-`getaddrinfo EAI_AGAIN`; the restricted attempt is expected to fail before the
-Cursor API can be reached. Keep network access scoped to this delegation
-command. Do not enable network access for the project sandbox globally solely
-for Cursor delegation.
+## Execution tools, network access, and approvals
+
+Cursor CLI must reach Cursor's external API. Before each invocation, the
+Supervisor inspects the execution tools exposed in the current session and
+their current schemas, plus the active sandbox and approval policy. Select the
+supported execution interface from that evidence. Do not assume the tool API
+name or permission options used by a previous Codex session.
+
+| Observed environment | Delegation decision |
+|---|---|
+| Network access is already permitted | Invoke the delegation script through the currently available execution tool. Do not request unnecessary elevation. |
+| Network is restricted and a supported limited approval path is available | Request approval through that path for the delegation command only. Do not broaden the project-wide sandbox or approval policy. |
+| Limited approval is unavailable or denied | Stop before invoking or retrying the command. Report the specific policy restriction and use an approved network-enabled Codex environment or an operator-run delegation there. |
+| No exposed execution tool can launch the script | Stop and report the missing execution capability; continue in an environment that exposes a supported command execution tool. |
+| A permission option such as `require_escalated` is absent or unsupported | Do not assume it exists or emulate it. Use another currently supported limited approval path if exposed; otherwise stop and report the constraint. |
+| The execution tool API has a different name | Use the currently exposed equivalent only if its documented capability and current policy allow the command; otherwise stop and report the limitation. |
+
+Never automatically enable `danger-full-access` for delegation. If a broad
+permission mode is already active, it is not evidence that the invocation uses
+least privilege. Do not alter that mode; keep the command and work order bounded
+and report the environment's broader access as an operational caveat.
+
+Classify failures only from observed evidence. DNS, connection, or egress
+denials are network failures; missing or expired credentials are authentication
+failures; an explicit Playwright MCP approval error is an MCP approval issue
+handled by the manual procedure below; a missing command execution capability
+is an execution-tool limitation; and an unavailable or denied limited approval
+path is an approval-policy limitation. Do not misclassify one as another, or
+treat a tooling/environment issue as model difficulty. Do not change the model
+tier for these failures or retry indefinitely. Make at most a bounded repair
+when it directly addresses the diagnosed cause; otherwise stop and report the
+supported alternative environment.
 
 Luna primarily clarifies requirements, investigates enough to classify and
 bound the task, decides whether Sol advice is needed, chooses the implementation
@@ -412,7 +436,7 @@ revision together after checking the package metadata and
 
 ## Retry / escalation
 
-- Environment/tooling failure: report and repair the environment; do not escalate model just because setup failed. For Cursor delegation, make the first attempt network-enabled as described above; do not intentionally make a restricted attempt first.
+- Environment/tooling failure: diagnose it from the currently exposed execution capability and active policy, then use only the supported network/approval path described above. Do not intentionally make a command attempt that current policy blocks. Make a bounded repair only when it addresses the observed failure; otherwise stop and report the alternative environment. Do not escalate the model just because setup failed.
 - Cursor CLI or delegation-script failure: report the failure, repair the environment or delegation infrastructure, then resume delegation; do not switch to Luna implementation as a shortcut.
 - `light` struggles with implementation: clarify the work order and retry as `normal`.
 - `normal` struggles after a clarified work order: retry as `hard`.
