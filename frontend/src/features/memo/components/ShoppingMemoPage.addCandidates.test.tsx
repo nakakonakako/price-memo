@@ -241,6 +241,8 @@ describe('ShoppingMemoPage add candidates', () => {
 
     const panel = addPanel()
     expect(within(panel).getByRole('button', { name: /メモに追加/ })).toBeTruthy()
+    expect(within(panel).queryByRole('button', { name: '+ 読み仮名' })).toBeNull()
+    expect(within(panel).queryByPlaceholderText('読み仮名（任意）')).toBeNull()
     expect(
       screen.queryByText('一致するフォルダがありません。'),
     ).toBeNull()
@@ -257,6 +259,7 @@ describe('ShoppingMemoPage add candidates', () => {
 
     const message = screen.getByText('一致するフォルダがありません。')
     expect(message.className).toContain('text-center')
+    expect(screen.getByRole('button', { name: '+ 読み仮名' })).toBeTruthy()
     expect(
       screen.queryByText(/追加ボタンで新規作成/),
     ).toBeNull()
@@ -295,7 +298,7 @@ describe('ShoppingMemoPage add candidates', () => {
     fireEvent.click(screen.getByRole('button', { name: '追加' }))
 
     await waitFor(() => {
-      expect(createFolder).toHaveBeenCalledWith('新規品目')
+      expect(createFolder).toHaveBeenCalledWith('新規品目', null)
     })
 
     const panel = addPanel()
@@ -567,7 +570,7 @@ describe('ShoppingMemoPage add candidates', () => {
     fireEvent.click(screen.getByRole('button', { name: '追加' }))
 
     await waitFor(() => {
-      expect(createFolder).toHaveBeenCalledWith('ぎゅうにゅう')
+      expect(createFolder).toHaveBeenCalledWith('ぎゅうにゅう', null)
       expect(addMemoItem).not.toHaveBeenCalledWith('folder-milk')
     })
   })
@@ -599,7 +602,7 @@ describe('ShoppingMemoPage add candidates', () => {
     })
   })
 
-  it('creates memo folders with name only (no reading)', async () => {
+  it('creates memo folders with the entered reading', async () => {
     const named: PriceFolder = {
       id: 'folder-named',
       user_id: 'user-a',
@@ -618,12 +621,71 @@ describe('ShoppingMemoPage add candidates', () => {
     fireEvent.change(screen.getByPlaceholderText(/品目名/), {
       target: { value: '牛乳（ぎゅうにゅう）' },
     })
+    fireEvent.click(screen.getByRole('button', { name: '+ 読み仮名' }))
+    fireEvent.change(screen.getByPlaceholderText('読み仮名（任意）'), {
+      target: { value: 'ぎゅうにゅう' },
+    })
     fireEvent.click(screen.getByRole('button', { name: '追加' }))
 
     await waitFor(() => {
-      expect(createFolder).toHaveBeenCalledWith('牛乳（ぎゅうにゅう）')
+      expect(createFolder).toHaveBeenCalledWith('牛乳（ぎゅうにゅう）', 'ぎゅうにゅう')
       expect(createFolder).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('clears reading and collapses the field when the folder name changes', async () => {
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+
+    const nameInput = screen.getByPlaceholderText(/品目名/)
+    fireEvent.change(nameInput, { target: { value: '新規品目' } })
+    fireEvent.click(screen.getByRole('button', { name: '+ 読み仮名' }))
+    const readingInput = screen.getByPlaceholderText('読み仮名（任意）')
+    fireEvent.change(readingInput, { target: { value: 'しんき' } })
+
+    fireEvent.change(nameInput, { target: { value: '別の品目' } })
+
+    expect(screen.queryByPlaceholderText('読み仮名（任意）')).toBeNull()
+    expect(screen.getByRole('button', { name: '+ 読み仮名' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '+ 読み仮名' }))
+    expect(
+      (screen.getByPlaceholderText('読み仮名（任意）') as HTMLInputElement).value,
+    ).toBe('')
+  })
+
+  it('does not update the reading of an existing folder when adding it', async () => {
+    const existing: PriceFolder = {
+      id: 'folder-existing',
+      user_id: 'user-a',
+      name: '既存品目',
+      reading: 'きそん',
+      created_at: '2026-01-01T00:00:00Z',
+    }
+    listFolders.mockResolvedValue([folderA, folderB, existing])
+    memoOnServer = [
+      ...memoOnServer,
+      {
+        ...memoItem('folder-existing', 2),
+        folder: existing,
+      },
+    ]
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: '既存品目' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '+ 読み仮名' }))
+    fireEvent.change(screen.getByPlaceholderText('読み仮名（任意）'), {
+      target: { value: '上書きしない' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '追加' }))
+
+    await waitFor(() => expect(screen.queryByPlaceholderText(/品目名/)).toBeNull())
+    expect(addMemoItem).not.toHaveBeenCalledWith('folder-existing')
+    expect(createFolder).not.toHaveBeenCalled()
   })
 
   it('does not trigger a full memo list reload after addMemoItem', async () => {
