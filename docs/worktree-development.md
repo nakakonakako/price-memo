@@ -1,5 +1,10 @@
 # Worktree and environment workflow
 
+The shared worktree-removal safety contract v1 and its price-memo test mapping
+are documented in [worktree-remove-contract.md](worktree-remove-contract.md).
+The contract describes observable removal protections and known detection
+limits; it does not standardize the internal process-inspection implementation.
+
 ## Standard locations
 
 - Main checkout: `~/web/price-memo`
