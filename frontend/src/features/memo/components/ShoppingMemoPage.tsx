@@ -120,6 +120,8 @@ export function ShoppingMemoPage({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
+  const [newReading, setNewReading] = useState('')
+  const [readingExpanded, setReadingExpanded] = useState(false)
   const [mutating, setMutating] = useState(false)
   const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -545,6 +547,9 @@ export function ShoppingMemoPage({
     if (!q) return []
     return filterFolders(foldersForPick, q)
   }, [foldersForPick, newName])
+  const hasExistingFolderName = Boolean(
+    findFolderByName(allFolders, newName.trim()),
+  )
 
   const clearFocusFolder = useCallback(() => {
     setFocusFolderId(null)
@@ -586,6 +591,8 @@ export function ShoppingMemoPage({
     try {
       await putOnMemo(folder)
       setNewName('')
+      setNewReading('')
+      setReadingExpanded(false)
       setAddOpen(false)
     } catch (err) {
       setError(toUserMessage(err, 'メモへの追加に失敗しました。'))
@@ -604,7 +611,7 @@ export function ShoppingMemoPage({
     let createdNewFolder = false
     try {
       if (!folder) {
-        folder = await createFolder(trimmed)
+        folder = await createFolder(trimmed, newReading.trim() || null)
         createdNewFolder = true
       }
 
@@ -618,6 +625,8 @@ export function ShoppingMemoPage({
         )
       }
       setNewName('')
+      setNewReading('')
+      setReadingExpanded(false)
       setAddOpen(false)
     } catch (err) {
       const createdFolder = folder
@@ -741,19 +750,41 @@ export function ShoppingMemoPage({
               onSubmit={(e) => void handleCreate(e)}
               className="flex flex-col gap-2 sm:flex-row"
             >
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="品目名（例: 鶏むね / 牛乳（ぎゅうにゅう））"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
-                disabled={interactionsLocked}
-                autoFocus
-              />
+              <div className="flex min-w-0 flex-1 gap-2">
+                <input
+                  type="text"
+                  value={newName}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value !== newName) {
+                      setNewReading('')
+                      setReadingExpanded(false)
+                    }
+                    setNewName(value)
+                  }}
+                  placeholder="品目名（例: 鶏むね / 牛乳）"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
+                  className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+                  disabled={interactionsLocked}
+                  autoFocus
+                />
+                {newName.trim() &&
+                  !hasExistingFolderName &&
+                  pickableFolders.length === 0 &&
+                  !readingExpanded && (
+                  <button
+                    type="button"
+                    onClick={() => setReadingExpanded(true)}
+                    disabled={interactionsLocked || readingExpanded}
+                    className="shrink-0 rounded-md border border-stone-300 px-2 text-xs text-stone-700 hover:bg-stone-50 disabled:opacity-50"
+                  >
+                    + 読み仮名
+                  </button>
+                )}
+              </div>
               <button
                 type="submit"
                 disabled={interactionsLocked || !newName.trim()}
@@ -762,11 +793,7 @@ export function ShoppingMemoPage({
                 追加
               </button>
             </form>
-            {allFolders.length > 0 && foldersForPick.length === 0 ? (
-              <p className="text-center text-sm text-stone-500">
-                追加できるフォルダはありません
-              </p>
-            ) : newName.trim() && pickableFolders.length > 0 ? (
+            {newName.trim() && pickableFolders.length > 0 ? (
               <ul className="max-h-48 divide-y divide-stone-100 overflow-y-auto rounded-md border border-stone-200 bg-white">
                 {pickableFolders.map((f) => (
                   <li key={f.id}>
@@ -786,10 +813,29 @@ export function ShoppingMemoPage({
                   </li>
                 ))}
               </ul>
-            ) : newName.trim() && foldersForPick.length > 0 ? (
+            ) : newName.trim() && readingExpanded ? (
+              <input
+                type="text"
+                value={newReading}
+                onChange={(e) => setNewReading(e.target.value)}
+                placeholder="読み仮名（任意）"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                disabled={interactionsLocked}
+                className="w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500"
+              />
+            ) : allFolders.length > 0 && foldersForPick.length === 0 ? (
               <p className="text-center text-sm text-stone-500">
-                一致するフォルダがありません。
+                追加できるフォルダはありません
               </p>
+            ) : newName.trim() ? (
+              foldersForPick.length > 0 ? (
+                <p className="text-center text-sm text-stone-500">
+                  一致するフォルダがありません。
+                </p>
+              ) : null
             ) : null}
           </div>
         )}
