@@ -181,11 +181,15 @@ export function useFolders() {
     }
   }
 
-  const rename = async (id: string, name: string) => {
+  const rename = async (
+    id: string,
+    name: string,
+    reading: string | null,
+  ) => {
     setIsMutating(true)
     setError(null)
     try {
-      const updated = await renameFolder(id, name)
+      const updated = await renameFolder(id, name, reading)
       if (!mountedRef.current) return
       refreshGenerationRef.current += 1
       setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)))

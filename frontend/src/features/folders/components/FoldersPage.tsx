@@ -74,7 +74,11 @@ import { subscribeStoresCacheRefresh } from '@/features/stores/api/storesCache'
 import type { PriceStore } from '@/features/stores/types'
 import { useFolders } from '../hooks/useFolders'
 import type { PriceFolder } from '../types'
-import { folderSortKey, parseFolderName } from '../utils/folderName'
+import { FolderNameFields } from './FolderNameFields'
+import {
+  folderSearchText,
+  folderSortKey,
+} from '../utils/folderName'
 import { ScrollToTopButton } from '@/components/ScrollToTopButton'
 import type { FolderDetailRequest } from '../folderDetailRequest'
 
@@ -279,6 +283,8 @@ export function FoldersPage({
   } = useFolders()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState('')
+  const [editingReading, setEditingReading] = useState('')
+  const [readingExpanded, setReadingExpanded] = useState(false)
   const [openFolderId, setOpenFolderId] = useState<string | null>(null)
   const [previewFolderId, setPreviewFolderId] = useState<string | null>(null)
   const [openFolderLoadingId, setOpenFolderLoadingId] = useState<string | null>(
@@ -349,7 +355,7 @@ export function FoldersPage({
     () =>
       folders.map((f) => ({
         id: f.id,
-        label: parseFolderName(f.name).displayName,
+        label: f.name,
       })),
     [folders],
   )
@@ -361,15 +367,16 @@ export function FoldersPage({
     const q = catalogQueryTrimmed
     const filtered = q
       ? folders.filter((f) => {
-          const { displayName, reading } = parseFolderName(f.name)
-          const hay = `${displayName} ${reading ?? ''} ${f.name}`
-          return matchesSearchQuery(hay, q)
+          return matchesSearchQuery(folderSearchText(f.name, f.reading), q)
         })
       : folders
     const rows = [...filtered]
     if (folderSort === 'name') {
       rows.sort((a, b) =>
-        nameCollator.compare(folderSortKey(a.name), folderSortKey(b.name)),
+        nameCollator.compare(
+          folderSortKey(a.name, a.reading),
+          folderSortKey(b.name, b.reading),
+        ),
       )
       if (draftFolderId) {
         const draftIdx = rows.findIndex((f) => f.id === draftFolderId)
@@ -810,18 +817,22 @@ export function FoldersPage({
   const startEdit = (folder: PriceFolder) => {
     setEditingId(folder.id)
     setEditingName(folder.name)
+    setEditingReading(folder.reading ?? '')
+    setReadingExpanded(Boolean(folder.reading))
   }
 
   const cancelEdit = useCallback(() => {
     setEditingId(null)
     setEditingName('')
+    setEditingReading('')
+    setReadingExpanded(false)
   }, [])
 
   const handleRename = async (e: FormEvent) => {
     e.preventDefault()
     if (!editingId) return
     try {
-      await rename(editingId, editingName)
+      await rename(editingId, editingName, editingReading)
       setDraftFolderId((id) => (id === editingId ? null : id))
       cancelEdit()
     } catch {
@@ -1340,36 +1351,41 @@ export function FoldersPage({
                 data-edit-surface
                 data-no-trash-drag
                 onSubmit={(e) => void handleRename(e)}
-                className="flex w-full min-w-0 items-center gap-1"
+                className="flex w-full min-w-0 flex-col gap-2"
                 onClick={(e) => e.stopPropagation()}
               >
-                <input
-                  type="text"
-                  value={editingName}
-                  onChange={(e) => setEditingName(e.target.value)}
-                  className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-stone-500"
-                  autoFocus
+                <FolderNameFields
+                  name={editingName}
+                  reading={editingReading}
+                  readingExpanded={readingExpanded}
                   disabled={isMutating}
+                  onNameChange={setEditingName}
+                  onReadingChange={setEditingReading}
+                  onReadingExpandedChange={setReadingExpanded}
+                  actions={
+                    <div className="flex items-center justify-end gap-1">
+                      <button
+                        type="submit"
+                        disabled={isMutating || !editingName.trim()}
+                        className="shrink-0 rounded-md bg-stone-900 px-2.5 py-1.5 text-sm text-white disabled:opacity-50"
+                      >
+                        保存
+                      </button>
+                      <button
+                        type="button"
+                        onClick={cancelEdit}
+                        className="shrink-0 rounded-md px-2.5 py-1.5 text-sm text-stone-600 hover:bg-white/60"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  }
                 />
-                <button
-                  type="submit"
-                  disabled={isMutating || !editingName.trim()}
-                  className="shrink-0 rounded-md bg-stone-900 px-2.5 py-1.5 text-sm text-white disabled:opacity-50"
-                >
-                  保存
-                </button>
-                <button
-                  type="button"
-                  onClick={cancelEdit}
-                  className="shrink-0 rounded-md px-2.5 py-1.5 text-sm text-stone-600 hover:bg-white/60"
-                >
-                  取消
-                </button>
               </form>
             ) : (
               <div className="flex min-w-0 w-full items-center">
                 <span className="min-w-0 truncate px-1 text-base font-semibold text-stone-900">
-                  {parseFolderName(folder.name).displayName}
+                  {folder.name}
                 </span>
                 <EditIconButton
                   quiet
@@ -1605,10 +1621,9 @@ export function FoldersPage({
                   <ul className="space-y-2">
                     {previewRows.map((record) => {
                       const expanded = expandedRecordIds.has(record.id)
-                      const itemName = parseFolderName(
+                      const itemName =
                         folders.find((f) => f.id === record.folder_id)?.name ??
-                          '—',
-                      ).displayName
+                        '—'
                       return (
                         <li key={record.id} className="list-none min-w-0">
                           <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-white px-2 py-1.5 sm:px-3">
@@ -1660,7 +1675,7 @@ export function FoldersPage({
               <ArrowLeftIcon />
             </button>
             <h2 className="min-w-0 flex-1 truncate text-lg font-semibold text-stone-900">
-              {parseFolderName(detailFolder.name).displayName}
+              {detailFolder.name}
             </h2>
             <div className="flex shrink-0 items-center gap-1">
               <button
@@ -1741,9 +1756,8 @@ export function FoldersPage({
           ) : (
             <ul className="space-y-2">
               {getStoreRecords(detailStore.name).map((record) => {
-                const itemName = parseFolderName(
-                  folders.find((f) => f.id === record.folder_id)?.name ?? '—',
-                ).displayName
+                const itemName =
+                  folders.find((f) => f.id === record.folder_id)?.name ?? '—'
                 return (
                   <li key={record.id} className="list-none min-w-0">
                     <div className="min-w-0 max-w-full overflow-hidden rounded-md border border-stone-200 bg-white px-2 py-2 sm:px-3">
@@ -2188,7 +2202,7 @@ export function FoldersPage({
             <p className="text-sm text-stone-700">
               「
               <span className="font-medium text-stone-900">
-                {parseFolderName(deleteConfirmFolder.name).displayName}
+                {deleteConfirmFolder.name}
               </span>
               」を削除しますか？
             </p>

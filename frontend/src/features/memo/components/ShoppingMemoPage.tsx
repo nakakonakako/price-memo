@@ -10,15 +10,16 @@ import { ScrollToTopButton } from '@/components/ScrollToTopButton'
 import { TrashDragProvider, MemoTrashZone } from '@/components/trash/TrashDragProvider'
 import type { DragEndResult } from '@/components/trash/types'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { createFolder, listFolders } from '@/features/folders/api/foldersApi'
-import type { PriceFolder } from '@/features/folders/types'
 import {
-  folderSortKey,
-  parseFolderName,
-} from '@/features/folders/utils/folderName'
+  createFolder,
+  filterFolders,
+  findFolderByName,
+  listFolders,
+} from '@/features/folders/api/foldersApi'
+import type { PriceFolder } from '@/features/folders/types'
+import { folderSortKey } from '@/features/folders/utils/folderName'
 import { listRecords, listRecordsForFolders } from '@/features/records/api/recordsApi'
 import type { PriceRecord } from '@/features/records/types'
-import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import { reorderIds } from '@/lib/listOrder'
 import { isMissingTargetError } from '@/lib/appError'
 import { toUserMessage } from '@/lib/userError'
@@ -92,18 +93,6 @@ function hasDeletedFolder(
     folderList.some((folder) => folder.id === folderId) ||
     memoList.some((item) => item.folder_id === folderId)
   )
-}
-
-function findFolderByInput(
-  folders: PriceFolder[],
-  input: string,
-): PriceFolder | undefined {
-  const q = input.trim()
-  if (!q) return undefined
-  return folders.find((f) => {
-    const { displayName } = parseFolderName(f.name)
-    return equalsSearchQuery(f.name, q) || equalsSearchQuery(displayName, q)
-  })
 }
 
 function MemoListEndMarker({ lastId }: { lastId: string | null }) {
@@ -524,7 +513,7 @@ export function ShoppingMemoPage({
       const position = nextIds.indexOf(draggedId) + 1
       const item = memoItems.find((m) => m.folder_id === draggedId)
       if (!item || position < 1) return
-      const name = parseFolderName(item.folder.name).displayName
+      const name = item.folder.name
       setReorderAnnouncement(`${name}を${position}番目に移動しました`)
     },
     [commitReorder, memoItems, setReorderAnnouncement],
@@ -544,18 +533,17 @@ export function ShoppingMemoPage({
     return allFolders
       .filter((f) => !memoFolderIds.has(f.id))
       .sort((a, b) =>
-        nameCollator.compare(folderSortKey(a.name), folderSortKey(b.name)),
+        nameCollator.compare(
+          folderSortKey(a.name, a.reading),
+          folderSortKey(b.name, b.reading),
+        ),
       )
   }, [allFolders, memoFolderIds])
 
   const pickableFolders = useMemo(() => {
     const q = newName.trim()
     if (!q) return []
-    return foldersForPick.filter((f) => {
-      const { displayName, reading } = parseFolderName(f.name)
-      const hay = `${displayName} ${reading ?? ''} ${f.name}`
-      return matchesSearchQuery(hay, q)
-    })
+    return filterFolders(foldersForPick, q)
   }, [foldersForPick, newName])
 
   const clearFocusFolder = useCallback(() => {
@@ -612,7 +600,7 @@ export function ShoppingMemoPage({
     if (!trimmed) return
     setError(null)
     setMutating(true)
-    let folder: PriceFolder | undefined = findFolderByInput(allFolders, trimmed)
+    let folder: PriceFolder | undefined = findFolderByName(allFolders, trimmed)
     let createdNewFolder = false
     try {
       if (!folder) {
@@ -789,7 +777,7 @@ export function ShoppingMemoPage({
                       className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left text-sm hover:bg-stone-50 disabled:opacity-50"
                     >
                       <span className="min-w-0 truncate font-medium text-stone-900">
-                        {parseFolderName(f.name).displayName}
+                        {f.name}
                       </span>
                       <span className="shrink-0 text-xs text-stone-500">
                         メモに追加

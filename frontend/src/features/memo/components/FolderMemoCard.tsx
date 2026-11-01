@@ -17,7 +17,6 @@ import {
 import { DateInput } from '@/components/DateInput'
 import { StoreField } from '@/components/StoreField'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
-import { parseFolderName } from '@/features/folders/utils/folderName'
 import { UnitField } from '@/features/records/components/UnitField'
 import { createRecord } from '@/features/records/api/recordsApi'
 import type { PriceRecord, PriceUnit } from '@/features/records/types'
@@ -81,7 +80,7 @@ export function FolderMemoCard({
     mobileReorderEnabled && mobileReorder?.activeId === folderId
   const compactListDisplay =
     mobileReorderEnabled && (mobileReorder?.compactListDisplay ?? false)
-  const displayName = parseFolderName(folderName).displayName
+  const displayName = folderName
   const [open, setOpen] = useState(false)
   const [amount, setAmount] = useState('')
   const [unit, setUnit] = useState<PriceUnit>('g')

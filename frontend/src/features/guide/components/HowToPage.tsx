@@ -878,9 +878,8 @@ function MockFolderCardAnnotated() {
 }
 
 /**
- * Semantics (folderName.ts / FoldersPage): a trailing （reading） is split from
- * the name; the list shows only the name, while search matches the reading and
- * name order uses the reading as sort key.
+ * Semantics (FoldersPage): folder name and reading are separate fields.
+ * Lists show the name as stored; search uses both; name sort prefers reading.
  */
 function KanaChip({ children }: { children: ReactNode }) {
   return (
@@ -897,20 +896,27 @@ function KanaBlock() {
         読み仮名を使った検索と並べ替え
       </p>
       <p className="text-sm leading-relaxed text-stone-600">
-        フォルダ名の末尾に（読み仮名）を付けて保存します。
+        フォルダ名と読み仮名は別々に入力します。
       </p>
 
       <div className="space-y-1" aria-hidden>
         <span className="text-xs text-stone-500">フォルダ名</span>
         <div className="rounded-md border border-stone-300 bg-white px-2.5 py-2 text-sm text-stone-800">
-          牛乳（ぎゅうにゅう）
+          牛乳（通常表記）
+        </div>
+      </div>
+
+      <div className="space-y-1" aria-hidden>
+        <span className="text-xs text-stone-500">読み仮名</span>
+        <div className="rounded-md border border-stone-300 bg-white px-2.5 py-2 text-sm text-stone-800">
+          ぎゅうにゅう
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <KanaStage
           title="保存後の表示"
-          result={<KanaChip>牛乳</KanaChip>}
+          result={<KanaChip>牛乳（通常表記）</KanaChip>}
         />
         <KanaStage
           title="検索・名前順"

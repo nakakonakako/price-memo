@@ -122,7 +122,7 @@ Supabase（A の Dev または Prod）
 
 | 画面 | ラベル（仮） | ステータス | 概要 |
 |------|--------------|------------|------|
-| `memo` | 買い物メモ | **現行** | 店頭用ピン留めリスト。掲載フォルダの記録のみロード。新規追加は先頭。開いたカードからフォルダ詳細へ移動できる。詳細は [spec-shopping-memo.md](./spec-shopping-memo.md) |
+| `memo` | 買い物メモ | **現行** | 店頭用ピン留めリスト。掲載フォルダの記録のみロード。新規追加は先頭。品目表示・候補は `name` そのまま。候補検索は `reading` 併用（追加ボタンは `name` 一致のみ）。開いたカードからフォルダ詳細へ移動できる。詳細は [spec-shopping-memo.md](./spec-shopping-memo.md) |
 | `folders` | フォルダ | **現行** | 品目名／店名カタログ、直近プレビュー＋詳細一覧、横断検索。詳細は [spec-folders-catalog.md](./spec-folders-catalog.md) |
 | `trends` | 値段推移 | **現行（スマホのみ）** | 独立タブ。`lg` 以上では非表示（フォルダタブの分割パネルに統合） |
 | `howto` | 使い方 | **現行** | 機能説明・操作ヒント。詳細は [spec-guide.md](./spec-guide.md) |
@@ -163,7 +163,7 @@ B 固有テーブル。RLS・`user_id` 分離。migration正本はshared-supabas
 
 | テーブル | 概要 | 主なカラム | 備考 |
 |----------|------|------------|------|
-| `price_folders` | 手動フォルダ（品目名） | `name`, `sort_order`, `user_id`（`name` 一意） | 末尾 `()` / `（）` で読みソート可。表示は読み非表示 |
+| `price_folders` | 手動フォルダ（品目名） | `name`, `reading?`, `sort_order`, `user_id`（`name` 一意） | 読み仮名は任意。括弧を含め `name` をそのまま表示 |
 | `price_stores` | 店舗名カタログ | `name`, `user_id`（`name` 一意） | 記録保存時に `ensureStore`。入力は `StoreField` |
 | `price_memo_items` | 買い物メモの掲載 | `folder_id`, `sort_order`, `user_id`（`folder_id` 一意） | フォルダ削除で CASCADE。メモから外すだけなら行削除 |
 | `price_records` | 厳密レコード | `folder_id`, `recorded_at`, `store_name`, `price`, `amount`, `unit`, `sort_order`, `receipt_item_id?` | `store_name` は `price_stores` と整合。単位は自由文字列 |
@@ -341,6 +341,8 @@ price-memo/
 | 2026-10-22 | Cursor検証サーバーの起動直後プロセスを追跡し、所有権未確認プロセスのkill禁止と停止完了確認を強化 |
 | 2026-10-22 | 開発・Playwright起動前にVite/backendのDev Supabase接続先を検証し、接続先不明な既存UI検証サーバーの再利用を拒否 |
 | 2026-10-22 | Cursor UI検証サーバーの同一worktree再利用にプロセス所有権・起動設定照合と排他ロックを追加 |
+| 2026-10-22 | 買い物メモの候補検索・並びをフォルダ一覧と同じ `reading` 対応に。表示とメモからの新規作成は `name` のみ |
+| 2026-10-21 | フォルダ名と任意の読み仮名を分離し、表示・検索・名前順と編集UIを更新 |
 | 2026-10-18 | Private Broadcast通知から表示中画面と店舗キャッシュを再取得。再接続時とアプリ復帰時の同期を維持 |
 | 2026-10-18 | BL-02 第3段階のうち、0件更新・削除を対象なしとして扱うフロント保護を追加（同時編集CASはDB側RPC待ち） |
 | 2026-10-18 | BL-02 第1段階: `resumeSync` で復帰時に Supabase から再取得（`catalogSync` revision とは別経路） |
