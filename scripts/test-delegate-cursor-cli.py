@@ -46,6 +46,10 @@ class DelegateCursorCliTests(unittest.TestCase):
             check=True,
             capture_output=True,
         )
+        subprocess.run(
+            ["git", "-C", str(self.repo), "update-ref", "refs/remotes/origin/main", "HEAD"],
+            check=True,
+        )
         self.workspace = self.root / "workspace"
         subprocess.run(
             ["git", "-C", str(self.repo), "worktree", "add", "-b", "fixture/workspace", str(self.workspace)],

@@ -118,6 +118,15 @@ disposable PostgreSQL database or cluster, never a shared or hosted database.
   `scripts/worktree.sh create`; failed fetches stop creation instead of falling
   back to a stale ref. Explicit bases and existing local branches do not fetch.
   Existing worktrees are reused without fetching or changing their branch.
+- Before delegation, fetch `origin/main` and inspect the checkout containing
+  the actual launcher. The launcher checks its source `main` against the local
+  `origin/main` ref and stops before Worker setup when main is stale, diverged,
+  or unverifiable. If the normal checkout is old, use a dedicated harness
+  worktree based on the fetched main; do not update the normal checkout. Feature
+  branches and detached HEADs are not rejected only because their HEAD differs.
+  The launcher reports source, Worker, baseline, and monitor paths/SHAs. This
+  guard cannot protect an invocation that directly starts an older launcher
+  predating the check; see `docs/cursor-delegation.md`.
 
 ## Implementation rules
 

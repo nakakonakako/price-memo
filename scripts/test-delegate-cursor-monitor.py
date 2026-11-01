@@ -814,6 +814,10 @@ class DelegateCursorMonitorTests(unittest.TestCase):
         (fixture / "tracked.txt").write_text("clean\n", encoding="utf-8")
         subprocess.run(["git", "-C", str(fixture), "add", "."], check=True)
         subprocess.run(["git", "-C", str(fixture), "commit", "-m", "fixture"], check=True, capture_output=True)
+        subprocess.run(
+            ["git", "-C", str(fixture), "update-ref", "refs/remotes/origin/main", "HEAD"],
+            check=True,
+        )
         (fixture / "tracked.txt").write_text("dirty\n", encoding="utf-8")
         fake_bin = self.root / "bin"
         fake_bin.mkdir()

@@ -16,6 +16,7 @@ mkdir -p "$fixture_config/secrets/ai-quota-ca"
 cp "$source_root/scripts/worktree.sh" "$fixture_repo/scripts/worktree.sh"
 cp "$source_root/scripts/worktree-env-validate.py" "$fixture_repo/scripts/worktree-env-validate.py"
 cp "$source_root/scripts/delegate-cursor-monitor.py" "$fixture_repo/scripts/delegate-cursor-monitor.py"
+cp "$source_root/scripts/delegate-cursor.sh" "$fixture_repo/scripts/delegate-cursor.sh"
 cp "$source_root/scripts/worktree-remove-inspect.py" "$fixture_repo/scripts/worktree-remove-inspect.py"
 cp "$source_root/scripts/cursor-devserver.py" "$fixture_repo/scripts/cursor-devserver.py"
 cp "$source_root/scripts/backend-venv.sh" "$fixture_repo/scripts/backend-venv.sh"
@@ -333,7 +334,7 @@ chmod +x "$fixture_bin/agent"
 git -C "$fixture_repo" update-ref refs/remotes/origin/main "$stale_origin_main"
 : > "$command_log"
 cd "$fixture_repo"
-if ! "$source_root/scripts/delegate-cursor.sh" --prompt "worktree fixture" --worktree delegate-fresh >"$test_root/delegate-create.log" 2>&1; then
+if ! "$fixture_repo/scripts/delegate-cursor.sh" --prompt "worktree fixture" --worktree delegate-fresh >"$test_root/delegate-create.log" 2>&1; then
   echo "Expected delegate-cursor to create a worktree." >&2
   cat "$test_root/delegate-create.log" >&2
   exit 1
@@ -348,7 +349,7 @@ grep -Fq 'git fetch origin-main' "$command_log" || {
 [[ "$(git -C "$delegate_workspace" rev-parse HEAD)" == "$latest_origin_main" ]]
 
 : > "$command_log"
-if ! "$source_root/scripts/delegate-cursor.sh" --prompt "worktree fixture" --worktree delegate-fresh >"$test_root/delegate-reuse.log" 2>&1; then
+if ! "$fixture_repo/scripts/delegate-cursor.sh" --prompt "worktree fixture" --worktree delegate-fresh >"$test_root/delegate-reuse.log" 2>&1; then
   echo "Expected delegate-cursor to reuse an existing worktree." >&2
   cat "$test_root/delegate-reuse.log" >&2
   exit 1
@@ -358,7 +359,7 @@ if grep -Fq 'git fetch origin-main' "$command_log"; then
   exit 1
 fi
 
-if ! "$source_root/scripts/delegate-cursor.sh" --prompt "worktree fixture" --continue-worktree "$delegate_workspace" >"$test_root/delegate-continue.log" 2>&1; then
+if ! "$fixture_repo/scripts/delegate-cursor.sh" --prompt "worktree fixture" --continue-worktree "$delegate_workspace" >"$test_root/delegate-continue.log" 2>&1; then
   echo "Expected --continue-worktree to preserve the existing worktree path." >&2
   cat "$test_root/delegate-continue.log" >&2
   exit 1
@@ -371,7 +372,7 @@ fi
 worker_started="$test_root/worker-started-invalid-env"
 unexpected_env="$delegate_workspace/.env.ai-quota"
 touch "$unexpected_env"
-if WORKER_STARTED_FILE="$worker_started" "$source_root/scripts/delegate-cursor.sh" --prompt 'invalid environment fixture' --workspace "$delegate_workspace" >"$test_root/delegate-invalid-env.log" 2>&1; then
+if WORKER_STARTED_FILE="$worker_started" "$fixture_repo/scripts/delegate-cursor.sh" --prompt 'invalid environment fixture' --workspace "$delegate_workspace" >"$test_root/delegate-invalid-env.log" 2>&1; then
   echo "Expected Cursor delegation to reject an unexpected dotenv path." >&2
   exit 1
 fi
@@ -385,7 +386,7 @@ ln -s "$fixture_config/frontend/.env" "$environment_alias"
 rm "$managed_link"
 ln -s "$environment_alias" "$managed_link"
 worker_started_indirect_link="$test_root/worker-started-indirect-link"
-if WORKER_STARTED_FILE="$worker_started_indirect_link" "$source_root/scripts/delegate-cursor.sh" \
+if WORKER_STARTED_FILE="$worker_started_indirect_link" "$fixture_repo/scripts/delegate-cursor.sh" \
   --prompt 'indirect environment link fixture' --workspace "$delegate_workspace" \
   >"$test_root/delegate-indirect-env.log" 2>&1; then
   echo "Expected Cursor delegation to reject an indirect environment link." >&2
@@ -417,7 +418,7 @@ EOF
 chmod +x "$fixture_repo/scripts/worktree.sh"
 worker_started_after_setup="$test_root/worker-started-after-setup"
 if WORKTREE_TEST_REAL_WORKTREE="$real_worktree_script" WORKER_STARTED_FILE="$worker_started_after_setup" \
-  "$source_root/scripts/delegate-cursor.sh" --prompt 'post-setup dotenv fixture' --workspace "$delegate_workspace" \
+  "$fixture_repo/scripts/delegate-cursor.sh" --prompt 'post-setup dotenv fixture' --workspace "$delegate_workspace" \
   >"$test_root/delegate-post-setup-env.log" 2>&1; then
   echo "Expected the final environment validation to reject a path added after setup." >&2
   exit 1

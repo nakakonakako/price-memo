@@ -67,6 +67,10 @@ class DelegateCursorOriginTests(unittest.TestCase):
             check=True,
             capture_output=True,
         )
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "update-ref", "refs/remotes/origin/main", "HEAD"],
+            check=True,
+        )
 
         self.feature_origin = self.root / "feature-origin"
         subprocess.run(
@@ -160,13 +164,14 @@ class DelegateCursorOriginTests(unittest.TestCase):
         *args: str,
         env_extra: dict[str, str] | None = None,
         timeout: int = 15,
+        cwd: Path | None = None,
     ) -> subprocess.CompletedProcess[str]:
         env = {**self.env, "ORIGIN_ROOT": str(origin)}
         if env_extra:
             env.update(env_extra)
         return subprocess.run(
             [str(origin / "scripts/delegate-cursor.sh"), *args],
-            cwd=origin,
+            cwd=cwd or origin,
             env=env,
             capture_output=True,
             text=True,
@@ -235,10 +240,182 @@ class DelegateCursorOriginTests(unittest.TestCase):
             model="grok-4.7-high",
         )
         worker = self.latest_worker()
+        head = subprocess.check_output(
+            ["git", "-C", str(self.main_origin), "rev-parse", "HEAD"], text=True
+        ).strip()
+        self.assertIn(
+            f"[delegate-cursor] launcher: {self.main_origin}/scripts/delegate-cursor.sh",
+            result.stderr,
+        )
+        self.assertIn(f"[delegate-cursor] origin checkout: {self.main_origin}", result.stderr)
+        self.assertIn("[delegate-cursor] source branch: main", result.stderr)
+        self.assertIn(f"[delegate-cursor] source HEAD: {head}", result.stderr)
+        self.assertIn(f"[delegate-cursor] baseline: origin/main {head}", result.stderr)
+        self.assertIn(f"[delegate-cursor] worker workspace: {self.main_origin}", result.stderr)
+        self.assertIn("[delegate-cursor] worker branch: main", result.stderr)
+        self.assertIn(f"[delegate-cursor] worker HEAD: {head}", result.stderr)
+        self.assertIn(
+            f"[delegate-cursor] monitor: {self.main_origin}/scripts/delegate-cursor-monitor.py",
+            result.stderr,
+        )
+        self.assertIn(f"[delegate-cursor] monitor checkout: {self.main_origin}", result.stderr)
         self.assertEqual(worker["cwd"], str(self.main_origin.resolve()))
         self.assertNotIn("--workspace", worker["argv"])
         self.assertIn("--model", worker["argv"])
         self.assertEqual(worker["argv"][worker["argv"].index("--model") + 1], "grok-4.7-high")
+
+    def test_current_main_and_main_ahead_of_origin_are_allowed_with_provenance(self) -> None:
+        baseline = subprocess.check_output(
+            ["git", "-C", str(self.main_origin), "rev-parse", "HEAD"], text=True
+        ).strip()
+        current = self.delegate(self.main_origin, "--allow-dirty", "--prompt", "main baseline")
+        self.assertEqual(current.returncode, 0, current.stdout + current.stderr)
+        self.assertIn(f"[delegate-cursor] launcher: {self.main_origin}/scripts/delegate-cursor.sh", current.stderr)
+        self.assertIn(f"[delegate-cursor] origin checkout: {self.main_origin}", current.stderr)
+        self.assertIn("[delegate-cursor] source branch: main", current.stderr)
+        self.assertIn(f"[delegate-cursor] source HEAD: {baseline}", current.stderr)
+        self.assertIn(f"[delegate-cursor] baseline: origin/main {baseline}", current.stderr)
+
+        (self.main_origin / "fixture.txt").write_text("local main ahead\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.main_origin), "add", "fixture.txt"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "commit", "-m", "advance local main"],
+            check=True,
+            capture_output=True,
+        )
+        ahead = self.delegate(self.main_origin, "--allow-dirty", "--prompt", "main ahead")
+        self.assertEqual(ahead.returncode, 0, ahead.stdout + ahead.stderr)
+        self.assertIn(f"[delegate-cursor] baseline: origin/main {baseline}", ahead.stderr)
+
+    def test_stale_and_diverged_main_stop_before_worker_or_worktree_operations(self) -> None:
+        initial = subprocess.check_output(
+            ["git", "-C", str(self.main_origin), "rev-parse", "HEAD"], text=True
+        ).strip()
+        (self.main_origin / "fixture.txt").write_text("remote advance\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.main_origin), "add", "fixture.txt"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "commit", "-m", "remote advance"],
+            check=True,
+            capture_output=True,
+        )
+        baseline = subprocess.check_output(
+            ["git", "-C", str(self.main_origin), "rev-parse", "HEAD"], text=True
+        ).strip()
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "update-ref", "refs/remotes/origin/main", baseline],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "reset", "--hard", initial],
+            check=True,
+            capture_output=True,
+        )
+        stale = self.delegate(
+            self.main_origin, "--worktree", "must-not-create", "--prompt", "stale"
+        )
+        self.assertEqual(stale.returncode, 3, stale.stdout + stale.stderr)
+        self.assertIn(initial, stale.stderr)
+        self.assertIn(baseline, stale.stderr)
+        self.assertFalse(self.worker_marker.exists())
+        self.assertFalse(self.worktree_log.exists())
+
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "checkout", "-q", "main"], check=True
+        )
+        (self.main_origin / "fixture.txt").write_text("local divergent advance\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.main_origin), "add", "fixture.txt"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "commit", "-m", "local divergent advance"],
+            check=True,
+            capture_output=True,
+        )
+        diverged = self.delegate(
+            self.main_origin, "--worktree", "also-must-not-create", "--prompt", "diverged"
+        )
+        self.assertEqual(diverged.returncode, 3, diverged.stdout + diverged.stderr)
+        self.assertIn(baseline, diverged.stderr)
+        self.assertIn("Refusing to delegate", diverged.stderr)
+        self.assertFalse(self.worker_marker.exists())
+        self.assertFalse(self.worktree_log.exists())
+
+    def test_detached_historical_launcher_is_allowed_and_cwd_does_not_select_source(self) -> None:
+        initial = subprocess.check_output(
+            ["git", "-C", str(self.main_origin), "rev-parse", "HEAD"], text=True
+        ).strip()
+        (self.main_origin / "fixture.txt").write_text("new baseline\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.main_origin), "add", "fixture.txt"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "commit", "-m", "advance baseline"],
+            check=True,
+            capture_output=True,
+        )
+        baseline = subprocess.check_output(
+            ["git", "-C", str(self.main_origin), "rev-parse", "HEAD"], text=True
+        ).strip()
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "update-ref", "refs/remotes/origin/main", baseline],
+            check=True,
+        )
+        newer_cwd = self.root / "newer-main-cwd"
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "worktree", "add", "-q", str(newer_cwd), baseline],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "reset", "--hard", initial],
+            check=True,
+            capture_output=True,
+        )
+        stale_from_other_cwd = self.delegate(
+            self.main_origin,
+            "--worktree",
+            "cwd-must-not-change-source",
+            "--prompt",
+            "stale source",
+            cwd=newer_cwd,
+        )
+        self.assertEqual(stale_from_other_cwd.returncode, 3, stale_from_other_cwd.stderr)
+        self.assertIn(str(self.main_origin), stale_from_other_cwd.stderr)
+        self.assertFalse(self.worker_marker.exists())
+
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "checkout", "--detach", initial],
+            check=True,
+            capture_output=True,
+        )
+        detached = self.delegate(self.main_origin, "--allow-dirty", "--prompt", "historical")
+        self.assertEqual(detached.returncode, 0, detached.stdout + detached.stderr)
+        self.assertIn("[delegate-cursor] source branch: (detached HEAD)", detached.stderr)
+        self.assertIn(f"[delegate-cursor] source HEAD: {initial}", detached.stderr)
+
+    def test_origin_main_missing_or_invalid_stops_before_worktree_or_worker(self) -> None:
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "update-ref", "-d", "refs/remotes/origin/main"],
+            check=True,
+        )
+        missing = self.delegate(
+            self.main_origin, "--worktree", "missing-baseline", "--prompt", "missing"
+        )
+        self.assertNotEqual(missing.returncode, 0)
+        self.assertIn("Fetch origin/main explicitly", missing.stderr)
+        self.assertFalse(self.worker_marker.exists())
+        self.assertFalse(self.worktree_log.exists())
+
+        blob = subprocess.check_output(
+            ["git", "-C", str(self.main_origin), "hash-object", "-w", "--stdin"],
+            input=b"not a commit",
+        ).decode().strip()
+        subprocess.run(
+            ["git", "-C", str(self.main_origin), "update-ref", "refs/remotes/origin/main", blob],
+            check=True,
+        )
+        invalid = self.delegate(
+            self.main_origin, "--worktree", "invalid-baseline", "--prompt", "invalid"
+        )
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn("Cannot verify the local origin/main baseline", invalid.stderr)
+        self.assertFalse(self.worker_marker.exists())
+        self.assertFalse(self.worktree_log.exists())
 
     def test_symlinked_invocation_path_is_normalized_for_harness_and_checkout(self) -> None:
         alias = self.root / "main-origin-alias"
@@ -254,6 +431,18 @@ class DelegateCursorOriginTests(unittest.TestCase):
         workspace = self.home / "worktrees/price-memo/worker-task"
         self.assertTrue(self.origin_monitor_marker.exists())
         self.assert_monitor_contract(self.feature_origin, workspace, workspace_mode=True)
+        source_head = subprocess.check_output(
+            ["git", "-C", str(self.feature_origin), "rev-parse", "HEAD"], text=True
+        ).strip()
+        worker_head = subprocess.check_output(
+            ["git", "-C", str(workspace), "rev-parse", "HEAD"], text=True
+        ).strip()
+        self.assertIn("[delegate-cursor] source branch: supervisor-topic", result.stderr)
+        self.assertIn(f"[delegate-cursor] source HEAD: {source_head}", result.stderr)
+        self.assertIn(f"[delegate-cursor] worker workspace: {workspace}", result.stderr)
+        self.assertIn("[delegate-cursor] worker branch: codex/worker-task", result.stderr)
+        self.assertIn(f"[delegate-cursor] worker HEAD: {worker_head}", result.stderr)
+        self.assertIn(f"[delegate-cursor] monitor checkout: {workspace}", result.stderr)
         worker = self.latest_worker()
         self.assertEqual(worker["cwd"], str(workspace.resolve()))
         self.assertEqual(worker["argv"][worker["argv"].index("--workspace") + 1], str(workspace.resolve()))
@@ -272,6 +461,35 @@ class DelegateCursorOriginTests(unittest.TestCase):
             self.assertFalse(self.workspace_monitor_marker.exists())
             self.assert_monitor_contract(self.feature_origin, workspace, workspace_mode=True)
             self.assertIn("EXISTING WORKTREE REQUIREMENT", " ".join(self.latest_worker()["argv"]))
+
+    def test_relative_task_file_keeps_caller_repository_resolution(self) -> None:
+        caller_checkout = self.root / "task-file-caller"
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.feature_origin),
+                "worktree",
+                "add",
+                "-q",
+                "--detach",
+                str(caller_checkout),
+                "HEAD",
+            ],
+            check=True,
+        )
+        task_file = caller_checkout / "tasks/order.md"
+        task_file.parent.mkdir()
+        task_file.write_text("caller repository work order sentinel\n", encoding="utf-8")
+        result = self.delegate(
+            self.feature_origin,
+            "--allow-dirty",
+            "--task-file",
+            "tasks/order.md",
+            cwd=caller_checkout,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("caller repository work order sentinel", " ".join(self.latest_worker()["argv"]))
 
     def test_environment_validation_failure_prevents_worker_start(self) -> None:
         workspace = self.home / "worktrees/price-memo/env-failure"
