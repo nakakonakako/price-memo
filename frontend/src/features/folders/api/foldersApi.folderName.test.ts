@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { PriceFolder } from '../types'
+
+vi.mock('@/lib/supabase', () => ({
+  supabase: {},
+}))
+
 import { filterFolders, findFolderByName } from './foldersApi'
 
 const folders: PriceFolder[] = [
