@@ -298,6 +298,29 @@ class DelegateCursorMonitorTests(unittest.TestCase):
                 for path in self.failure_records():
                     path.unlink()
 
+    def test_zero_exit_with_error_result_is_failure(self) -> None:
+        source = (
+            "import json\n"
+            "print(json.dumps({'type':'result','subtype':'error','is_error':True}),flush=True)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("process_exit_code: 0", result.stdout)
+        self.assertIn("result_event_status: error", result.stdout)
+        self.assertIn("outcome: cursor_agent_unclassified", result.stdout)
+
+    def test_success_result_with_nonzero_worker_exit_is_failure(self) -> None:
+        source = (
+            "import json\n"
+            "print(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n"
+            "raise SystemExit(7)\n"
+        )
+        result = self.run_agent(self.fake_agent(source))
+        self.assertEqual(result.returncode, 7)
+        self.assertIn("process_exit_code: 7", result.stdout)
+        self.assertIn("result_event_status: success", result.stdout)
+        self.assertIn("outcome: cursor_agent_unclassified", result.stdout)
+
     def test_oversized_stream_line_is_discarded_without_unbounded_output(self) -> None:
         source = (
             "import json\n"
@@ -795,6 +818,77 @@ class DelegateCursorMonitorTests(unittest.TestCase):
                     "import json\nprint(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n"
                 ))
                 self.assertEqual(retry.returncode, 0, retry.stdout + retry.stderr)
+
+    def test_interrupt_does_not_affect_another_workspace_worker(self) -> None:
+        # Prepare shared private state before parallel monitor startup; testing
+        # lock isolation should not depend on a mkdir race in fixture setup.
+        self.failure_dir().mkdir(mode=0o700, parents=True)
+        interrupted_marker = self.root / "interrupted-worker-started"
+        other_marker = self.root / "other-worker-started"
+        interrupted_agent = self.fake_agent(
+            "import os,time\nfrom pathlib import Path\n"
+            "Path(os.environ['WORKER_MARKER']).touch()\ntime.sleep(30)\n",
+            "interrupted-agent.py",
+        )
+        other_agent = self.fake_agent(
+            "import json,os,time\nfrom pathlib import Path\n"
+            "Path(os.environ['WORKER_MARKER']).touch()\ntime.sleep(0.5)\n"
+            "print(json.dumps({'type':'result','subtype':'success','is_error':False}),flush=True)\n",
+            "other-agent.py",
+        )
+        interrupted_process = subprocess.Popen(
+            self.monitor_command(interrupted_agent),
+            cwd=REPO_ROOT,
+            env=self.env({"WORKER_MARKER": str(interrupted_marker)}),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        other_workspace = self.root / "other-workspace"
+        other_workspace.mkdir()
+        other_process = subprocess.Popen(
+            self.monitor_command(other_agent, checkout=other_workspace),
+            cwd=REPO_ROOT,
+            env=self.env({"WORKER_MARKER": str(other_marker)}),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline and not (
+                interrupted_marker.exists() and other_marker.exists()
+            ):
+                time.sleep(0.01)
+            if not interrupted_marker.exists() or not other_marker.exists():
+                for process in (interrupted_process, other_process):
+                    if process.poll() is None:
+                        process.send_signal(signal.SIGTERM)
+                interrupted_output = interrupted_process.communicate(timeout=8)
+                other_output = other_process.communicate(timeout=8)
+                self.fail(
+                    "fake Worker did not start: "
+                    f"target={interrupted_marker.exists()} {interrupted_output!r}; "
+                    f"other={other_marker.exists()} {other_output!r}"
+                )
+            interrupted_process.send_signal(signal.SIGTERM)
+            interrupted_stdout, interrupted_stderr = interrupted_process.communicate(
+                timeout=8
+            )
+            other_stdout, other_stderr = other_process.communicate(timeout=8)
+        finally:
+            for process in (interrupted_process, other_process):
+                if process.poll() is None:
+                    process.kill()
+                    process.wait(timeout=5)
+        self.assertEqual(
+            interrupted_process.returncode,
+            128 + signal.SIGTERM,
+            interrupted_stdout + interrupted_stderr,
+        )
+        self.assertIn("outcome: interrupted", interrupted_stdout)
+        self.assertEqual(other_process.returncode, 0, other_stdout + other_stderr)
+        self.assertIn("outcome: success", other_stdout)
 
     def test_all_model_routes_and_allow_dirty_gate_are_preserved(self) -> None:
         fixture = self.root / "repo"

@@ -138,6 +138,9 @@ version being run: it cannot protect an invocation that directly starts an
 older launcher predating the check, so the Supervisor must inspect the actual
 launcher checkout before invoking it.
 
+The shared v1 behavioral contract and price-memo test mapping are documented
+in [cursor-monitor-contract.md](./cursor-monitor-contract.md).
+
 The launcher reports its absolute path, `origin_root`, source branch and HEAD,
 baseline ref and SHA, Worker workspace path/branch/HEAD, monitor script path,
 and the monitor's `--checkout`. Worktree creation/reuse, final
