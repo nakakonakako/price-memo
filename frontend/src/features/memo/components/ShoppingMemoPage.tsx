@@ -547,6 +547,9 @@ export function ShoppingMemoPage({
     if (!q) return []
     return filterFolders(foldersForPick, q)
   }, [foldersForPick, newName])
+  const hasExistingFolderName = Boolean(
+    findFolderByName(allFolders, newName.trim()),
+  )
 
   const clearFocusFolder = useCallback(() => {
     setFocusFolderId(null)
@@ -759,7 +762,7 @@ export function ShoppingMemoPage({
                     }
                     setNewName(value)
                   }}
-                  placeholder="品目名（例: 鶏むね / 牛乳（ぎゅうにゅう））"
+                  placeholder="品目名（例: 鶏むね / 牛乳）"
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="off"
@@ -768,7 +771,10 @@ export function ShoppingMemoPage({
                   disabled={interactionsLocked}
                   autoFocus
                 />
-                {newName.trim() && pickableFolders.length === 0 && !readingExpanded && (
+                {newName.trim() &&
+                  !hasExistingFolderName &&
+                  pickableFolders.length === 0 &&
+                  !readingExpanded && (
                   <button
                     type="button"
                     onClick={() => setReadingExpanded(true)}

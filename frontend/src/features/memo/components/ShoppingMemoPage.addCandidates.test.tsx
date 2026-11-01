@@ -455,7 +455,7 @@ describe('ShoppingMemoPage add candidates', () => {
     const milk: PriceFolder = {
       id: 'folder-milk',
       user_id: 'user-a',
-      name: '牛乳（通常表記）',
+      name: '牛乳',
       reading: 'ぎゅうにゅう',
       sort_order: 0,
       created_at: '2026-01-01T00:00:00Z',
@@ -473,7 +473,7 @@ describe('ShoppingMemoPage add candidates', () => {
 
     const panel = addPanel()
     expect(
-      within(panel).getByRole('button', { name: /牛乳（通常表記）/ }),
+      within(panel).getByRole('button', { name: /牛乳/ }),
     ).toBeTruthy()
     expect(filterFolders([milk], 'ぎゅうにゅう').map((f) => f.id)).toEqual([
       'folder-milk',
@@ -542,7 +542,7 @@ describe('ShoppingMemoPage add candidates', () => {
     const milk: PriceFolder = {
       id: 'folder-milk',
       user_id: 'user-a',
-      name: '牛乳（通常表記）',
+      name: '牛乳',
       reading: 'ぎゅうにゅう',
       sort_order: 0,
       created_at: '2026-01-01T00:00:00Z',
@@ -579,7 +579,7 @@ describe('ShoppingMemoPage add candidates', () => {
     const milk: PriceFolder = {
       id: 'folder-milk',
       user_id: 'user-a',
-      name: '牛乳（通常表記）',
+      name: '牛乳',
       reading: 'ぎゅうにゅう',
       sort_order: 0,
       created_at: '2026-01-01T00:00:00Z',
@@ -592,7 +592,7 @@ describe('ShoppingMemoPage add candidates', () => {
     await openAddPanel()
 
     fireEvent.change(screen.getByPlaceholderText(/品目名/), {
-      target: { value: '牛乳（通常表記）' },
+      target: { value: '牛乳' },
     })
     fireEvent.click(screen.getByRole('button', { name: '追加' }))
 
@@ -606,8 +606,8 @@ describe('ShoppingMemoPage add candidates', () => {
     const named: PriceFolder = {
       id: 'folder-named',
       user_id: 'user-a',
-      name: '牛乳（ぎゅうにゅう）',
-      reading: null,
+      name: '牛乳',
+      reading: 'ぎゅうにゅう',
       sort_order: 0,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
@@ -619,7 +619,7 @@ describe('ShoppingMemoPage add candidates', () => {
     await openAddPanel()
 
     fireEvent.change(screen.getByPlaceholderText(/品目名/), {
-      target: { value: '牛乳（ぎゅうにゅう）' },
+      target: { value: '牛乳' },
     })
     fireEvent.click(screen.getByRole('button', { name: '+ 読み仮名' }))
     fireEvent.change(screen.getByPlaceholderText('読み仮名（任意）'), {
@@ -628,7 +628,7 @@ describe('ShoppingMemoPage add candidates', () => {
     fireEvent.click(screen.getByRole('button', { name: '追加' }))
 
     await waitFor(() => {
-      expect(createFolder).toHaveBeenCalledWith('牛乳（ぎゅうにゅう）', 'ぎゅうにゅう')
+      expect(createFolder).toHaveBeenCalledWith('牛乳', 'ぎゅうにゅう')
       expect(createFolder).toHaveBeenCalledTimes(1)
     })
   })
@@ -654,20 +654,20 @@ describe('ShoppingMemoPage add candidates', () => {
     ).toBe('')
   })
 
-  it('does not update the reading of an existing folder when adding it', async () => {
-    const existing: PriceFolder = {
-      id: 'folder-existing',
+  it('hides reading creation for an existing folder already on the memo', async () => {
+    const existingMilk: PriceFolder = {
+      id: 'folder-milk',
       user_id: 'user-a',
-      name: '既存品目',
-      reading: 'きそん',
+      name: '牛乳',
+      reading: 'ぎゅうにゅう',
       created_at: '2026-01-01T00:00:00Z',
     }
-    listFolders.mockResolvedValue([folderA, folderB, existing])
+    listFolders.mockResolvedValue([folderA, folderB, existingMilk])
     memoOnServer = [
       ...memoOnServer,
       {
-        ...memoItem('folder-existing', 2),
-        folder: existing,
+        ...memoItem('folder-milk', 2),
+        folder: existingMilk,
       },
     ]
 
@@ -675,16 +675,45 @@ describe('ShoppingMemoPage add candidates', () => {
     await waitForInitialLoad()
     await openAddPanel()
     fireEvent.change(screen.getByPlaceholderText(/品目名/), {
-      target: { value: '既存品目' },
+      target: { value: '牛乳' },
     })
-    fireEvent.click(screen.getByRole('button', { name: '+ 読み仮名' }))
-    fireEvent.change(screen.getByPlaceholderText('読み仮名（任意）'), {
-      target: { value: '上書きしない' },
-    })
+    expect(screen.queryByRole('button', { name: '+ 読み仮名' })).toBeNull()
+    expect(screen.queryByPlaceholderText('読み仮名（任意）')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '追加' }))
 
     await waitFor(() => expect(screen.queryByPlaceholderText(/品目名/)).toBeNull())
-    expect(addMemoItem).not.toHaveBeenCalledWith('folder-existing')
+    expect(addMemoItem).not.toHaveBeenCalledWith('folder-milk')
+    expect(createFolder).not.toHaveBeenCalled()
+  })
+
+  it('hides reading creation for a kana-equivalent existing folder name', async () => {
+    const existingMilk: PriceFolder = {
+      id: 'folder-kana-milk',
+      user_id: 'user-a',
+      name: 'ぎゅうにゅう',
+      reading: null,
+      created_at: '2026-01-01T00:00:00Z',
+    }
+    listFolders.mockResolvedValue([folderA, folderB, existingMilk])
+    memoOnServer = [
+      ...memoOnServer,
+      {
+        ...memoItem('folder-kana-milk', 2),
+        folder: existingMilk,
+      },
+    ]
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: 'ギュウニュウ' },
+    })
+
+    expect(screen.queryByRole('button', { name: '+ 読み仮名' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '追加' }))
+
+    await waitFor(() => expect(screen.queryByPlaceholderText(/品目名/)).toBeNull())
     expect(createFolder).not.toHaveBeenCalled()
   })
 
