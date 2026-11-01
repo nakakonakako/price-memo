@@ -41,9 +41,21 @@ describe('renameFolder', () => {
       error: { code: 'PGRST116', message: 'no rows' },
     })
 
-    await expect(renameFolder('folder-1', 'Renamed')).rejects.toSatisfy(
+    await expect(renameFolder('folder-1', 'Renamed', null)).rejects.toSatisfy(
       (err: unknown) => isMissingTargetError(err),
     )
     expect(bumpFoldersRevision).not.toHaveBeenCalled()
+  })
+
+  it('normalizes an empty reading to null on rename', async () => {
+    single.mockResolvedValue({ data: { id: 'folder-1' }, error: null })
+
+    await renameFolder('folder-1', 'Renamed', '   ')
+
+    expect(update).toHaveBeenCalledWith({
+      name: 'Renamed',
+      reading: null,
+      updated_at: expect.any(String),
+    })
   })
 })

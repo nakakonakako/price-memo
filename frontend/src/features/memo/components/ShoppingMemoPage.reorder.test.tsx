@@ -17,10 +17,15 @@ vi.mock('@/hooks/useMediaQuery', () => ({
   useMediaQuery: () => false,
 }))
 
-vi.mock('@/features/folders/api/foldersApi', () => ({
-  createFolder: vi.fn(),
-  listFolders: () => listFolders(),
-}))
+vi.mock('@/features/folders/api/foldersApi', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/features/folders/api/foldersApi')>()
+  return {
+    ...actual,
+    createFolder: vi.fn(),
+    listFolders: () => listFolders(),
+  }
+})
 
 vi.mock('@/features/records/api/recordsApi', () => ({
   listRecords: vi.fn(),

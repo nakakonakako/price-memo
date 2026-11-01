@@ -4,7 +4,6 @@ import {
   findFolderByName,
 } from '@/features/folders/api/foldersApi'
 import type { PriceFolder } from '@/features/folders/types'
-import { parseFolderName } from '@/features/folders/utils/folderName'
 import { toUserMessage } from '@/lib/userError'
 
 type Props = {
@@ -44,9 +43,7 @@ export function FolderField({
   const selected =
     selectedFromProps ??
     (pinned && pinned.id === folderId ? pinned : null)
-  const selectedLabel = selected
-    ? parseFolderName(selected.name).displayName
-    : ''
+  const selectedLabel = selected ? selected.name : ''
 
   useEffect(() => {
     if (!open) return
@@ -77,7 +74,7 @@ export function FolderField({
     }
     setPinned(folder)
     onFolderChange(folder.id)
-    setQuery(parseFolderName(folder.name).displayName)
+    setQuery(folder.name)
     setOpen(false)
     setFieldError(null)
   }
@@ -160,7 +157,7 @@ export function FolderField({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => selectFolder(folder)}
                   >
-                    {parseFolderName(folder.name).displayName}
+                    {folder.name}
                   </button>
                 </li>
               ))}

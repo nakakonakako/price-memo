@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { bumpFoldersRevision, publishFolderDeleted } from '@/lib/catalogSync'
 import { equalsSearchQuery, matchesSearchQuery } from '@/lib/kanaSearch'
 import type { PriceFolder } from '../types'
-import { parseFolderName } from '../utils/folderName'
+import { folderSearchText } from '../utils/folderName'
 
 export async function listFolders(): Promise<PriceFolder[]> {
   const { data, error } = await supabase
@@ -20,7 +20,10 @@ export async function listFolders(): Promise<PriceFolder[]> {
   return (data ?? []) as PriceFolder[]
 }
 
-export async function createFolder(name: string): Promise<PriceFolder> {
+export async function createFolder(
+  name: string,
+  reading: string | null = null,
+): Promise<PriceFolder> {
   const {
     data: { user },
     error: userError,
@@ -30,6 +33,7 @@ export async function createFolder(name: string): Promise<PriceFolder> {
 
   const trimmed = name.trim()
   if (!trimmed) throw new Error('フォルダ名を入力してください')
+  const normalizedReading = reading?.trim() || null
 
   const { data: maxRow } = await supabase
     .from('price_folders')
@@ -43,7 +47,12 @@ export async function createFolder(name: string): Promise<PriceFolder> {
 
   const { data, error } = await supabase
     .from('price_folders')
-    .insert({ name: trimmed, user_id: user.id, sort_order })
+    .insert({
+      name: trimmed,
+      reading: normalizedReading,
+      user_id: user.id,
+      sort_order,
+    })
     .select()
     .single()
 
@@ -55,13 +64,18 @@ export async function createFolder(name: string): Promise<PriceFolder> {
 export async function renameFolder(
   id: string,
   name: string,
+  reading: string | null,
 ): Promise<PriceFolder> {
   const trimmed = name.trim()
   if (!trimmed) throw new Error('フォルダ名を入力してください')
 
   const { data, error } = await supabase
     .from('price_folders')
-    .update({ name: trimmed, updated_at: new Date().toISOString() })
+    .update({
+      name: trimmed,
+      reading: reading?.trim() || null,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
     .select()
     .single()
@@ -94,8 +108,7 @@ export function findFolderByName(
   const nq = input.trim()
   if (!nq) return undefined
   return folders.find((f) => {
-    if (equalsSearchQuery(f.name, nq)) return true
-    return equalsSearchQuery(parseFolderName(f.name).displayName, nq)
+    return equalsSearchQuery(f.name, nq)
   })
 }
 
@@ -103,9 +116,7 @@ export function filterFolders(folders: PriceFolder[], query: string): PriceFolde
   const q = query.trim()
   if (!q) return folders
   return folders.filter((f) => {
-    const { displayName, reading } = parseFolderName(f.name)
-    const hay = `${displayName} ${reading ?? ''} ${f.name}`
-    return matchesSearchQuery(hay, q)
+    return matchesSearchQuery(folderSearchText(f.name, f.reading), q)
   })
 }
 

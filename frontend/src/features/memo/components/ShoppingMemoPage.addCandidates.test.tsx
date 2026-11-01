@@ -13,6 +13,7 @@ import {
 import { applyAuthIdentity, resetAuthIdentityForTests } from '@/lib/authIdentity'
 import { AuthProvider } from '@/contexts/AuthContext'
 import type { PriceFolder } from '@/features/folders/types'
+import { filterFolders } from '@/features/folders/api/foldersApi'
 
 const listFolders = vi.fn()
 const listMemoItems = vi.fn()
@@ -27,10 +28,15 @@ vi.mock('@/hooks/useMediaQuery', () => ({
   useMediaQuery: () => false,
 }))
 
-vi.mock('@/features/folders/api/foldersApi', () => ({
-  createFolder: (...args: unknown[]) => createFolder(...args),
-  listFolders: () => listFolders(),
-}))
+vi.mock('@/features/folders/api/foldersApi', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('@/features/folders/api/foldersApi')>()
+  return {
+    ...actual,
+    createFolder: (...args: unknown[]) => createFolder(...args),
+    listFolders: () => listFolders(),
+  }
+})
 
 vi.mock('@/features/records/api/recordsApi', () => ({
   listRecords: (...args: unknown[]) => listRecords(...args),
@@ -440,6 +446,184 @@ describe('ShoppingMemoPage add candidates', () => {
     })
     expect(screen.queryByText('メモへの追加に失敗しました。')).toBeNull()
     expect(screen.getByText(/メモへの追加は完了しています/)).toBeTruthy()
+  })
+
+  it('finds candidates by explicit reading with the same semantics as folder list', async () => {
+    const milk: PriceFolder = {
+      id: 'folder-milk',
+      user_id: 'user-a',
+      name: '牛乳（通常表記）',
+      reading: 'ぎゅうにゅう',
+      sort_order: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+    listFolders.mockResolvedValue([folderA, folderB, folderC, milk])
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: 'ぎゅうにゅう' },
+    })
+
+    const panel = addPanel()
+    expect(
+      within(panel).getByRole('button', { name: /牛乳（通常表記）/ }),
+    ).toBeTruthy()
+    expect(filterFolders([milk], 'ぎゅうにゅう').map((f) => f.id)).toEqual([
+      'folder-milk',
+    ])
+  })
+
+  it('shows literal folder names including parentheses in candidates', async () => {
+    const beans: PriceFolder = {
+      id: 'folder-beans',
+      user_id: 'user-a',
+      name: '納豆（3パック）',
+      reading: null,
+      sort_order: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+    listFolders.mockResolvedValue([folderA, folderB, folderC, beans])
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: '3パック' },
+    })
+
+    expect(screen.getByText('納豆（3パック）')).toBeTruthy()
+  })
+
+  it('sorts candidates by reading when present', async () => {
+    const alpha: PriceFolder = {
+      id: 'folder-alpha',
+      user_id: 'user-a',
+      name: 'あ品目',
+      reading: null,
+      sort_order: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+    const sortedByReading: PriceFolder = {
+      id: 'folder-sorted',
+      user_id: 'user-a',
+      name: '品目Z',
+      reading: 'あいうえお',
+      sort_order: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+    listFolders.mockResolvedValue([folderA, folderB, folderC, sortedByReading, alpha])
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: '品' },
+    })
+
+    const labels = within(addPanel())
+      .getAllByRole('button', { name: /メモに追加/ })
+      .map((btn) => btn.textContent?.replace(/メモに追加/g, '').trim())
+    expect(labels.indexOf('品目Z')).toBeLessThan(labels.indexOf('あ品目'))
+  })
+
+  it('does not bind an existing folder by reading on submit', async () => {
+    const milk: PriceFolder = {
+      id: 'folder-milk',
+      user_id: 'user-a',
+      name: '牛乳（通常表記）',
+      reading: 'ぎゅうにゅう',
+      sort_order: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+    const readingOnlyName: PriceFolder = {
+      id: 'folder-reading-only',
+      user_id: 'user-a',
+      name: 'ぎゅうにゅう',
+      reading: null,
+      sort_order: 1,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+    createFolder.mockResolvedValue(readingOnlyName)
+    listFolders.mockResolvedValue([folderA, folderB, folderC, milk])
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: 'ぎゅうにゅう' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '追加' }))
+
+    await waitFor(() => {
+      expect(createFolder).toHaveBeenCalledWith('ぎゅうにゅう')
+      expect(addMemoItem).not.toHaveBeenCalledWith('folder-milk')
+    })
+  })
+
+  it('reuses an existing folder on submit by literal name only', async () => {
+    const milk: PriceFolder = {
+      id: 'folder-milk',
+      user_id: 'user-a',
+      name: '牛乳（通常表記）',
+      reading: 'ぎゅうにゅう',
+      sort_order: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+    listFolders.mockResolvedValue([folderA, folderB, folderC, milk])
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: '牛乳（通常表記）' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '追加' }))
+
+    await waitFor(() => {
+      expect(createFolder).not.toHaveBeenCalled()
+      expect(addMemoItem).toHaveBeenCalledWith('folder-milk')
+    })
+  })
+
+  it('creates memo folders with name only (no reading)', async () => {
+    const named: PriceFolder = {
+      id: 'folder-named',
+      user_id: 'user-a',
+      name: '牛乳（ぎゅうにゅう）',
+      reading: null,
+      sort_order: 0,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    }
+    createFolder.mockResolvedValue(named)
+
+    renderPage()
+    await waitForInitialLoad()
+    await openAddPanel()
+
+    fireEvent.change(screen.getByPlaceholderText(/品目名/), {
+      target: { value: '牛乳（ぎゅうにゅう）' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '追加' }))
+
+    await waitFor(() => {
+      expect(createFolder).toHaveBeenCalledWith('牛乳（ぎゅうにゅう）')
+      expect(createFolder).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('does not trigger a full memo list reload after addMemoItem', async () => {

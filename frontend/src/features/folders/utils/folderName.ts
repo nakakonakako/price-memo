@@ -1,26 +1,18 @@
-/** Trailing reading in half- or full-width parentheses, e.g. 牛乳(ぎゅうにゅう) / 牛乳（ぎゅうにゅう）. */
-const TRAILING_READING =
-  /^(.*)[（(]([^（）()]*)[）)]\s*$/u
-
+/** Compatibility shape for memo callers pending their separately coordinated update. */
 export function parseFolderName(name: string): {
   displayName: string
-  reading: string | null
+  reading: null
 } {
-  const m = name.match(TRAILING_READING)
-  if (!m) return { displayName: name, reading: null }
-
-  const reading = m[2].trim()
-  if (!reading) return { displayName: name, reading: null }
-
-  const displayName = m[1].replace(/\s+$/u, '')
-  return {
-    displayName: displayName.length > 0 ? displayName : name,
-    reading,
-  }
+  return { displayName: name, reading: null }
 }
 
-/** Sort key: trailing reading if present, otherwise the visible name. */
-export function folderSortKey(name: string): string {
-  const { displayName, reading } = parseFolderName(name)
-  return reading ?? displayName
+/** Sort by an explicitly stored reading when present, otherwise by the name. */
+export function folderSortKey(name: string, reading?: string | null): string {
+  return reading?.trim() || name
+}
+
+/** Searchable folder text includes the literal name and explicit reading. */
+export function folderSearchText(name: string, reading?: string | null): string {
+  const normalizedReading = reading?.trim()
+  return normalizedReading ? `${name} ${normalizedReading}` : name
 }

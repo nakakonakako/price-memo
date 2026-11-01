@@ -156,7 +156,7 @@ describe('useFolders mutation races', () => {
 
     renameFolder.mockResolvedValue({ ...folderA, name: 'Renamed' })
     await act(async () => {
-      await apiRef.current?.rename('folder-a', 'Renamed')
+      await apiRef.current?.rename('folder-a', 'Renamed', null)
     })
 
     expect(screen.getByText('Renamed')).toBeTruthy()

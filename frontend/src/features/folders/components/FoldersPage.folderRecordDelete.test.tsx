@@ -30,6 +30,7 @@ const useMediaQuery = vi.fn()
 const deleteRecord = vi.fn()
 const listAllRecords = vi.fn()
 const listRecords = vi.fn()
+const renameFolderInPage = vi.fn()
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -48,7 +49,7 @@ vi.mock('../hooks/useFolders', () => ({
     isMutating: false,
     error: null,
     create: vi.fn(),
-    rename: vi.fn(),
+    rename: (...args: unknown[]) => renameFolderInPage(...args),
     remove: vi.fn(),
     refresh: vi.fn(),
   }),
@@ -223,7 +224,7 @@ async function waitForCatalogRecords(recordCount = 2) {
 }
 
 function folderCardSurface() {
-  return screen.getByText('牛乳')
+  return screen.getByText('牛乳（ぎゅうにゅう）')
 }
 
 function recordRowUsesTrashDrag(li: HTMLElement) {
@@ -337,6 +338,7 @@ describe('FoldersPage folder record delete', () => {
     ensurePointerCapture()
     window.scrollTo = vi.fn()
     deleteRecord.mockReset()
+    renameFolderInPage.mockReset()
     listAllRecords.mockReset().mockResolvedValue([recordA, recordB])
     listRecords.mockReset().mockResolvedValue([recordA, recordB])
     getStoresCached.mockReset().mockResolvedValue([])
@@ -344,6 +346,41 @@ describe('FoldersPage folder record delete', () => {
 
   afterEach(() => {
     cleanup()
+  })
+
+  describe('folder name editing', () => {
+    beforeEach(() => {
+      useMediaQuery.mockReturnValue(false)
+    })
+
+    it('keeps reading edits local until Save and clears without collapsing the field', async () => {
+      render(<FoldersPage active />)
+
+      fireEvent.click(screen.getByRole('button', { name: '名前変更' }))
+      fireEvent.click(screen.getByRole('button', { name: '＋ 読み仮名を追加' }))
+
+      const readingInput = screen.getByRole('textbox', {
+        name: '読み仮名（任意）',
+      }) as HTMLInputElement
+      fireEvent.change(readingInput, { target: { value: 'ぎゅうにゅう' } })
+      expect(renameFolderInPage).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole('button', { name: '読み仮名をクリア' }))
+      expect(readingInput.value).toBe('')
+      expect(screen.getByRole('textbox', { name: '読み仮名（任意）' })).toBeTruthy()
+      expect(renameFolderInPage).not.toHaveBeenCalled()
+
+      fireEvent.change(readingInput, { target: { value: 'ぎゅうにゅう' } })
+      fireEvent.click(screen.getByRole('button', { name: '保存' }))
+
+      await waitFor(() => {
+        expect(renameFolderInPage).toHaveBeenCalledWith(
+          folder.id,
+          folder.name,
+          'ぎゅうにゅう',
+        )
+      })
+    })
   })
 
   describe('desktop (PC trash drag)', () => {
@@ -389,7 +426,7 @@ describe('FoldersPage folder record delete', () => {
         expect(() => findRecordListItem(recordA)).toThrow()
       })
       expect(findRecordListItem(recordB)).toBeTruthy()
-      expect(screen.getByText('牛乳')).toBeTruthy()
+      expect(screen.getByText('牛乳（ぎゅうにゅう）')).toBeTruthy()
     })
 
     it('removes only the deleted record after trash drop in folder detail', async () => {
@@ -521,7 +558,7 @@ describe('FoldersPage folder record delete', () => {
       await waitFor(() => {
         expect(() => findRecordListItem(recordA)).toThrow()
       })
-      expect(screen.getByText('牛乳')).toBeTruthy()
+      expect(screen.getByText('牛乳（ぎゅうにゅう）')).toBeTruthy()
     })
 
     it('removes the record via left swipe in folder detail', async () => {
