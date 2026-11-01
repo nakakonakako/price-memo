@@ -15,7 +15,7 @@ vi.mock('@/lib/supabase', () => ({
       getSession: () => getSession(),
       onAuthStateChange: (cb: (event: string, session: unknown) => void) =>
         onAuthStateChange(cb),
-      signOut: () => signOut(),
+      signOut: (options?: unknown) => signOut(options),
     },
   },
 }))
@@ -25,6 +25,15 @@ function AuthProbe() {
   if (isLoading) return <div data-testid="loading" />
   return (
     <div data-testid="session" data-user-id={session?.user?.id ?? 'none'} />
+  )
+}
+
+function LogoutProbe() {
+  const { logout } = useAuth()
+  return (
+    <button type="button" onClick={() => void logout()}>
+      Log out
+    </button>
   )
 }
 
@@ -97,6 +106,25 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(screen.getByTestId('session').dataset.userId).toBe('user-a')
+    })
+  })
+
+  it('calls signOut with local scope so other sessions stay valid', async () => {
+    getSession.mockResolvedValue({ data: { session: null } })
+    signOut.mockResolvedValue({ error: null })
+
+    render(
+      <AuthProvider>
+        <LogoutProbe />
+      </AuthProvider>,
+    )
+
+    await act(async () => {
+      screen.getByRole('button', { name: 'Log out' }).click()
+    })
+
+    await waitFor(() => {
+      expect(signOut).toHaveBeenCalledWith({ scope: 'local' })
     })
   })
 })
