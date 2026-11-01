@@ -146,27 +146,42 @@ automatically after a PR is merged.
 Before the confirmation prompt and again immediately before `git worktree remove`,
 `scripts/worktree-remove-inspect.py` scans for processes still using the target
 worktree. The check is fail-closed: it never kills or changes processes, never
-reads or prints environment values or full command lines, and refuses removal
-when inspection is incomplete.
+prints environment values or full command lines, and refuses removal when an
+inspection failure affects a process linked to the target worktree.
 
 What is inspected:
 
 - Any live process whose resolved working directory lies inside the canonical
   worktree path (boundary-safe `realpath` comparison; similar path prefixes do
-  not match).
+  not match). The process identity is sampled from `/proc/<pid>/stat` before
+  and after reading cwd. The start time must match and both samples must be
+  non-zombie; a state transition such as sleeping to running is allowed. If the
+  process exited, became a zombie, or the PID was reused during the sample, the
+  old cwd observation is discarded. A target cwd followed by an unreadable
+  stat recheck refuses removal; an unassociated process whose identity cannot
+  be rechecked is not assumed to belong to this worktree.
 - A Cursor Playwright `devserver` session record for the same worktree, when
   present and structurally valid. A file alone does not count as “running”.
   Process IDs, process groups, session IDs, and process start times are checked
   against live `/proc` entries. A matching live group member carrying the
   session marker is detected even after its recorded leader exits or its `cwd`
   moves outside the worktree. A PID whose start time differs from the recorded
-  leader is treated as reused; its old group record is not trusted.
+  leader is treated as reused; its old group record is not trusted. To verify
+  the session marker, the guard reads `/proc/<pid>/environ` in memory and
+  extracts the value for the dedicated marker variable for comparison with
+  the nonce in that worktree's recorded session. Arbitrary environment values
+  are not used to establish ownership, and environment contents are not
+  printed or added to diagnostics.
 - `/proc` enumeration and the target's Cursor session record must be readable
   and valid. If a recorded live process cannot be inspected, removal is refused.
-  An unreadable `cwd` on a PID with no evidence linking it to the target does
-  not block removal, since Linux restricts some unrelated process inspection.
-  When a recorded PID or matching process-group member cannot be inspected,
-  removal is refused.
+  An unreadable `cwd` or stat on a PID with no evidence linking it to the target
+  does not by itself block removal, since Linux restricts some unrelated
+  process inspection. If a target cwd has already been observed but its stat
+  identity cannot be rechecked, or a recorded PID / matching process-group
+  member cannot be inspected, removal is refused. Failure to read the session
+  marker from `/proc/<pid>/environ` for a matching recorded group member also
+  refuses removal. This process-environment read is separate from worktree
+  environment-file link validation, which does not read linked file contents.
 
 Removal is refused when:
 
@@ -186,10 +201,14 @@ What to do when removal is refused:
   uses the worktree before retrying. Do not delete or edit Cursor session files
   to bypass the guard.
 
-The scan cannot establish whether an otherwise unrelated PID with unreadable
-`stat` or `cwd` data is using files in the target worktree. A short race also
-remains between the final inspection and `git worktree remove`; a process
-started in that window may not be detected.
+Ordinary cwd scanning cannot detect a general process after it moves cwd
+outside the worktree. The recorded Cursor session/group check is additional
+protection only for processes tied to a valid recorded session; it does not
+cover every process. If a PID has unreadable inspection data and no evidence
+links it to the target, the guard skips it, so a related process may be missed.
+A short race also remains between the final inspection and `git worktree
+remove`; a process started in that window may not be detected. The guard never
+kills processes.
 Conversely, a process that exits immediately after inspection may still leave
 the worktree removable even though work was active moments earlier. The guard
 reduces accidental removal; it does not replace checking active workers and
