@@ -115,6 +115,17 @@ def _inside(cwd: Path | None, root: Path) -> bool:
         return False
 
 
+def _same_process(before: ProcStat, after: ProcStat | None) -> bool:
+    """Confirm the sampled PID still has the same live process identity."""
+    return (
+        after is not None
+        and before.pid == after.pid
+        and before.starttime == after.starttime
+        and before.state != "Z"
+        and after.state != "Z"
+    )
+
+
 def _load_session(worktree: Path, state_base: Path | None) -> tuple[dict[str, Any] | None, list[dict[str, int]], list[int]]:
     dev = CURSOR.Devserver(worktree, state_base=state_base)
     try:
@@ -195,13 +206,46 @@ def inspect_worktree(worktree_path: Path, *, state_base: Path | None = None) -> 
             stats[pid] = stat
 
     # Direct cwd ownership is path-component based, after canonicalization.
-    for pid in stats:
+    # Re-read stat after cwd so a PID that exited or was reused during the
+    # sample is never attributed using the earlier process identity.
+    for pid, before in tuple(stats.items()):
+        cwd_error: InspectionError | None = None
         try:
             cwd = _proc_cwd(pid)
-        except InspectionError:
+        except InspectionError as exc:
             # Unrelated processes may be protected by Linux ptrace/Yama policy.
+            cwd = None
+            cwd_error = exc
+        try:
+            after = _proc_stat(pid)
+        except InspectionError as exc:
+            # A target cwd or recorded Cursor identity is evidence that this
+            # PID may belong to the worktree. Do not allow an incomplete
+            # identity check to turn that evidence into permission to remove.
+            recorded_group_candidate = nonce and any(
+                before.pgid == group["pgid"] and before.sid == group["sid"]
+                for group in groups
+            )
+            if (
+                _inside(cwd, root)
+                or pid in expected
+                or pid in launch_set
+                or recorded_group_candidate
+            ):
+                errors.append(str(exc))
+            stats.pop(pid, None)
             continue
-        if _inside(cwd, root):
+        if not _same_process(before, after):
+            # Discard the old cwd sample. Keep a newly observed identity only
+            # for the separate Cursor group/nonce checks below.
+            if after is None or after.state == "Z":
+                stats.pop(pid, None)
+            else:
+                stats[pid] = after
+            continue
+        # Use refreshed PGID/SID values in subsequent recorded-group checks.
+        stats[pid] = after
+        if cwd_error is None and _inside(cwd, root):
             blocked.add(pid)
 
     # Validate recorded leaders by PID and start time before trusting their group IDs.

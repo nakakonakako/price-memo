@@ -258,12 +258,162 @@ class WorktreeRemoveGuardTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         outsider.send_signal(signal.SIGTERM)
 
+    def test_other_worktree_process_does_not_block_target(self) -> None:
+        target = self._create_worktree("other-wt-target", "feature/other-wt-target")
+        other = self._create_worktree("other-wt-process", "feature/other-wt-process")
+        process = self._start_sleep(other, subdir="nested")
+
+        outcome = INSPECT.inspect_worktree(target, state_base=self.state_base)
+
+        self.assertTrue(outcome.ok, outcome.reason)
+        self.assertFalse(outcome.blocked_pids)
+        self.assertIsNone(process.poll(), "guard must not stop another worktree process")
+
     def test_subdir_cwd_detected(self) -> None:
         path = self._create_worktree("subdir-cwd", "feature/subdir-cwd")
         self._start_sleep(path, subdir="nested/task")
         outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
         self.assertFalse(outcome.ok)
         self.assertTrue(outcome.blocked_pids)
+
+    def test_stable_cwd_identity_blocks_and_allows_process_state_changes(self) -> None:
+        path = self._create_worktree("stable-cwd", "feature/stable-cwd")
+        pid = 987654
+        before = INSPECT.ProcStat(pid, "S", pid, pid, 100)
+        after = INSPECT.ProcStat(pid, "R", pid, pid, 100)
+        with (
+            patch.object(INSPECT, "_proc_pids", return_value=[pid]),
+            patch.object(INSPECT, "_proc_stat", side_effect=[before, after]),
+            patch.object(INSPECT, "_proc_cwd", return_value=path),
+        ):
+            outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.blocked_pids, (pid,))
+
+    def test_stable_external_cwd_does_not_block(self) -> None:
+        path = self._create_worktree("stable-external", "feature/stable-external")
+        outside = self.base / "outside-cwd"
+        outside.mkdir()
+        pid = 987655
+        stat = INSPECT.ProcStat(pid, "S", pid, pid, 100)
+        with (
+            patch.object(INSPECT, "_proc_pids", return_value=[pid]),
+            patch.object(INSPECT, "_proc_stat", side_effect=[stat, stat]),
+            patch.object(INSPECT, "_proc_cwd", return_value=outside),
+        ):
+            outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
+        self.assertTrue(outcome.ok, outcome.reason)
+        self.assertFalse(outcome.blocked_pids)
+
+    def test_symlink_alias_uses_canonical_worktree_path(self) -> None:
+        path = self._create_worktree("cwd-symlink", "feature/cwd-symlink")
+        alias = self.base / "worktree-alias"
+        alias.symlink_to(path, target_is_directory=True)
+        pid = 987656
+        stat = INSPECT.ProcStat(pid, "S", pid, pid, 100)
+        with (
+            patch.object(INSPECT, "_proc_pids", return_value=[pid]),
+            patch.object(INSPECT, "_proc_stat", side_effect=[stat, stat]),
+            patch.object(INSPECT, "_proc_cwd", return_value=path),
+        ):
+            outcome = INSPECT.inspect_worktree(alias, state_base=self.state_base)
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.blocked_pids, (pid,))
+
+    def test_cwd_sample_is_discarded_when_pid_exits_is_reused_or_zombifies(self) -> None:
+        path = self._create_worktree("cwd-pid-race", "feature/cwd-pid-race")
+        pid = 987657
+        before = INSPECT.ProcStat(pid, "S", pid, pid, 100)
+        cases = (
+            ("PID reused", INSPECT.ProcStat(pid, "S", pid, pid, 101)),
+            ("process exited", None),
+            ("process became zombie", INSPECT.ProcStat(pid, "Z", pid, pid, 100)),
+        )
+        for label, after in cases:
+            with self.subTest(label=label):
+                with (
+                    patch.object(INSPECT, "_proc_pids", return_value=[pid]),
+                    patch.object(INSPECT, "_proc_stat", side_effect=[before, after]),
+                    patch.object(INSPECT, "_proc_cwd", return_value=path),
+                ):
+                    outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
+                self.assertTrue(outcome.ok, outcome.reason)
+                self.assertFalse(outcome.blocked_pids)
+
+    def test_post_cwd_stat_failure_refuses_only_with_association_evidence(self) -> None:
+        path = self._create_worktree("cwd-stat-failure", "feature/cwd-stat-failure")
+        outside = self.base / "outside-stat-failure"
+        outside.mkdir()
+        pid = 987658
+        before = INSPECT.ProcStat(pid, "S", pid, pid, 100)
+        cases = (
+            ("target cwd", path, False),
+            ("external cwd", outside, True),
+            ("unreadable cwd", INSPECT.InspectionError("cwd denied"), True),
+        )
+        for label, cwd_result, expected_ok in cases:
+            with self.subTest(label=label):
+                cwd_effect = (
+                    {"side_effect": cwd_result}
+                    if isinstance(cwd_result, Exception)
+                    else {"return_value": cwd_result}
+                )
+                with (
+                    patch.object(INSPECT, "_proc_pids", return_value=[pid]),
+                    patch.object(
+                        INSPECT,
+                        "_proc_stat",
+                        side_effect=[before, INSPECT.InspectionError("stat denied")],
+                    ),
+                    patch.object(INSPECT, "_proc_cwd", **cwd_effect),
+                ):
+                    outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
+                self.assertEqual(outcome.ok, expected_ok, outcome.reason)
+                self.assertEqual(bool(outcome.reason), not expected_ok)
+
+    def test_unassociated_initial_stat_failure_is_skipped(self) -> None:
+        path = self._create_worktree("unassociated-stat", "feature/unassociated-stat")
+        with (
+            patch.object(INSPECT, "_proc_pids", return_value=[987659]),
+            patch.object(
+                INSPECT, "_proc_stat", side_effect=INSPECT.InspectionError("denied")
+            ),
+            patch.object(INSPECT, "_proc_cwd") as cwd,
+        ):
+            outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
+        self.assertTrue(outcome.ok, outcome.reason)
+        cwd.assert_not_called()
+
+    def test_recorded_cursor_group_stat_recheck_failure_refuses(self) -> None:
+        path = self._create_worktree("recorded-stat-failure", "feature/recorded-stat-failure")
+        pid = 987660
+        marker = "21111111-2222-4333-8444-555555555555"
+        dev = CURSOR.Devserver(path, state_base=self.state_base)
+        dev.save_session({
+            "version": CURSOR.VERSION,
+            "session_id": "00000000-0000-4000-8000-000000000005",
+            "nonce": marker,
+            "created_at": 1,
+            "worktree": dev.identity,
+            "verified_project_ref": CURSOR.APPROVED_REF,
+            "config_fingerprint": "e" * 64,
+            "ports": dev.ports,
+            "processes": {"backend": {"pid": pid, "pgid": pid, "sid": pid, "starttime": 100}},
+            "launches": {},
+        })
+        before = INSPECT.ProcStat(pid, "S", pid, pid, 100)
+        with (
+            patch.object(INSPECT, "_proc_pids", return_value=[pid]),
+            patch.object(
+                INSPECT,
+                "_proc_stat",
+                side_effect=[before, INSPECT.InspectionError("stat denied")],
+            ),
+            patch.object(INSPECT, "_proc_cwd", return_value=self.fixture_repo),
+        ):
+            outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.exit_code, 2)
 
     def test_similar_directory_not_matched(self) -> None:
         path = self._create_worktree("prefix", "feature/prefix")
@@ -604,6 +754,13 @@ for command in sys.stdin:
             "launches": {},
         })
         with patch.object(INSPECT, "_proc_marker", side_effect=INSPECT.InspectionError("unreadable")):
+            outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
+        self.assertFalse(outcome.ok)
+        self.assertEqual(outcome.exit_code, 2)
+
+        with patch.object(
+            INSPECT, "_proc_cwd", side_effect=INSPECT.InspectionError("unreadable")
+        ):
             outcome = INSPECT.inspect_worktree(path, state_base=self.state_base)
         self.assertFalse(outcome.ok)
         self.assertEqual(outcome.exit_code, 2)
