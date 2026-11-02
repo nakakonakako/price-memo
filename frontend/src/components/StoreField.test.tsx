@@ -9,16 +9,24 @@ const { getStoresCached, createStore, peekStoresCache } = vi.hoisted(() => ({
   peekStoresCache: vi.fn(),
 }))
 
-vi.mock('@/features/stores/api/storesApi', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('@/features/stores/api/storesApi')>()
+vi.mock('@/features/stores/api/storesApi', async () => {
+  const { equalsSearchQuery, matchesSearchQuery } = await import('@/lib/kanaSearch')
   return {
-    ...actual,
     getStoresCached,
     createStore,
     peekStoresCache,
     getStoresCacheEpoch: vi.fn().mockReturnValue(0),
     upsertStoresCache: vi.fn(),
+    findStoreByName: (stores: PriceStore[], input: string) => {
+      const nq = input.trim()
+      if (!nq) return undefined
+      return stores.find((s) => equalsSearchQuery(s.name, nq))
+    },
+    filterStores: (stores: PriceStore[], query: string) => {
+      const q = query.trim()
+      if (!q) return stores
+      return stores.filter((s) => matchesSearchQuery(s.name, q))
+    },
   }
 })
 
