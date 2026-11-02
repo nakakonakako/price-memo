@@ -32,16 +32,23 @@ import {
   defaultBasis,
   diffVs,
   formatDiff,
+  parseTrialPriceInput,
   recordsForStoreScope,
   trialDisplayValue,
   unitsInRecords,
   type FolderStats,
 } from '../utils/stats'
 
+export type RecordStoreCandidate = {
+  recordedAt: string
+  storeName: string
+}
+
 type Props = {
   folderId: string
   folderName: string
   records: PriceRecord[]
+  recordStoreCandidate?: RecordStoreCandidate | null
   colorClass?: string
   forceOpen?: boolean
   onForceOpenHandled?: () => void
@@ -59,6 +66,7 @@ export function FolderMemoCard({
   folderId,
   folderName,
   records,
+  recordStoreCandidate = null,
   colorClass = 'border-stone-200 bg-white',
   forceOpen = false,
   onForceOpenHandled,
@@ -90,10 +98,6 @@ export function FolderMemoCard({
   const [recordedAt, setRecordedAt] = useState(todayISODate())
   const [recordSectionOpen, setRecordSectionOpen] = useState(false)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [saveCandidateStore, setSaveCandidateStore] = useState('')
-  const [saveCandidateDate, setSaveCandidateDate] = useState<string | null>(
-    null,
-  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
@@ -137,12 +141,15 @@ export function FolderMemoCard({
     return () => cancelAnimationFrame(frame)
   }, [forceOpen, onForceOpenHandled])
 
-  const priceN = Number(price)
+  const priceN = parseTrialPriceInput(price)
   const amountN = Number(amount)
   const compareOk = canCompareToStats(unit, activeStats)
   const trialBasis =
     compareOk && activeStats ? activeStats.basis : defaultBasis(unit)
-  const trialValue = trialDisplayValue(priceN, amountN, unit, trialBasis)
+  const trialValue =
+    priceN != null
+      ? trialDisplayValue(priceN, amountN, unit, trialBasis)
+      : null
   const showStatDiffs =
     isOpen &&
     !compactListDisplay &&
@@ -198,11 +205,11 @@ export function FolderMemoCard({
     setError(null)
     setSavedMsg(null)
     if (
-      saveCandidateDate === recordedAt &&
-      saveCandidateStore.trim() &&
+      recordStoreCandidate?.recordedAt === recordedAt &&
+      recordStoreCandidate.storeName.trim() &&
       !recordStore.trim()
     ) {
-      setRecordStore(saveCandidateStore)
+      setRecordStore(recordStoreCandidate.storeName)
     }
   }
 
@@ -214,7 +221,16 @@ export function FolderMemoCard({
       setError('保存するには記録先の店名が必要です')
       return
     }
-    if (!Number.isFinite(priceN) || priceN < 0 || !Number.isInteger(priceN)) {
+    if (price.trim() === '') {
+      setError('価格は 0 以上の整数（円）で入力してください')
+      return
+    }
+    const savePrice = Number(price)
+    if (
+      !Number.isFinite(savePrice) ||
+      savePrice < 0 ||
+      !Number.isInteger(savePrice)
+    ) {
       setError('価格は 0 以上の整数（円）で入力してください')
       return
     }
@@ -237,14 +253,12 @@ export function FolderMemoCard({
         folder_id: folderId,
         recorded_at: recordedAt,
         store_name: recordStore,
-        price: priceN,
+        price: savePrice,
         amount: amountN,
         unit: unit.trim(),
         note: note.trim() || null,
       })
       setSavedMsg('統計に残しました')
-      setSaveCandidateStore(created.store_name)
-      setSaveCandidateDate(recordedAt)
       setNote('')
       setStatsUnit(created.unit)
       onSaved(created)

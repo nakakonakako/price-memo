@@ -39,7 +39,7 @@ import {
   type PriceMemoItem,
 } from '../api/memoApi'
 import { recordsByFolderId } from '../utils/stats'
-import { FolderMemoCard } from './FolderMemoCard'
+import { FolderMemoCard, type RecordStoreCandidate } from './FolderMemoCard'
 import {
   MemoMobileReorderEndMarker,
   MemoMobileReorderLiveRegion,
@@ -124,6 +124,8 @@ export function ShoppingMemoPage({
   const [readingExpanded, setReadingExpanded] = useState(false)
   const [mutating, setMutating] = useState(false)
   const [focusFolderId, setFocusFolderId] = useState<string | null>(null)
+  const [recordStoreCandidate, setRecordStoreCandidate] =
+    useState<RecordStoreCandidate | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const cardRefs = useRef(new Map<string, HTMLElement>())
   const loadGenerationRef = useRef(0)
@@ -687,6 +689,10 @@ export function ShoppingMemoPage({
     if (deletedFolderTombstonesRef.current.has(record.folder_id)) return
     loadGenerationRef.current += 1
     setRecords((prev) => withoutTombstonedRecords([record, ...prev]))
+    setRecordStoreCandidate({
+      recordedAt: record.recorded_at,
+      storeName: record.store_name,
+    })
   }
 
   const memoList = (
@@ -697,6 +703,7 @@ export function ShoppingMemoPage({
           folderId={item.folder_id}
           folderName={item.folder.name}
           records={byFolder.get(item.folder_id) ?? []}
+          recordStoreCandidate={recordStoreCandidate}
           colorClass={MEMO_PALETTES[index % MEMO_PALETTES.length]}
           forceOpen={focusFolderId === item.folder_id}
           onForceOpenHandled={clearFocusFolder}

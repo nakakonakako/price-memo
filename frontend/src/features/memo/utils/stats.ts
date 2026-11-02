@@ -74,6 +74,14 @@ export function computeAllFolderStats(records: PriceRecord[]): FolderStats[] {
     .filter((s): s is FolderStats => s != null)
 }
 
+/** Empty input is not a trial price; explicit `0` is valid. */
+export function parseTrialPriceInput(raw: string): number | null {
+  if (raw.trim() === '') return null
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  return n
+}
+
 export function trialDisplayValue(
   price: number,
   amount: number,
