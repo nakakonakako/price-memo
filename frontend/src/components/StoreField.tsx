@@ -20,6 +20,8 @@ type Props = {
   required?: boolean
   className?: string
   placeholder?: string
+  /** false … 既存店舗の選択のみ（比較店舗など） */
+  allowRegister?: boolean
 }
 
 export function StoreField({
@@ -29,6 +31,7 @@ export function StoreField({
   required,
   className = '',
   placeholder = '店舗名で検索',
+  allowRegister = true,
 }: Props) {
   const [stores, setStores] = useState<PriceStore[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,7 +82,11 @@ export function StoreField({
   const exact = findStoreByName(stores, displayedQuery)
   const trimmedQuery = displayedQuery.trim()
   const showRegister =
-    trimmedQuery.length > 0 && !exact && !loading && !registering
+    allowRegister &&
+    trimmedQuery.length > 0 &&
+    !exact &&
+    !loading &&
+    !registering
 
   const fieldClass =
     className ||
