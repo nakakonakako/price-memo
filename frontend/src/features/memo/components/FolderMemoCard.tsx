@@ -357,36 +357,11 @@ export function FolderMemoCard({
                   className={`cursor-pointer text-center ${compactListDisplay ? 'hidden' : ''}`}
                   onClick={handleOpen}
                 >
-                  <div className="inline-grid grid-cols-3 gap-3">
-                    <StatCell
-                      label="平均"
-                      value={activeStats.avg}
-                      trialDiff={
-                        showStatDiffs
-                          ? diffVs(trialValue, activeStats.avg)
-                          : undefined
-                      }
-                    />
-                    <StatCell
-                      label="最安"
-                      value={activeStats.min}
-                      highlight
-                      trialDiff={
-                        showStatDiffs
-                          ? diffVs(trialValue, activeStats.min)
-                          : undefined
-                      }
-                    />
-                    <StatCell
-                      label="直近"
-                      value={activeStats.latest}
-                      trialDiff={
-                        showStatDiffs
-                          ? diffVs(trialValue, activeStats.latest)
-                          : undefined
-                      }
-                    />
-                  </div>
+                  <MemoStatsGrid
+                    activeStats={activeStats}
+                    showStatDiffs={showStatDiffs}
+                    trialValue={trialValue}
+                  />
                   {(compareStore.trim() || activeStats.latestDate) && (
                     <div className="mt-0.5 inline-grid grid-cols-3 gap-3">
                       {compareStore.trim() ? (
@@ -463,36 +438,12 @@ export function FolderMemoCard({
 
             {activeStats ? (
               <div className="shrink-0 text-center">
-                <div className="grid grid-cols-3 gap-3 sm:gap-4">
-                  <StatCell
-                    label="平均"
-                    value={activeStats.avg}
-                    trialDiff={
-                      showStatDiffs
-                        ? diffVs(trialValue, activeStats.avg)
-                        : undefined
-                    }
-                  />
-                  <StatCell
-                    label="最安"
-                    value={activeStats.min}
-                    highlight
-                    trialDiff={
-                      showStatDiffs
-                        ? diffVs(trialValue, activeStats.min)
-                        : undefined
-                    }
-                  />
-                  <StatCell
-                    label="直近"
-                    value={activeStats.latest}
-                    trialDiff={
-                      showStatDiffs
-                        ? diffVs(trialValue, activeStats.latest)
-                        : undefined
-                    }
-                  />
-                </div>
+                <MemoStatsGrid
+                  activeStats={activeStats}
+                  showStatDiffs={showStatDiffs}
+                  trialValue={trialValue}
+                  desktop
+                />
                 {(compareStore.trim() || activeStats.latestDate) && (
                   <div className="mt-0.5 grid grid-cols-3 gap-3 sm:gap-4">
                     {compareStore.trim() ? (
@@ -703,47 +654,107 @@ export function FolderMemoCard({
   )
 }
 
+function MemoStatsGrid({
+  activeStats,
+  showStatDiffs,
+  trialValue,
+  desktop = false,
+}: {
+  activeStats: FolderStats
+  showStatDiffs: boolean
+  trialValue: number | null
+  desktop?: boolean
+}) {
+  const gridClass = desktop
+    ? 'grid min-w-0 grid-cols-3 gap-x-1 gap-y-0.5 sm:gap-x-4'
+    : 'grid min-w-0 w-full max-w-full grid-cols-3 gap-x-1 gap-y-0.5'
+  return (
+    <div className="min-w-0">
+      {showStatDiffs ? (
+        <p className="mb-0.5 text-center text-[9px] text-stone-400">
+          {activeStats.valueLabel}
+        </p>
+      ) : null}
+      <div className={gridClass}>
+        <StatCell
+          label="平均"
+          value={activeStats.avg}
+          trialDiff={
+            showStatDiffs && trialValue != null
+              ? diffVs(trialValue, activeStats.avg)
+              : undefined
+          }
+        />
+        <StatCell
+          label="最安"
+          value={activeStats.min}
+          highlightMin={!showStatDiffs}
+          trialDiff={
+            showStatDiffs && trialValue != null
+              ? diffVs(trialValue, activeStats.min)
+              : undefined
+          }
+        />
+        <StatCell
+          label="直近"
+          value={activeStats.latest}
+          trialDiff={
+            showStatDiffs && trialValue != null
+              ? diffVs(trialValue, activeStats.latest)
+              : undefined
+          }
+        />
+      </div>
+    </div>
+  )
+}
+
 function StatCell({
   label,
   value,
-  highlight,
+  highlightMin,
   trialDiff,
 }: {
   label: string
   value: number
-  highlight?: boolean
+  highlightMin?: boolean
   trialDiff?: number
 }) {
-  const cheaper = trialDiff != null && trialDiff < -0.005
+  const comparing = trialDiff != null
+  const cheaper = comparing && trialDiff < -0.005
   const same =
-    trialDiff != null && trialDiff >= -0.005 && trialDiff <= 0.005
+    comparing && trialDiff >= -0.005 && trialDiff <= 0.005
+  const displayLabel = comparing ? `${label}比` : label
+
+  const diffMainClass = same
+    ? 'text-base font-semibold tabular-nums leading-tight text-stone-500 sm:text-lg'
+    : cheaper
+      ? 'text-base font-bold tabular-nums leading-tight text-teal-800 sm:text-lg'
+      : 'text-base font-bold tabular-nums leading-tight text-amber-800 sm:text-lg'
+
+  const statMainClass = highlightMin
+    ? 'text-lg font-bold tabular-nums leading-tight text-teal-800 sm:text-xl'
+    : 'text-lg font-semibold tabular-nums leading-tight text-stone-900 sm:text-xl'
+
   return (
-    <div className="min-w-[3.5rem]">
-      <p className="text-[10px] tracking-wide text-stone-500">{label}</p>
-      <p
-        className={
-          highlight
-            ? 'text-lg font-bold tabular-nums leading-tight text-teal-800 sm:text-xl'
-            : 'text-lg font-semibold tabular-nums leading-tight text-stone-900 sm:text-xl'
-        }
-      >
-        {formatYen(value, 1)}
+    <div className="min-w-0 px-0.5">
+      <p className="truncate text-[10px] tracking-wide text-stone-500">
+        {displayLabel}
       </p>
-      {trialDiff != null ? (
-        <p
-          className={
-            same
-              ? 'text-[9px] tabular-nums text-stone-500'
-              : cheaper
-                ? 'text-[9px] tabular-nums font-medium text-teal-800'
-                : 'text-[9px] tabular-nums font-medium text-amber-800'
-          }
-        >
-          {same
-            ? '±0'
-            : `${formatDiff(trialDiff, 1)}${cheaper ? '↓' : '↑'}`}
-        </p>
-      ) : null}
+      {comparing ? (
+        <>
+          <p className={diffMainClass}>
+            {same
+              ? '±0'
+              : `${formatDiff(trialDiff, 1)}円${cheaper ? '↓' : '↑'}`}
+          </p>
+          <p className="truncate text-[9px] tabular-nums text-stone-400">
+            {formatYen(value, 1)}
+          </p>
+        </>
+      ) : (
+        <p className={statMainClass}>{formatYen(value, 1)}</p>
+      )}
     </div>
   )
 }

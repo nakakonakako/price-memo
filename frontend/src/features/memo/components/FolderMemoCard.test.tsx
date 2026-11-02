@@ -81,6 +81,19 @@ const sampleRecords: PriceRecord[] = [
     updated_at: '2026-01-10T00:00:00Z',
     user_id: 'u1',
   },
+  {
+    id: 'r2',
+    folder_id: 'f1',
+    recorded_at: '2026-01-15',
+    store_name: '店A',
+    price: 150,
+    amount: 100,
+    unit: 'g',
+    note: null,
+    created_at: '2026-01-15T00:00:00Z',
+    updated_at: '2026-01-15T00:00:00Z',
+    user_id: 'u1',
+  },
 ]
 
 describe('FolderMemoCard BL-10 record flow', () => {
@@ -232,6 +245,70 @@ describe('FolderMemoCard BL-10 record flow', () => {
       (screen.getByRole('button', { name: 'この価格を記録' }) as HTMLButtonElement)
         .disabled,
     ).toBe(false)
+  })
+
+  it('shows historical unit prices when trial price is empty', () => {
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="牛乳"
+        records={sampleRecords}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('平均')).toBeTruthy()
+    expect(screen.getByText('最安')).toBeTruthy()
+    expect(screen.getByText('直近')).toBeTruthy()
+    expect(screen.queryByText('平均比')).toBeNull()
+    expect(screen.getAllByText('¥100').length).toBeGreaterThan(0)
+  })
+
+  it('promotes yen diffs with comparison labels when trial is comparable', () => {
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="牛乳"
+        records={sampleRecords}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('牛乳'))
+    fireEvent.change(screen.getByLabelText('値段'), {
+      target: { value: '200' },
+    })
+    fireEvent.change(screen.getByLabelText('内容量'), {
+      target: { value: '100' },
+    })
+
+    expect(screen.getByText('平均比')).toBeTruthy()
+    expect(screen.getByText('最安比')).toBeTruthy()
+    expect(screen.getByText('直近比')).toBeTruthy()
+    expect(screen.getByText('円/100g')).toBeTruthy()
+    expect(screen.getByText('+75円↑')).toBeTruthy()
+    expect(screen.getByText('+100円↑')).toBeTruthy()
+    expect(screen.getByText('+50円↑')).toBeTruthy()
+  })
+
+  it('does not show comparison labels without a trial price', () => {
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="牛乳"
+        records={sampleRecords}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('牛乳'))
+    fireEvent.change(screen.getByLabelText('内容量'), {
+      target: { value: '100' },
+    })
+
+    expect(screen.getByText('平均')).toBeTruthy()
+    expect(screen.queryByText('平均比')).toBeNull()
+    expect(screen.queryByText('円/100g')).toBeNull()
   })
 
   it('shares record store candidate across cards on the same confirmation date', async () => {
