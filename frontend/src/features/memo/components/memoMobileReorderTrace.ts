@@ -9,7 +9,13 @@ export function isMemoReorderTraceEnabled(): boolean {
 }
 
 export type MemoReorderTracePayload = {
-  event: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel'
+  event:
+    | 'touchstart'
+    | 'touchmove'
+    | 'touchend'
+    | 'touchcancel'
+    | 'longPressArmed'
+    | 'scroll'
   phase: string
   elapsedMs: number
   dx: number
@@ -22,6 +28,5 @@ export type MemoReorderTracePayload = {
 
 export function logMemoReorderTrace(payload: MemoReorderTracePayload): void {
   if (!isMemoReorderTraceEnabled()) return
-  // eslint-disable-next-line no-console -- intentional dev-only diagnostic
   console.info('[memo-reorder-trace]', payload)
 }

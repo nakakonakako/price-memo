@@ -73,6 +73,7 @@ export function MemoMobileReorderProvider({
   const [activeId, setActiveId] = useState<string | null>(null)
   const [gesturePhase, setGesturePhase] =
     useState<MemoReorderGesturePhase>('idle')
+  const [gestureFolderId, setGestureFolderId] = useState<string | null>(null)
   const [activePlaceholderHeight, setActivePlaceholderHeight] = useState<
     number | null
   >(null)
@@ -149,6 +150,7 @@ export function MemoMobileReorderProvider({
       setDragging(false)
       setActiveId(null)
       setGesturePhase('idle')
+      setGestureFolderId(null)
       setActivePlaceholderHeight(null)
       scrollAnchorViewportTopRef.current = null
       setInsertTarget(undefined)
@@ -164,6 +166,7 @@ export function MemoMobileReorderProvider({
     setDragging(false)
     setActiveId(null)
     setGesturePhase('idle')
+    setGestureFolderId(null)
     setActivePlaceholderHeight(null)
     scrollAnchorViewportTopRef.current = null
     setInsertTarget(undefined)
@@ -201,6 +204,7 @@ export function MemoMobileReorderProvider({
     move: (e: TouchEvent) => void
     end: (e: TouchEvent) => void
     cancel: (e: TouchEvent) => void
+    scroll: (e: Event) => void
   } | null>(null)
   const documentTouchTrackingRef = useRef(false)
 
@@ -212,6 +216,7 @@ export function MemoMobileReorderProvider({
     document.removeEventListener('touchmove', handlers.move, true)
     document.removeEventListener('touchend', handlers.end, true)
     document.removeEventListener('touchcancel', handlers.cancel, true)
+    document.removeEventListener('scroll', handlers.scroll, true)
     documentTouchHandlersRef.current = null
   }, [])
 
@@ -242,11 +247,16 @@ export function MemoMobileReorderProvider({
       width: 0,
     }
     setGesturePhase('idle')
+    setGestureFolderId(null)
   }, [clearGestureWatchdog, clearLongPressTimer, detachDocumentTouchTracking])
 
   const traceTouch = useCallback(
     (
-      eventKind: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
+      eventKind:
+        | 'touchstart'
+        | 'touchmove'
+        | 'touchend'
+        | 'touchcancel',
       e: TouchEvent,
       dx: number,
       dy: number,
@@ -443,6 +453,12 @@ export function MemoMobileReorderProvider({
 
       if (!s.dragActive) {
         if (s.longPressArmed) {
+          const isVerticalIntent = Math.abs(dy) >= Math.abs(dx)
+          if (isVerticalIntent && e.cancelable) {
+            // Once long-press is armed, reserve vertical movement before the
+            // browser's pan threshold can take over and dispatch touchcancel.
+            e.preventDefault()
+          }
           if (shouldActivateDrag(dx, dy)) {
             if (!e.cancelable) {
               traceTouch('touchmove', e, dx, dy)
@@ -454,8 +470,8 @@ export function MemoMobileReorderProvider({
               resetTouchSession()
               return
             }
+            if (!e.defaultPrevented) e.preventDefault()
             activateDragFromLongPress(s.folderId, s.cardEl, touch.clientY)
-            e.preventDefault()
             moveActiveDrag(touch.clientY)
             traceTouch('touchmove', e, dx, dy)
             return
@@ -524,10 +540,33 @@ export function MemoMobileReorderProvider({
       else resetTouchSession()
     }
 
+    const onDocumentScroll = (e: Event) => {
+      const s = touchSessionRef.current
+      if (s.touchId < 0) return
+      const scroller =
+        e.target instanceof HTMLElement ? e.target : document.scrollingElement
+      logMemoReorderTrace({
+        event: 'scroll',
+        phase: s.dragActive
+          ? 'dragging'
+          : s.longPressArmed
+            ? 'longPressArmed'
+            : 'longPressPending',
+        elapsedMs: Date.now() - s.touchStartAt,
+        dx: scroller?.scrollLeft ?? 0,
+        dy: scroller?.scrollTop ?? 0,
+        cancelable: false,
+        defaultPrevented: false,
+        dragActive: s.dragActive,
+        longPressArmed: s.longPressArmed,
+      })
+    }
+
     const handlers = {
       move: onDocumentTouchMove,
       end: onDocumentTouchEnd,
       cancel: onDocumentTouchCancel,
+      scroll: onDocumentScroll,
     }
     documentTouchHandlersRef.current = handlers
     document.addEventListener('touchmove', handlers.move, {
@@ -536,6 +575,7 @@ export function MemoMobileReorderProvider({
     })
     document.addEventListener('touchend', handlers.end, { capture: true })
     document.addEventListener('touchcancel', handlers.cancel, { capture: true })
+    document.addEventListener('scroll', handlers.scroll, { capture: true })
     documentTouchTrackingRef.current = true
   }, [
     activateDragFromLongPress,
@@ -602,19 +642,30 @@ export function MemoMobileReorderProvider({
           height: 0,
           width: 0,
         }
+        setGestureFolderId(folderId)
         setGesturePhase('longPressPending')
         attachDocumentTouchTracking()
         scheduleGestureWatchdog()
-        traceTouch('touchstart', e, 0, 0)
-
         touchSessionRef.current.longPressTimer = setTimeout(() => {
           const s = touchSessionRef.current
           if (s.touchId !== touch.identifier || s.folderId !== folderId) return
           s.longPressArmed = true
           clearLongPressTimer()
           setGesturePhase('longPressArmed')
+          logMemoReorderTrace({
+            event: 'longPressArmed',
+            phase: 'longPressArmed',
+            elapsedMs: Date.now() - s.touchStartAt,
+            dx: 0,
+            dy: 0,
+            cancelable: false,
+            defaultPrevented: false,
+            dragActive: false,
+            longPressArmed: true,
+          })
           scheduleGestureWatchdog()
         }, MEMO_REORDER_LONG_PRESS_MS)
+        traceTouch('touchstart', e, 0, 0)
       }
 
       const handlers = {
@@ -758,6 +809,7 @@ export function MemoMobileReorderProvider({
       dragging,
       compactListDisplay: dragging,
       gesturePhase,
+      gestureFolderId,
       activePlaceholderHeight,
       requestStepMove,
       announce,
@@ -771,6 +823,7 @@ export function MemoMobileReorderProvider({
       activeId,
       dragging,
       gesturePhase,
+      gestureFolderId,
       activePlaceholderHeight,
       requestStepMove,
       announce,
@@ -853,6 +906,9 @@ export function MemoMobileReorderGestureRoot({
     reorder?.gesturePhase === 'longPressPending' ||
     reorder?.gesturePhase === 'longPressArmed' ||
     reorder?.gesturePhase === 'dragging'
+  const isArmedForThisCard =
+    reorder?.gesturePhase === 'longPressArmed' &&
+    reorder.gestureFolderId === folderId
 
   useEffect(() => {
     if (!cardGesture) return
@@ -866,7 +922,8 @@ export function MemoMobileReorderGestureRoot({
   return (
     <div
       ref={surfaceRef}
-      className={`min-w-0 flex-1 ${blockSelection ? 'select-none' : ''}`}
+      data-memo-reorder-ready={isArmedForThisCard ? 'true' : undefined}
+      className={`min-w-0 flex-1 ${blockSelection ? 'select-none' : ''} ${isArmedForThisCard ? 'rounded-md ring-2 ring-amber-500 ring-offset-1' : ''}`}
       onContextMenu={(e) => {
         if (!blockSelection) return
         e.preventDefault()

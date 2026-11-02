@@ -597,6 +597,11 @@ describe('MemoMobileReorder long-press gestures', () => {
     expect(screen.getByTestId('gesture-phase').textContent).toBe('longPressArmed')
     expect(screen.getByTestId('dragging').textContent).toBe('false')
     expect(screen.getByTestId('active-id').textContent).toBe('null')
+    expect(
+      screen
+        .getByTestId('surface-b')
+        .closest('[data-memo-reorder-ready="true"]'),
+    ).not.toBeNull()
     expect(onCommit).not.toHaveBeenCalled()
   })
 
@@ -799,7 +804,7 @@ describe('MemoMobileReorder long-press gestures', () => {
     expect(onCommit).not.toHaveBeenCalled()
   })
 
-  it('calls preventDefault on the first vertical move that activates drag', async () => {
+  it('prevents vertical pan after arming, including the first move that activates drag', async () => {
     const onCommit = vi.fn()
     render(
       <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
@@ -828,22 +833,18 @@ describe('MemoMobileReorder long-press gestures', () => {
       })
 
     await act(async () => {
-      const touch = {
-        identifier: 1,
-        clientX: 100,
-        clientY: 188,
-        target: surface,
-      }
-      fireEvent.touchMove(document, {
-        touches: [touch],
-        targetTouches: [touch],
-        cancelable: true,
-      })
+      touchAt(surface, 'move', 197)
+    })
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('longPressArmed')
+    expect(preventDefaultCalls).toBeGreaterThanOrEqual(1)
+
+    await act(async () => {
+      touchAt(surface, 'move', 188)
     })
     vi.useRealTimers()
     preventSpy.mockRestore()
 
-    expect(preventDefaultCalls).toBeGreaterThanOrEqual(1)
+    expect(preventDefaultCalls).toBeGreaterThanOrEqual(2)
     expect(screen.getByTestId('gesture-phase').textContent).toBe('dragging')
   })
 
