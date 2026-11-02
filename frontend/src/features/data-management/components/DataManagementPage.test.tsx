@@ -67,7 +67,7 @@ describe('DataManagementPage', () => {
     render(<DataManagementPage onDataDeleted={vi.fn()} />)
 
     expect(
-      screen.getByRole('heading', { name: '単価メモのデータをすべて削除' }),
+      screen.getByRole('heading', { name: '単価メモにおけるデータの全削除' }),
     ).toBeTruthy()
     expect(
       screen.getByText(

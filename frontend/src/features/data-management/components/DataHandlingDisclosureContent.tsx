@@ -4,11 +4,13 @@ export const DATA_HANDLING_DISCLOSURE_TEST_ID = 'data-handling-disclosure-conten
 export function DataHandlingDisclosureContent() {
   return (
     <div
-      className="space-y-4 text-sm leading-6 text-stone-700"
+      className="text-[15px] leading-[1.8] text-stone-700 sm:text-base"
       data-testid={DATA_HANDLING_DISCLOSURE_TEST_ID}
     >
-      <section className="space-y-1">
-        <h3 className="font-medium text-stone-900">1. 取得する情報と利用目的</h3>
+      <section className="space-y-3">
+        <h3 className="text-base font-semibold text-stone-900">
+          1. 取得する情報と利用目的
+        </h3>
         <p>
           本アプリでは、利用者が登録した商品フォルダ、店舗情報、価格記録、買い物メモを取得・保存します。
         </p>
@@ -20,8 +22,10 @@ export function DataHandlingDisclosureContent() {
         </p>
       </section>
 
-      <section className="space-y-1">
-        <h3 className="font-medium text-stone-900">2. データの保存先と外部サービス</h3>
+      <section className="mt-7 space-y-3 border-t border-stone-200 pt-3">
+        <h3 className="text-base font-semibold text-stone-900">
+          2. データの保存先と外部サービス
+        </h3>
         <p>
           登録されたデータは、Supabaseが提供するデータベースに保存します。データへのアクセスは利用者ごとに制限し、他の利用者による閲覧や変更を防止する仕組みを設けています。
         </p>
@@ -34,8 +38,10 @@ export function DataHandlingDisclosureContent() {
         <p>本アプリからGoogle Geminiへのデータ送信は行いません。</p>
       </section>
 
-      <section className="space-y-1">
-        <h3 className="font-medium text-stone-900">3. データの保持と削除</h3>
+      <section className="mt-7 space-y-3 border-t border-stone-200 pt-3">
+        <h3 className="text-base font-semibold text-stone-900">
+          3. データの保持と削除
+        </h3>
         <p>
           登録された商品フォルダ、価格記録、店舗情報、買い物メモについて、保存期限や定期的な自動削除は設定していません。
         </p>

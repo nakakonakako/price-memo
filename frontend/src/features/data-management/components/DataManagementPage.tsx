@@ -53,7 +53,7 @@ export function DataManagementPage({ onDataDeleted }: Props) {
 
   return (
     <section className="space-y-5" aria-labelledby="data-management-title">
-      <div>
+      <div className="border-b border-stone-200 pb-4">
         <h2
           id="data-management-title"
           className="text-xl font-semibold text-stone-900"
@@ -67,10 +67,12 @@ export function DataManagementPage({ onDataDeleted }: Props) {
       </div>
 
       <section className="space-y-4 rounded-xl border border-red-200 bg-white p-4 sm:p-6">
-        <div className="space-y-2">
-          <h3 className="text-base font-semibold text-stone-900">
-            単価メモのデータをすべて削除
-          </h3>
+        <div className="space-y-3">
+          <div className="border-b border-stone-200 pb-3">
+            <h3 className="text-base font-semibold text-stone-900">
+              単価メモにおけるデータの全削除
+            </h3>
+          </div>
           <p className="text-sm leading-6 text-stone-700">
             ログイン中のアカウントに保存されたフォルダ、価格記録、買い物メモ、店舗名をすべて削除します。
           </p>

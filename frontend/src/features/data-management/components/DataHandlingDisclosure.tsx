@@ -30,6 +30,7 @@ export function DataHandlingDisclosure({ className, linkLabel }: Props) {
         onClose={() => setOpen(false)}
         title={DIALOG_TITLE}
         titleId="data-handling-disclosure-title"
+        width="wide"
       >
         <DataHandlingDisclosureContent />
       </DialogShell>
