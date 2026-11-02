@@ -73,6 +73,16 @@ export function SwipeToDeleteRow({
     }
   }
 
+  const onPointerDownCapture = (e: React.PointerEvent<HTMLDivElement>) => {
+    const g = gesture.current
+    if (g.suppressClick && e.pointerId !== g.pointerId) {
+      g.suppressClick = false
+    }
+    if (isInteractive(e.target)) {
+      g.suppressClick = false
+    }
+  }
+
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (mobileReorder?.isSwipeDeleteBlocked()) {
       abortSwipeGesture(e.currentTarget, e.pointerId)
@@ -167,15 +177,19 @@ export function SwipeToDeleteRow({
         className={`relative bg-inherit ${animate ? 'transition-transform duration-200 ease-out' : ''}`}
         style={{ transform: `translateX(${offset}px)`, touchAction: 'pan-y' }}
         onPointerDown={onPointerDown}
+        onPointerDownCapture={onPointerDownCapture}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
         onClickCapture={(e) => {
-          if (gesture.current.suppressClick) {
-            e.preventDefault()
-            e.stopPropagation()
+          if (!gesture.current.suppressClick) return
+          if (isInteractive(e.target)) {
             gesture.current.suppressClick = false
+            return
           }
+          e.preventDefault()
+          e.stopPropagation()
+          gesture.current.suppressClick = false
         }}
       >
         {children}

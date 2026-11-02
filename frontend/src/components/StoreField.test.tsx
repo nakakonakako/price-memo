@@ -186,6 +186,7 @@ describe('StoreField clearable compare store', () => {
           value={value}
           onChange={setValue}
           clearable
+          clearFitsInput
           clearAriaLabel="比較店舗をクリア"
           candidateNames={['店A', '店B']}
           allowRegister={false}
@@ -202,6 +203,40 @@ describe('StoreField clearable compare store', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '比較店舗をクリア' }))
     expect((input as HTMLInputElement).value).toBe('')
+  })
+
+  it('uses inset clear control styling only when clearFitsInput is set', () => {
+    render(
+      <StoreField
+        value="店A"
+        onChange={vi.fn()}
+        clearable
+        clearFitsInput
+        clearAriaLabel="比較店舗をクリア"
+        candidateNames={['店A']}
+        allowRegister={false}
+      />,
+    )
+
+    const clear = screen.getByRole('button', { name: '比較店舗をクリア' })
+    expect(clear.className.includes('inset-y-0')).toBe(true)
+    expect(clear.className.includes('h-11')).toBe(false)
+  })
+
+  it('keeps legacy clear sizing when clearFitsInput is false', () => {
+    render(
+      <StoreField
+        value="店A"
+        onChange={vi.fn()}
+        clearable
+        clearAriaLabel="比較店舗をクリア"
+        candidateNames={['店A']}
+        allowRegister={false}
+      />,
+    )
+
+    const clear = screen.getByRole('button', { name: '比較店舗をクリア' })
+    expect(clear.className.includes('h-11')).toBe(true)
   })
 
   it('does not show clear button when clearable is false', () => {

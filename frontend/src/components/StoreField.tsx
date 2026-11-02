@@ -36,6 +36,8 @@ type Props = {
   clearable?: boolean
   /** clearable 時の accessible name */
   clearAriaLabel?: string
+  /** clearable 時、クリアボタンの hover/focus 見た目を入力枠内に収める（比較店舗向け） */
+  clearFitsInput?: boolean
 }
 
 export function StoreField({
@@ -49,6 +51,7 @@ export function StoreField({
   candidateNames,
   clearable = false,
   clearAriaLabel = 'クリア',
+  clearFitsInput = false,
 }: Props) {
   const [stores, setStores] = useState<PriceStore[]>([])
   const [loading, setLoading] = useState(true)
@@ -119,9 +122,21 @@ export function StoreField({
     !listLoading &&
     !registering
 
-  const fieldClass =
-    className ||
+  const showClear =
+    clearable &&
+    !disabled &&
+    !registering &&
+    displayedQuery.length > 0
+
+  const defaultFieldClass =
     'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-500'
+  const fieldClass = className || defaultFieldClass
+  const useClearInset = clearable && clearFitsInput
+  const inputClass = useClearInset
+    ? `${fieldClass} min-h-0 border-0 bg-transparent py-2 outline-none focus:border-0 focus:ring-0${showClear ? ' pr-11' : ''}`
+    : `${fieldClass}${showClear ? ' pr-11' : ''}`
+  const clearInsetWrapClass =
+    'relative flex w-full min-h-11 items-stretch overflow-hidden rounded-md border border-stone-300 bg-white focus-within:border-stone-500'
 
   const pick = (name: string) => {
     onChange(name)
@@ -129,12 +144,6 @@ export function StoreField({
     setOpen(false)
     setFieldError(null)
   }
-
-  const showClear =
-    clearable &&
-    !disabled &&
-    !registering &&
-    displayedQuery.length > 0
 
   const clearSelection = (e: ReactMouseEvent | ReactPointerEvent) => {
     e.preventDefault()
@@ -161,9 +170,29 @@ export function StoreField({
     }
   }
 
+  const clearButton = showClear ? (
+    <button
+      type="button"
+      data-no-trash-drag
+      aria-label={clearAriaLabel}
+      className={
+        useClearInset
+          ? 'absolute inset-y-0 right-0 inline-flex w-11 shrink-0 items-center justify-center rounded-none text-stone-600 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-stone-500'
+          : 'absolute right-0 top-1/2 inline-flex h-11 w-11 shrink-0 -translate-y-1/2 items-center justify-center rounded-md text-stone-600 hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-stone-500'
+      }
+      onPointerDown={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }}
+      onClick={clearSelection}
+    >
+      <CloseIcon className="h-4 w-4" />
+    </button>
+  ) : null
+
   return (
     <div ref={rootRef} className="relative">
-      <div className="relative">
+      <div className={useClearInset ? clearInsetWrapClass : 'relative'}>
         <input
           type="text"
           value={displayedQuery}
@@ -187,25 +216,11 @@ export function StoreField({
           autoCorrect="off"
           autoCapitalize="off"
           spellCheck={false}
-          className={`${fieldClass}${showClear ? ' pr-11' : ''}`}
+          className={inputClass}
           aria-autocomplete="list"
           aria-expanded={open}
         />
-        {showClear ? (
-          <button
-            type="button"
-            data-no-trash-drag
-            aria-label={clearAriaLabel}
-            className="absolute right-0 top-1/2 inline-flex h-11 w-11 shrink-0 -translate-y-1/2 items-center justify-center rounded-md text-stone-600 hover:bg-stone-100"
-            onPointerDown={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-            }}
-            onClick={clearSelection}
-          >
-            <CloseIcon className="h-4 w-4" />
-          </button>
-        ) : null}
+        {clearButton}
       </div>
       {open && !disabled && (
         <div

@@ -228,10 +228,8 @@ export function MemoMobileReorderProvider({
 
   const cancelPendingLongPress = useCallback(() => {
     if (touchSessionRef.current.dragActive) return
-    clearLongPressTimer()
-    touchSessionRef.current.touchId = -1
-    setGesturePhase('idle')
-  }, [clearLongPressTimer])
+    resetTouchSession()
+  }, [resetTouchSession])
 
   const isSwipeDeleteBlocked = useCallback(() => {
     return touchSessionRef.current.dragActive || draggingRef.current
@@ -491,8 +489,18 @@ export function MemoMobileReorderProvider({
       const { handlers } = binding
       surfaceEl.removeEventListener('touchstart', handlers.touchstart)
       cardBindingsRef.current.delete(key)
+
+      const s = touchSessionRef.current
+      if (s.folderId !== folderId) return
+      if (s.dragActive) {
+        cancelActiveDrag()
+        return
+      }
+      if (s.touchId >= 0 || s.longPressTimer != null) {
+        resetTouchSession()
+      }
     },
-    [],
+    [cancelActiveDrag, resetTouchSession],
   )
 
   useEffect(() => {

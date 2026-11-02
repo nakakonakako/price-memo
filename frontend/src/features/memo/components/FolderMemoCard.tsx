@@ -537,6 +537,7 @@ export function FolderMemoCard({
                 candidateNames={compareStoreCandidates}
                 placeholder="全店舗の記録と比較"
                 clearable
+                clearFitsInput
                 clearAriaLabel="比較店舗をクリア"
                 className={fieldClass}
               />
