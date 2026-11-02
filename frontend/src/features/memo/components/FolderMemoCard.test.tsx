@@ -497,6 +497,16 @@ describe('FolderMemoCard BL-11 compare store candidates', () => {
     )
 
     fireEvent.click(screen.getByText('牛乳'))
+    fireEvent.change(screen.getByLabelText('値段'), {
+      target: { value: '200' },
+    })
+    fireEvent.change(screen.getByLabelText('内容量'), {
+      target: { value: '100' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'この価格を記録' }))
+
+    expect(screen.getByLabelText('record-store')).toBeTruthy()
+    expect(recordStoreField).toHaveBeenCalled()
 
     const compareProps = compareStoreField.mock.calls.at(-1)?.[0]
     expect(compareProps?.candidateNames).toEqual(['店A', '店B'])
