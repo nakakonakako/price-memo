@@ -73,14 +73,11 @@ export function SwipeToDeleteRow({
     }
   }
 
-  const onPointerDownCapture = (e: React.PointerEvent<HTMLDivElement>) => {
-    const g = gesture.current
-    if (g.suppressClick && e.pointerId !== g.pointerId) {
-      g.suppressClick = false
-    }
-    if (isInteractive(e.target)) {
-      g.suppressClick = false
-    }
+  const onPointerDownCapture = () => {
+    // A new pointerdown starts a new gesture, even when touch reuses the same
+    // pointerId. Preserve suppression only for the synthetic click immediately
+    // following the swipe's pointerup.
+    gesture.current.suppressClick = false
   }
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {

@@ -84,7 +84,7 @@ describe('SwipeToDeleteRow pointer click suppression', () => {
     expect(onClear).toHaveBeenCalledTimes(1)
   })
 
-  it('allows the next tap after swipe when pointerdown starts a new gesture', () => {
+  it('allows the next tap after swipe when touch reuses the same pointer id', () => {
     const onRowClick = vi.fn()
     render(
       <SwipeToDeleteRow onDelete={vi.fn()}>
@@ -103,7 +103,7 @@ describe('SwipeToDeleteRow pointer click suppression', () => {
       clientY: 200,
       button: 0,
       buttons: 1,
-      pointerId: 8,
+      pointerId: 7,
       pointerType: 'touch',
       isPrimary: true,
     })
