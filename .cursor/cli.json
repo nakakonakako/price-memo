@@ -17,7 +17,9 @@
       "Shell(ls)",
       "Shell(cat)",
       "Shell(cp)",
-      "Mcp(playwright:*)"
+      "Mcp(playwright:*)",
+      "Mcp(playwright-unauth:browser_navigate)",
+      "Mcp(playwright-unauth:browser_snapshot)"
     ],
     "deny": [
       "Shell(sudo)",

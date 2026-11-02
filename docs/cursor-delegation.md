@@ -409,11 +409,14 @@ Use this path end to end; do not substitute standalone Playwright CLI,
 `npx playwright`, system Chrome, or other browser tools:
 
 1. `npm run devserver:ensure`
-2. Cursor Playwright MCP
-3. `.cursor/playwright-mcp.sh` (stdio server from `.cursor/mcp.json`)
-4. managed Chromium (pinned revision/cache in the wrapper script)
-5. shared persistent profile at
-   `${userHome}/.local/state/price-memo/playwright-profile`
+2. Cursor Playwright MCP selected by purpose (`playwright` for authenticated
+   UI, `playwright-unauth` for login/pre-auth UI)
+3. The matching launcher from `.cursor/mcp.json`
+   (`.cursor/playwright-mcp.sh` or `.cursor/playwright-unauth-mcp.sh`)
+4. managed Chromium (pinned revision/cache in the launcher)
+5. The matching browser state: shared persistent profile at
+   `${userHome}/.local/state/price-memo/playwright-profile` for `playwright`, or
+   an in-memory `--isolated` profile for `playwright-unauth`
 6. `http://localhost:5273`
 7. `npm run devserver:stop` for process groups started by that ensure invocation
 
@@ -439,27 +442,46 @@ prestarted for them.
 - Never automate Google OAuth. Never read, inspect, print, copy into the
   repository, or include profile files, cookies, tokens, `localStorage`, or
   `sessionStorage` in prompts or logs.
-- When the official path shows a Google login screen, treat the profile
-  authentication session as expired, report that fact, and stop for manual
-  re-login in the Playwright MCP browser. Do not continue UI verification until
-  authentication is restored manually.
-- Only one MCP browser may use the profile at a time; perform UI checks
-  sequentially and close the browser before another worker starts one.
+- Select the configured project MCP by verification purpose: `playwright` for
+  authenticated UI using the shared persistent profile, and `playwright-unauth`
+  for login/pre-auth UI using `--isolated` with no user-data directory or saved
+  storage state. Logout unit tests use mocks. Real logout behavior checks use a
+  dedicated profile and a separate Dev test account, never the shared profile.
+- In the authenticated shared `playwright` MCP, do not log out, clear site data
+  or browser storage, or otherwise invalidate/change its authentication state.
+  The MCP does not technically prevent destructive actions; these rules and
+  operator review are the protection.
+- The app login screen alone does not prove Google credentials or Google-side
+  login state have expired. If an authenticated UI cannot be confirmed, report
+  `アプリ側は未認証、Google側のログイン状態は未確認` and stop. If Google
+  interactive sign-in appears, stop for manual operator review; workers never
+  click login buttons or automate OAuth. Operator observations do not authorize
+  worker OAuth or guarantee future sessions.
+- Run UI checks sequentially. The authenticated persistent profile may be used
+  by only one browser instance at a time; the isolated unauthenticated MCP has
+  separate in-memory browser state.
 
 If a delegation reports that an MCP approval is missing, stop the run. Review
-the configured project MCP in `.cursor/mcp.json`, then manually run
-`agent mcp enable playwright` from the price-memo repository and retry the
-delegation. This approves only the `playwright` server in Cursor's local
-approved-server list; the delegate never enables MCPs, and no global MCP
-configuration is changed. Do not approve other servers to resolve this error.
+the named project MCP in `.cursor/mcp.json`, then manually run
+`agent mcp enable <server-name>` from the price-memo repository and retry the
+delegation. This approves only that server in Cursor's local approved-server
+list; the delegate never enables MCPs, and no global MCP configuration is
+changed. Do not approve other servers to resolve this error.
 
-The MCP launcher pins `@playwright/mcp` 0.0.83, its exact `playwright` /
+Both MCP launchers pin `@playwright/mcp` 0.0.83, its exact `playwright` /
 `playwright-core` dependency 1.64.0-alpha-1790635538000, and Chromium revision
-1247 in `.cursor/playwright-mcp.sh`. It sets
+1247. `.cursor/playwright-mcp.sh` uses the shared persistent profile;
+`.cursor/playwright-unauth-mcp.sh` uses `--isolated` and does not pass a
+user-data directory, storage-state file, or external browser connection. The
+unauthenticated launcher clears inherited MCP environment variables that could
+attach saved or external browser state. Both set
 `PLAYWRIGHT_BROWSERS_PATH` to the shared `${userHome}/.cache/ms-playwright`
-cache and installs the pinned Chromium only when its expected headless-shell
-binary is absent. Update the MCP version, Playwright version, and browser
-revision together after checking the package metadata and
+cache and install the pinned Chromium only when its expected headless-shell
+binary is absent. The isolated profile keeps state in memory and is discarded
+when the browser session closes. These settings separate browser storage but
+do not technically prevent destructive actions through the authenticated MCP
+or isolate operating-system access. Update the MCP version, Playwright version,
+and browser revision together after checking the package metadata and
 `playwright-core/browsers.json`; do not use `@latest` or system Chrome.
 
 ## Retry / escalation

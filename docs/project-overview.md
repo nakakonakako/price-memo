@@ -227,8 +227,8 @@ cd .. && npm run dev
 - `npm run dev`、`npm run dev:playwright`、`npm run devserver:ensure` は起動前にViteとbackendの実効Supabase URLを承認済みDev project refへ照合する。URL欠落・不一致・曖昧なdotenv設定は値を表示せず停止する
 - `npm run dev` は起動前にVite `:5173` とFastAPI `:8001` を検査し、競合時は所有プロセス情報を表示できる範囲で表示して停止する。別ポートへの自動切替や既存プロセスの終了は行わず、Ctrl+C・SIGTERM・片側起動失敗時はこの起動が作成したサーバープロセス群だけを停止する。SIGTERM後に終了確認し、必要なSIGKILL後も期限付きで再確認する。所有権・終了状態・`/proc` のいずれかを確認できない場合はcleanup失敗をstderrと終了コードに反映する
 - Cursor / Playwright MCP のローカル UI 確認は `npm run devserver:ensure` で `:8001` / `:5273` を起動し、ブラウザーは `http://localhost:5273` に固定する（Vite `strictPort`）。同一worktreeの起動時Dev検証記録、PID/PGID/session/starttime、worktree識別子、実listener所有者、現在の接続設定を照合できた完全なセッションだけ再利用する。起動直後の所有権未確認プロセスは検証前記録として扱い、所有者を証明できない場合はkillせず記録を保持して停止する。停止時はpidfd取得・シグナル送信の失敗を成功扱いせず、プロセス群とポートの消滅を確認できた場合だけセッション記録を削除する。所有者不明・別worktree・旧形式・片側停止・接続設定変更時は再利用せず、別プロセスを終了しない。ensure/stopは全worktree共通ロックで直列化し、通常の `npm run dev:playwright` は `:5273` / `:8001` を使い、別の競合検査・プロセス終了管理を行う
-- Playwright MCP はユーザー home 配下の共通 persistent profile を利用する。初回 Google OAuth はブラウザー上で手動実施し、main checkout と worktree からの確認は逐次実行する。詳細は [cursor-delegation.md](./cursor-delegation.md)
-- Playwright MCP / Playwright / Chromium revision は `.cursor/playwright-mcp.sh` で固定し、browser binary はユーザー共通 cache を利用する。更新手順は [cursor-delegation.md](./cursor-delegation.md)
+- 認証済み UI は `playwright` MCP とユーザー home 配下の共通 persistent profile、ログイン画面・未認証 UI は `playwright-unauth` MCP と `--isolated` のメモリー内 profile を用途別に選ぶ。ログアウト単体テストはmock、実動作確認は専用 profile と別Devテストアカウントを使う。認証済み共有MCPでログアウトや認証状態を破壊する操作は禁止。MCP設定自体はその操作を技術的に阻止しない。詳細は [cursor-delegation.md](./cursor-delegation.md)
+- 両 Playwright MCP は `@playwright/mcp` / Playwright / Chromium revision を固定し、browser binary はユーザー共通 cache を利用する。未認証側は共有 profile、storage-state、外部browser接続を使わない。更新手順は [cursor-delegation.md](./cursor-delegation.md)
 - DB: A と同じ Supabase プロジェクトを利用。migration正本は `shared-supabase-db`。ローカルSQL検証は隔離された使い捨てPostgreSQLを使用。hosted DBへの適用はsharedの保護Writer workflowに限り、price-memoはmigrationを保持・適用しない
 
 ### 7.2 環境変数
@@ -333,6 +333,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-11-02 | 未認証 Playwright MCP を `--isolated` で追加し、共有認証 profile の破壊操作禁止と用途別検証ルールを明記 |
 | 2026-10-31 | Cursor委譲元のハーネスとWorker対象workspaceを分離し、monitorを委譲元checkoutから実行 |
 | 2026-10-31 | Cursor委譲CLIの重複route指定、workspace trust、task-file解決仕様を統一 |
 | 2026-10-31 | worktree環境リンク検証をreceipt-managerと共通の直接絶対symlink・全親階層検査へ統一 |

@@ -169,11 +169,14 @@ Use this path end to end; do not substitute standalone Playwright CLI,
 `npx playwright`, system Chrome, or other browser tools:
 
 1. `npm run devserver:ensure`
-2. Cursor Playwright MCP
-3. `.cursor/playwright-mcp.sh` (stdio server from `.cursor/mcp.json`)
-4. managed Chromium (pinned revision/cache in the wrapper script)
-5. shared persistent profile at
-   `~/.local/state/price-memo/playwright-profile`
+2. Cursor Playwright MCP selected by purpose (`playwright` for authenticated
+   UI, `playwright-unauth` for login/pre-auth UI)
+3. The matching launcher from `.cursor/mcp.json`
+   (`.cursor/playwright-mcp.sh` or `.cursor/playwright-unauth-mcp.sh`)
+4. managed Chromium (pinned revision/cache in the launcher)
+5. The matching browser state: shared persistent profile at
+   `~/.local/state/price-memo/playwright-profile` for `playwright`, or an
+   in-memory `--isolated` profile for `playwright-unauth`
 6. `http://localhost:5273`
 7. `npm run devserver:stop` for process groups started by that ensure invocation
 
@@ -186,27 +189,60 @@ storage.
 The helper starts or reuses the price-memo backend on `:8001` and frontend on
 `:5273` (`strictPort`), refuses unrelated port occupants without fallback or
 kill, and records per-worktree state under the user's home directory so a fresh
-session cannot stop reused servers. Run MCP browser checks sequentially; only
-one MCP browser may use the profile at a time.
+session cannot stop reused servers. Run MCP browser checks sequentially; the
+shared persistent profile may be used by only one browser at a time.
 
 ### MCP and authentication policy
 
 - `scripts/delegate-cursor.sh` must not pass `--approve-mcps` or automatically
   approve MCP servers. If the Cursor CLI reports missing approval, stop and ask
-  the supervisor to have the operator review and run `agent mcp enable playwright`
+  the supervisor to have the operator review and run `agent mcp enable <server-name>`
   from the price-memo repository, then retry. This approves only
   the named project MCP in Cursor's local approved-server list; do not enable
   other servers or edit global MCP configuration. MCP approval is separate
   from `--trust`, sandbox settings, and the shell command allowlist.
 - If Playwright MCP tools are unavailable, repair the MCP environment and retry
   the official path. Do not fall back to another browser route.
-- Never automate Google OAuth. Never read, inspect, print, copy into the
-  repository, or include profile files, cookies, tokens, `localStorage`, or
-  `sessionStorage` in prompts or logs.
-- When the official path shows a Google login screen, treat the profile
-  authentication session as expired, report that fact, and stop for manual
-  re-login in the Playwright MCP browser. Do not continue UI verification until
-  authentication is restored manually.
+- Never automate Google OAuth. Workers must not click app login buttons or
+  otherwise drive OAuth re-authentication. Never read, inspect, print, copy
+  into the repository, or include profile files, cookies, tokens,
+  `localStorage`, or `sessionStorage` in prompts or logs.
+- Distinguish **app-side unauthenticated state** (for example, the price-memo
+  login screen with no Google account-selection or password dialog) from
+  **Google-side re-authentication** (Google account chooser, password, or other
+  Google interactive sign-in UI). Seeing only the app login screen does not, by
+  itself, prove that Google credentials in the shared profile are expired or
+  invalid.
+- When UI verification requires an authenticated in-app screen and that screen
+  cannot be confirmed, stop and report exactly:
+  `アプリ側は未認証、Google側のログイン状態は未確認`. Do not infer Google login
+  state from the app login screen alone. Do not continue UI verification until
+  an operator restores access manually in the Playwright MCP browser when needed.
+- When the official path shows Google interactive re-authentication (not merely
+  the app login screen), stop for manual operator re-login in the Playwright MCP
+  browser. Do not continue UI verification until authentication is restored
+  manually.
+- Operator observations outside a worker run (for example, that Google sign-in
+  still works in the shared profile) may indicate Google auth is intact, but they
+  do not authorize workers to automate OAuth and do not guarantee future MCP
+  sessions.
+- Select the MCP by verification purpose:
+  - Authenticated UI: `playwright` (shared persistent profile).
+  - Login screen or other unauthenticated UI: `playwright-unauth` (separate
+    `--isolated` in-memory profile; no `--user-data-dir` or storage-state file).
+  - Logout unit tests: mocks.
+  - Real logout behavior: a dedicated profile and a separate Dev test account.
+- In the authenticated shared `playwright` MCP, never log out, clear site data,
+  clear browser storage, or perform another action that invalidates or changes
+  the shared authentication state. The MCP does not technically prevent these
+  actions; worker selection and operation rules are the protection, so operator
+  review remains necessary.
+- Use a dedicated profile and separate Dev test account for any real logout
+  behavior check. Never use the shared authenticated profile for that purpose.
+- Keep unauthenticated and authenticated MCP use separate. Do not add automatic
+  session recovery or silent re-login. These settings isolate browser state,
+  but do not isolate operating-system access or technically block a worker from
+  misusing the authenticated MCP.
 
 ## Codex supervisor escalation (Luna → Sol)
 

@@ -21,12 +21,31 @@ the assigned work order and this repository.
 - Prefer small, focused changes and avoid unrelated refactors.
 - Run `npm run check` after implementation.
 - For browser/UI work, run `npm run devserver:ensure` before Playwright MCP at
-  `http://localhost:5273`, then `npm run devserver:stop` when finished. Do not
-  kill unrelated port occupants or stop reused dev servers from another session.
-  Start 5273 only when UI verification needs it; humans use `npm run dev` at
-  `http://localhost:5173`. Reuse the shared profile, but never automate Google
-  OAuth or read credentials, cookies, tokens, localStorage, sessionStorage, or
-  profile contents.
+  `http://localhost:5273`, then `npm run devserver:stop` when finished. Follow
+  AGENTS.md official MCP verification. Choose `playwright` for authenticated UI
+  and `playwright-unauth` for login/pre-auth UI. The latter uses `--isolated`
+  without `--user-data-dir` or saved storage state. Do not kill unrelated port
+  occupants or stop reused dev servers from another session. Start 5273 only
+  when UI verification needs it; humans use `npm run dev` at
+  `http://localhost:5173`.
+- Never automate Google OAuth (including clicking app login buttons). Never read
+  credentials, cookies, tokens, localStorage, sessionStorage, or profile
+  contents. The app login screen alone does not prove Google profile credentials
+  are expired; distinguish app-side unauthenticated UI from Google interactive
+  re-auth screens.
+- When authenticated in-app UI cannot be verified, stop and report exactly:
+  `アプリ側は未認証、Google側のログイン状態は未確認`. On Google interactive
+  re-auth, stop for manual operator re-login in Playwright MCP. Operator
+  observations do not authorize worker OAuth or guarantee future sessions. Do
+  not add automatic session recovery.
+- In authenticated `playwright`, never log out or clear site data, cookies,
+  browser storage, or otherwise invalidate/change the shared authentication
+  state. The MCP does not enforce this technically; follow the task's assigned
+  verification purpose and ask the supervisor if unclear.
+- Use mocks for logout unit tests. Real logout checks require a dedicated
+  profile and a separate Dev test account, never the shared authenticated
+  profile. `playwright-unauth` is for login/pre-auth screens, not a substitute
+  for a controlled real logout test.
 - For browser/UI work, use Playwright when it materially verifies the task.
 
 At completion, report:
