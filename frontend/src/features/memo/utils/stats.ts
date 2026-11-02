@@ -74,6 +74,14 @@ export function computeAllFolderStats(records: PriceRecord[]): FolderStats[] {
     .filter((s): s is FolderStats => s != null)
 }
 
+/** Empty input is not a trial price; explicit `0` is valid. */
+export function parseTrialPriceInput(raw: string): number | null {
+  if (raw.trim() === '') return null
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  return n
+}
+
 export function trialDisplayValue(
   price: number,
   amount: number,
@@ -105,6 +113,29 @@ export function formatDiff(diff: number, digits = 1): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: digits,
   })}`
+}
+
+export function isSameComparisonDiff(diff: number): boolean {
+  return diff >= -0.005 && diff <= 0.005
+}
+
+export function formatComparisonDiffLabel(diff: number, digits = 1): string {
+  if (isSameComparisonDiff(diff)) return '±0円'
+  const cheaper = diff < -0.005
+  return `${formatDiff(diff, digits)}円${cheaper ? '↓' : '↑'}`
+}
+
+/** Keeps long mobile diffs on one line within a ~⅓ card column. */
+export function comparisonDiffFontClass(label: string, desktop: boolean): string {
+  const base = 'max-w-full overflow-hidden text-ellipsis whitespace-nowrap tabular-nums leading-tight'
+  if (desktop) {
+    return `${base} text-base sm:text-lg`
+  }
+  const len = label.length
+  if (len <= 9) return `${base} text-base`
+  if (len <= 11) return `${base} text-sm leading-none`
+  if (len <= 13) return `${base} text-xs leading-none`
+  return `${base} text-[10px] leading-none`
 }
 
 export function recordsByFolderId(

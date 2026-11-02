@@ -631,7 +631,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByLabelText('確認日')).toBeTruthy()
+      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
     })
     expect(reorderMemoItems).not.toHaveBeenCalled()
   })
@@ -676,12 +676,14 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByLabelText('確認日')).toBeTruthy()
+      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
     })
 
-    const storeInput = screen.getByLabelText('店名') as HTMLInputElement
+    const compareInput = screen.getByPlaceholderText(
+      '未入力は全記録',
+    ) as HTMLInputElement
     await act(async () => {
-      fireEvent.change(storeInput, { target: { value: 'テスト店' } })
+      fireEvent.change(compareInput, { target: { value: 'テスト店' } })
     })
 
     await withListItemRectsAsync(async () => {
@@ -696,10 +698,11 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByLabelText('確認日')).toBeTruthy()
-      expect((screen.getByLabelText('店名') as HTMLInputElement).value).toBe(
-        'テスト店',
-      )
+      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
+      expect(
+        (screen.getByPlaceholderText('未入力は全記録') as HTMLInputElement)
+          .value,
+      ).toBe('テスト店')
     })
   })
 

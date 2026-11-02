@@ -30,19 +30,27 @@ import {
   canCompareToStats,
   computeAllFolderStats,
   defaultBasis,
+  comparisonDiffFontClass,
   diffVs,
-  formatDiff,
+  formatComparisonDiffLabel,
+  isSameComparisonDiff,
+  parseTrialPriceInput,
   recordsForStoreScope,
   trialDisplayValue,
   unitsInRecords,
-  valueLabelFor,
   type FolderStats,
 } from '../utils/stats'
+
+export type RecordStoreCandidate = {
+  recordedAt: string
+  storeName: string
+}
 
 type Props = {
   folderId: string
   folderName: string
   records: PriceRecord[]
+  recordStoreCandidate?: RecordStoreCandidate | null
   colorClass?: string
   forceOpen?: boolean
   onForceOpenHandled?: () => void
@@ -60,6 +68,7 @@ export function FolderMemoCard({
   folderId,
   folderName,
   records,
+  recordStoreCandidate = null,
   colorClass = 'border-stone-200 bg-white',
   forceOpen = false,
   onForceOpenHandled,
@@ -85,17 +94,20 @@ export function FolderMemoCard({
   const [amount, setAmount] = useState('')
   const [unit, setUnit] = useState<PriceUnit>('g')
   const [price, setPrice] = useState('')
-  const [store, setStore] = useState('')
+  const [compareStore, setCompareStore] = useState('')
+  const [recordStore, setRecordStore] = useState('')
   const [note, setNote] = useState('')
   const [recordedAt, setRecordedAt] = useState(todayISODate())
+  const [recordSectionOpen, setRecordSectionOpen] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [statsUnit, setStatsUnit] = useState<PriceUnit | null>(null)
 
   const statsRecords = useMemo(
-    () => recordsForStoreScope(records, store),
-    [records, store],
+    () => recordsForStoreScope(records, compareStore),
+    [records, compareStore],
   )
   const allStats = useMemo(
     () => computeAllFolderStats(statsRecords),
@@ -131,16 +143,21 @@ export function FolderMemoCard({
     return () => cancelAnimationFrame(frame)
   }, [forceOpen, onForceOpenHandled])
 
-  const priceN = Number(price)
+  const priceN = parseTrialPriceInput(price)
   const amountN = Number(amount)
   const compareOk = canCompareToStats(unit, activeStats)
   const trialBasis =
     compareOk && activeStats ? activeStats.basis : defaultBasis(unit)
-  const trialValue = trialDisplayValue(priceN, amountN, unit, trialBasis)
-  const displayLabel =
-    compareOk && activeStats
-      ? activeStats.valueLabel
-      : valueLabelFor(unit, defaultBasis(unit))
+  const trialValue =
+    priceN != null
+      ? trialDisplayValue(priceN, amountN, unit, trialBasis)
+      : null
+  const showStatDiffs =
+    isOpen &&
+    !compactListDisplay &&
+    compareOk &&
+    activeStats != null &&
+    trialValue != null
 
   const fieldClass =
     'w-full rounded-md border border-stone-300 bg-white px-2.5 py-2 text-sm outline-none focus:border-stone-500'
@@ -185,15 +202,37 @@ export function FolderMemoCard({
     })
   }
 
+  const openRecordSection = () => {
+    setRecordSectionOpen(true)
+    setError(null)
+    setSavedMsg(null)
+    if (
+      recordStoreCandidate?.recordedAt === recordedAt &&
+      recordStoreCandidate.storeName.trim() &&
+      !recordStore.trim()
+    ) {
+      setRecordStore(recordStoreCandidate.storeName)
+    }
+  }
+
   const handleSave = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
     setSavedMsg(null)
-    if (!store.trim()) {
-      setError('保存するには店名が必要です')
+    if (!recordStore.trim()) {
+      setError('保存するには記録先の店名が必要です')
       return
     }
-    if (!Number.isFinite(priceN) || priceN < 0 || !Number.isInteger(priceN)) {
+    if (price.trim() === '') {
+      setError('価格は 0 以上の整数（円）で入力してください')
+      return
+    }
+    const savePrice = Number(price)
+    if (
+      !Number.isFinite(savePrice) ||
+      savePrice < 0 ||
+      !Number.isInteger(savePrice)
+    ) {
       setError('価格は 0 以上の整数（円）で入力してください')
       return
     }
@@ -215,15 +254,13 @@ export function FolderMemoCard({
       const created = await createRecord({
         folder_id: folderId,
         recorded_at: recordedAt,
-        store_name: store,
-        price: priceN,
+        store_name: recordStore,
+        price: savePrice,
         amount: amountN,
         unit: unit.trim(),
         note: note.trim() || null,
       })
       setSavedMsg('統計に残しました')
-      setPrice('')
-      setAmount('')
       setNote('')
       setStatsUnit(created.unit)
       onSaved(created)
@@ -322,16 +359,17 @@ export function FolderMemoCard({
                   className={`cursor-pointer text-center ${compactListDisplay ? 'hidden' : ''}`}
                   onClick={handleOpen}
                 >
-                  <div className="inline-grid grid-cols-3 gap-3">
-                    <StatCell label="平均" value={activeStats.avg} />
-                    <StatCell label="最安" value={activeStats.min} highlight />
-                    <StatCell label="直近" value={activeStats.latest} />
-                  </div>
-                  {(store.trim() || activeStats.latestDate) && (
+                  <MemoStatsGrid
+                    activeStats={activeStats}
+                    showStatDiffs={showStatDiffs}
+                    trialValue={trialValue}
+                  />
+                  {!isOpen &&
+                    (compareStore.trim() || activeStats.latestDate) && (
                     <div className="mt-0.5 inline-grid grid-cols-3 gap-3">
-                      {store.trim() ? (
+                      {compareStore.trim() ? (
                         <p className="col-span-2 truncate text-[9px] text-stone-400">
-                          {store.trim()}
+                          {compareStore.trim()}
                         </p>
                       ) : (
                         <div className="col-span-2" aria-hidden />
@@ -346,7 +384,7 @@ export function FolderMemoCard({
                     </div>
                   )}
                 </div>
-              ) : records.length > 0 && store.trim() ? (
+              ) : records.length > 0 && compareStore.trim() ? (
                 <p
                   className={`text-center text-[11px] text-stone-500 ${compactListDisplay ? 'hidden' : ''}`}
                 >
@@ -403,16 +441,18 @@ export function FolderMemoCard({
 
             {activeStats ? (
               <div className="shrink-0 text-center">
-                <div className="grid grid-cols-3 gap-3 sm:gap-4">
-                  <StatCell label="平均" value={activeStats.avg} />
-                  <StatCell label="最安" value={activeStats.min} highlight />
-                  <StatCell label="直近" value={activeStats.latest} />
-                </div>
-                {(store.trim() || activeStats.latestDate) && (
+                <MemoStatsGrid
+                  activeStats={activeStats}
+                  showStatDiffs={showStatDiffs}
+                  trialValue={trialValue}
+                  desktop
+                />
+                {!isOpen &&
+                  (compareStore.trim() || activeStats.latestDate) && (
                   <div className="mt-0.5 grid grid-cols-3 gap-3 sm:gap-4">
-                    {store.trim() ? (
+                    {compareStore.trim() ? (
                       <p className="col-span-2 truncate text-[9px] text-stone-400">
-                        {store.trim()}
+                        {compareStore.trim()}
                       </p>
                     ) : (
                       <div className="col-span-2" aria-hidden />
@@ -427,7 +467,7 @@ export function FolderMemoCard({
                   </div>
                 )}
               </div>
-            ) : records.length > 0 && store.trim() ? (
+            ) : records.length > 0 && compareStore.trim() ? (
               <p className="shrink-0 text-right text-[11px] text-stone-500">
                 この店の記録なし
               </p>
@@ -473,134 +513,143 @@ export function FolderMemoCard({
             className={`space-y-3 border-t border-stone-200/80 bg-white/50 px-3 py-3 ${compactListDisplay ? 'hidden' : ''}`}
             onClick={(e) => e.stopPropagation()}
           >
-          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-3 sm:gap-x-3">
-            <label className="min-w-0 space-y-1">
-              <span className="text-xs text-stone-500">確認日</span>
-              <DateInput
-                wrapClassName="px-2.5"
-                value={recordedAt}
-                onChange={(e) => setRecordedAt(e.target.value)}
-              />
-            </label>
-            <label className="min-w-0 space-y-1">
-              <span className="text-xs text-stone-500">店名</span>
+            <label className="block min-w-0 space-y-1">
+              <span className="text-xs text-stone-500">比較店舗</span>
               <StoreField
-                value={store}
-                onChange={setStore}
+                value={compareStore}
+                onChange={setCompareStore}
+                allowRegister={false}
+                placeholder="未入力は全記録"
                 className={fieldClass}
               />
             </label>
 
-            <label className="min-w-0 space-y-1">
-              <span className="text-xs text-stone-500">値段</span>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-stone-400">
-                  ¥
-                </span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
-                  className="w-full rounded-md border border-stone-300 bg-white py-2 pl-7 pr-2.5 text-sm outline-none focus:border-stone-500"
-                  value={price}
-                  onChange={(e) => setPrice(e.target.value)}
-                  placeholder="398"
-                />
-              </div>
-            </label>
-
-            <UnitField
-              value={unit}
-              onChange={setTrialUnit}
-              preferredUnits={preferredUnits}
-              className="w-full border-0 bg-transparent px-1 py-2 text-sm outline-none"
-              customInputClassName={fieldClass}
-            >
-              {({ select, customInput }) => (
-                <div className="min-w-0 space-y-1">
-                  <span className="text-xs text-stone-500">内容量</span>
-                  <div className="flex min-w-0 overflow-hidden rounded-md border border-stone-300 bg-white focus-within:border-stone-500">
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      step="any"
-                      className="min-w-0 flex-1 border-0 bg-transparent px-2.5 py-2 text-sm outline-none"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="250"
-                    />
-                    <div className="w-[4.5rem] shrink-0 border-l border-stone-200 bg-stone-50 [&_select]:border-0 [&_select]:bg-transparent [&_select]:py-2 [&_select]:text-sm">
-                      {select}
-                    </div>
-                  </div>
-                  {customInput}
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-x-2 gap-y-3 sm:gap-x-3">
+              <label className="min-w-0 space-y-1">
+                <span className="text-xs text-stone-500">値段</span>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-stone-400">
+                    ¥
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1}
+                    aria-label="値段"
+                    className="w-full rounded-md border border-stone-300 bg-white py-2 pl-7 pr-2.5 text-sm outline-none focus:border-stone-500"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    placeholder="398"
+                  />
                 </div>
-              )}
-            </UnitField>
+              </label>
 
-            <label className="col-span-2 min-w-0 space-y-1 sm:col-span-1">
-              <span className="text-xs text-stone-500">補足など</span>
-              <input
-                type="text"
-                className={fieldClass}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder=""
-              />
-            </label>
-
-            <div className="col-span-2 flex items-end sm:col-span-1 sm:justify-end">
-              <button
-                type="submit"
-                disabled={saving || trialValue == null}
-                className="h-[42px] w-full shrink-0 rounded-md bg-stone-900 px-4 text-sm text-white hover:bg-stone-800 disabled:opacity-50 sm:w-auto sm:whitespace-nowrap"
+              <UnitField
+                value={unit}
+                onChange={setTrialUnit}
+                preferredUnits={preferredUnits}
+                className="w-full border-0 bg-transparent px-1 py-2 text-sm outline-none"
+                customInputClassName={fieldClass}
               >
-                {saving ? '保存中...' : '統計に残す'}
+                {({ select, customInput }) => (
+                  <div className="min-w-0 space-y-1">
+                    <span className="text-xs text-stone-500">内容量</span>
+                    <div className="flex min-w-0 overflow-hidden rounded-md border border-stone-300 bg-white focus-within:border-stone-500">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        aria-label="内容量"
+                        className="min-w-0 flex-1 border-0 bg-transparent px-2.5 py-2 text-sm outline-none"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value)}
+                        placeholder="250"
+                      />
+                      <div className="w-[4.5rem] shrink-0 border-l border-stone-200 bg-stone-50 [&_select]:border-0 [&_select]:bg-transparent [&_select]:py-2 [&_select]:text-sm">
+                        {select}
+                      </div>
+                    </div>
+                    {customInput}
+                  </div>
+                )}
+              </UnitField>
+            </div>
+
+            {!recordSectionOpen ? (
+              <button
+                type="button"
+                data-no-trash-drag
+                disabled={trialValue == null}
+                onClick={openRecordSection}
+                className="h-[42px] w-full rounded-md border border-stone-300 bg-white px-4 text-sm text-stone-800 hover:bg-stone-50 disabled:opacity-50"
+              >
+                この価格を記録
               </button>
-            </div>
-          </div>
+            ) : (
+              <div className="space-y-3 rounded-md border border-stone-200 bg-white/80 p-3">
+                <label className="block min-w-0 space-y-1">
+                  <span className="text-xs text-stone-500">記録先店舗</span>
+                  <StoreField
+                    value={recordStore}
+                    onChange={setRecordStore}
+                    className={fieldClass}
+                  />
+                </label>
 
-          {trialValue != null ? (
-            <div className="space-y-2 rounded-md border border-stone-200 bg-white px-4 py-3">
-              <p className="text-base text-stone-900">
-                今の単価{' '}
-                <span className="text-lg font-bold">
-                  {formatYen(trialValue, 2)}
-                </span>{' '}
-                <span className="text-sm text-stone-500">({displayLabel})</span>
-              </p>
-              {compareOk && activeStats ? (
-                <ul className="space-y-1 text-sm text-stone-700">
-                  <CompareLine
-                    label="平均"
-                    baseline={activeStats.avg}
-                    current={trialValue}
-                  />
-                  <CompareLine
-                    label="最安"
-                    baseline={activeStats.min}
-                    current={trialValue}
-                  />
-                  <CompareLine
-                    label="直近"
-                    baseline={activeStats.latest}
-                    current={trialValue}
-                  />
-                </ul>
-              ) : (
-                <p className="text-sm text-stone-500">
-                  {unitLabel(unit)} の過去データがないため、比較はまだできません。
-                </p>
-              )}
-            </div>
-          ) : null}
+                <button
+                  type="button"
+                  data-no-trash-drag
+                  onClick={() => setDetailsOpen((v) => !v)}
+                  className="flex w-full items-center gap-1 text-left text-xs text-stone-500 hover:text-stone-700"
+                >
+                  <span
+                    className={`text-stone-400 transition-transform ${detailsOpen ? 'rotate-90' : ''}`}
+                    aria-hidden
+                  >
+                    ▸
+                  </span>
+                  日付・補足
+                </button>
 
-          {error && <p className="text-sm text-red-700">{error}</p>}
-          {savedMsg && <p className="text-sm text-teal-800">{savedMsg}</p>}
-        </form>
-      )}
+                {detailsOpen ? (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="min-w-0 space-y-1">
+                      <span className="text-xs text-stone-500">確認日</span>
+                      <DateInput
+                        wrapClassName="px-2.5"
+                        value={recordedAt}
+                        onChange={(e) => setRecordedAt(e.target.value)}
+                      />
+                    </label>
+                    <label className="min-w-0 space-y-1 sm:col-span-1">
+                      <span className="text-xs text-stone-500">補足など</span>
+                      <input
+                        type="text"
+                        className={fieldClass}
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        placeholder=""
+                      />
+                    </label>
+                  </div>
+                ) : null}
+
+                <button
+                  type="submit"
+                  disabled={saving || trialValue == null}
+                  className="h-[42px] w-full shrink-0 rounded-md bg-stone-900 px-4 text-sm text-white hover:bg-stone-800 disabled:opacity-50 sm:w-auto sm:whitespace-nowrap"
+                >
+                  {saving ? '保存中...' : '統計に残す'}
+                </button>
+              </div>
+            )}
+
+            {error && <p className="text-sm text-red-700">{error}</p>}
+            {savedMsg && <p className="text-sm text-teal-800">{savedMsg}</p>}
+          </form>
+        )}
       </DraggableCatalogItem>
         </div>
         </MemoMobileReorderGestureRoot>
@@ -609,59 +658,115 @@ export function FolderMemoCard({
   )
 }
 
-function StatCell({
-  label,
-  value,
-  highlight,
+function MemoStatsGrid({
+  activeStats,
+  showStatDiffs,
+  trialValue,
+  desktop = false,
 }: {
-  label: string
-  value: number
-  highlight?: boolean
+  activeStats: FolderStats
+  showStatDiffs: boolean
+  trialValue: number | null
+  desktop?: boolean
 }) {
+  const gridClass = desktop
+    ? 'grid min-w-0 grid-cols-3 gap-x-1 gap-y-0.5 sm:gap-x-4'
+    : 'grid min-w-0 w-full max-w-full grid-cols-3 gap-x-1 gap-y-0.5'
   return (
-    <div className="min-w-[3.5rem]">
-      <p className="text-[10px] tracking-wide text-stone-500">{label}</p>
-      <p
-        className={
-          highlight
-            ? 'text-lg font-bold tabular-nums leading-tight text-teal-800 sm:text-xl'
-            : 'text-lg font-semibold tabular-nums leading-tight text-stone-900 sm:text-xl'
-        }
-      >
-        {formatYen(value, 1)}
-      </p>
+    <div className="min-w-0">
+      <div className={gridClass}>
+        <StatCell
+          label="平均"
+          value={activeStats.avg}
+          basisLabel={showStatDiffs ? activeStats.valueLabel : undefined}
+          desktop={desktop}
+          trialDiff={
+            showStatDiffs && trialValue != null
+              ? diffVs(trialValue, activeStats.avg)
+              : undefined
+          }
+        />
+        <StatCell
+          label="最安"
+          value={activeStats.min}
+          highlightMin={!showStatDiffs}
+          desktop={desktop}
+          trialDiff={
+            showStatDiffs && trialValue != null
+              ? diffVs(trialValue, activeStats.min)
+              : undefined
+          }
+        />
+        <StatCell
+          label="直近"
+          value={activeStats.latest}
+          desktop={desktop}
+          trialDiff={
+            showStatDiffs && trialValue != null
+              ? diffVs(trialValue, activeStats.latest)
+              : undefined
+          }
+        />
+      </div>
     </div>
   )
 }
 
-function CompareLine({
+function StatCell({
   label,
-  baseline,
-  current,
+  value,
+  highlightMin,
+  trialDiff,
+  basisLabel,
+  desktop = false,
 }: {
   label: string
-  baseline: number
-  current: number
+  value: number
+  highlightMin?: boolean
+  trialDiff?: number
+  basisLabel?: string
+  desktop?: boolean
 }) {
-  const d = diffVs(current, baseline)
-  const cheaper = d < 0
-  const same = Math.abs(d) < 0.005
+  const comparing = trialDiff != null
+  const cheaper = comparing && trialDiff < -0.005
+  const same = comparing && isSameComparisonDiff(trialDiff)
+  const displayLabel = comparing ? `${label}比` : label
+  const diffLabel = comparing
+    ? formatComparisonDiffLabel(trialDiff)
+    : null
+
+  const diffColorClass = same
+    ? 'font-semibold text-stone-500'
+    : cheaper
+      ? 'font-bold text-teal-800'
+      : 'font-bold text-amber-800'
+
+  const statMainClass = highlightMin
+    ? 'text-lg font-bold tabular-nums leading-tight text-teal-800 sm:text-xl'
+    : 'text-lg font-semibold tabular-nums leading-tight text-stone-900 sm:text-xl'
+
   return (
-    <li>
-      {label} {formatYen(baseline, 1)} との差{' '}
-      <span
-        className={
-          same
-            ? 'text-stone-600'
-            : cheaper
-              ? 'font-semibold text-teal-800'
-              : 'font-semibold text-amber-800'
-        }
-      >
-        {same
-          ? 'ほぼ同じ'
-          : `${formatDiff(d, 1)}（${cheaper ? '安い' : '高い'}）`}
-      </span>
-    </li>
+    <div className="min-w-0 px-0.5">
+      <p className="truncate text-[10px] tracking-wide text-stone-500">
+        {displayLabel}
+        {basisLabel ? (
+          <span className="text-stone-400"> {basisLabel}</span>
+        ) : null}
+      </p>
+      {comparing && diffLabel ? (
+        <>
+          <p
+            className={`${diffColorClass} ${comparisonDiffFontClass(diffLabel, desktop)}`}
+          >
+            {diffLabel}
+          </p>
+          <p className="truncate text-[9px] tabular-nums text-stone-400">
+            {formatYen(value, 1)}
+          </p>
+        </>
+      ) : (
+        <p className={statMainClass}>{formatYen(value, 1)}</p>
+      )}
+    </div>
   )
 }
