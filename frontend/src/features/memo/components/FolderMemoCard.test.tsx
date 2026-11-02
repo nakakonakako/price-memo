@@ -38,6 +38,8 @@ vi.mock('@/components/StoreField', () => ({
     allowRegister?: boolean
     placeholder?: string
     candidateNames?: readonly string[]
+    clearable?: boolean
+    clearAriaLabel?: string
   }) => {
     const label =
       props.allowRegister === false ? 'compare-store' : 'record-store'
@@ -45,12 +47,23 @@ vi.mock('@/components/StoreField', () => ({
       props.allowRegister === false ? compareStoreField : recordStoreField
     track(props)
     return (
-      <input
-        aria-label={label}
-        placeholder={props.placeholder}
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value)}
-      />
+      <>
+        <input
+          aria-label={label}
+          placeholder={props.placeholder}
+          value={props.value}
+          onChange={(e) => props.onChange(e.target.value)}
+        />
+        {props.clearable && props.value ? (
+          <button
+            type="button"
+            aria-label={props.clearAriaLabel ?? 'クリア'}
+            onClick={() => props.onChange('')}
+          >
+            比較クリア
+          </button>
+        ) : null}
+      </>
     )
   },
 }))
@@ -511,10 +524,14 @@ describe('FolderMemoCard BL-11 compare store candidates', () => {
     const compareProps = compareStoreField.mock.calls.at(-1)?.[0]
     expect(compareProps?.candidateNames).toEqual(['店A', '店B'])
     expect(compareProps?.allowRegister).toBe(false)
+    expect(compareProps?.clearable).toBe(true)
+    expect(compareProps?.clearAriaLabel).toBe('比較店舗をクリア')
+    expect(compareProps?.placeholder).toBe('全店舗の記録と比較')
 
     const recordProps = recordStoreField.mock.calls.at(-1)?.[0]
     expect(recordProps?.candidateNames).toBeUndefined()
     expect(recordProps?.allowRegister).not.toBe(false)
+    expect(recordProps?.clearable).toBeUndefined()
   })
 
   it('uses empty compare candidates when records are empty', () => {
@@ -651,5 +668,72 @@ describe('FolderMemoCard BL-11 compare store candidates', () => {
     expect(
       compareStoreField.mock.calls.at(-1)?.[0].candidateNames,
     ).not.toContain('店B')
+  })
+
+  it('clears compare store to all-store scope while keeping trial and record section', () => {
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="牛乳"
+        records={recordsTwoStores}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('牛乳'))
+    fireEvent.change(screen.getByLabelText('compare-store'), {
+      target: { value: '店A' },
+    })
+    fireEvent.change(screen.getByLabelText('値段'), {
+      target: { value: '250' },
+    })
+    fireEvent.change(screen.getByLabelText('内容量'), {
+      target: { value: '500' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'この価格を記録' }))
+    fireEvent.change(screen.getByLabelText('record-store'), {
+      target: { value: '記録店' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '比較店舗をクリア' }))
+
+    expect(
+      (screen.getByLabelText('compare-store') as HTMLInputElement).value,
+    ).toBe('')
+    expect((screen.getByLabelText('値段') as HTMLInputElement).value).toBe('250')
+    expect((screen.getByLabelText('内容量') as HTMLInputElement).value).toBe(
+      '500',
+    )
+    expect(
+      (screen.getByLabelText('record-store') as HTMLInputElement).value,
+    ).toBe('記録店')
+    expect(screen.getByLabelText('record-store')).toBeTruthy()
+  })
+
+  it('does not render compare clear on record StoreField', () => {
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="牛乳"
+        records={recordsTwoStores}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('牛乳'))
+    fireEvent.change(screen.getByLabelText('値段'), {
+      target: { value: '100' },
+    })
+    fireEvent.change(screen.getByLabelText('内容量'), {
+      target: { value: '100' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'この価格を記録' }))
+    fireEvent.change(screen.getByLabelText('record-store'), {
+      target: { value: '記録店' },
+    })
+
+    expect(
+      screen.queryByRole('button', { name: '比較店舗をクリア' }),
+    ).toBeNull()
   })
 })

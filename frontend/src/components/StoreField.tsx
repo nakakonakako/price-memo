@@ -1,4 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import {
   createStore,
   filterStores,
@@ -11,6 +18,7 @@ import {
 import { subscribeStoresCacheRefresh } from '@/features/stores/api/storesCache'
 import type { PriceStore } from '@/features/stores/types'
 import { subscribeCatalogRevisions } from '@/lib/catalogSync'
+import { CloseIcon } from '@/components/icons/CloseIcon'
 import { toUserMessage } from '@/lib/userError'
 
 type Props = {
@@ -24,6 +32,10 @@ type Props = {
   allowRegister?: boolean
   /** 指定時は店舗マスタではなくこの名前だけを候補にする（検索は従来どおり kanaSearch） */
   candidateNames?: readonly string[]
+  /** true のとき入力欄右端にクリアボタン（文字があるときのみ） */
+  clearable?: boolean
+  /** clearable 時の accessible name */
+  clearAriaLabel?: string
 }
 
 export function StoreField({
@@ -35,6 +47,8 @@ export function StoreField({
   placeholder = '店舗名で検索',
   allowRegister = true,
   candidateNames,
+  clearable = false,
+  clearAriaLabel = 'クリア',
 }: Props) {
   const [stores, setStores] = useState<PriceStore[]>([])
   const [loading, setLoading] = useState(true)
@@ -116,6 +130,21 @@ export function StoreField({
     setFieldError(null)
   }
 
+  const showClear =
+    clearable &&
+    !disabled &&
+    !registering &&
+    displayedQuery.length > 0
+
+  const clearSelection = (e: ReactMouseEvent | ReactPointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setQuery('')
+    onChange('')
+    setOpen(false)
+    setFieldError(null)
+  }
+
   const registerNew = async () => {
     if (!trimmedQuery) return
     const epoch = getStoresCacheEpoch()
@@ -134,33 +163,50 @@ export function StoreField({
 
   return (
     <div ref={rootRef} className="relative">
-      <input
-        type="text"
-        value={displayedQuery}
-        onChange={(e) => {
-          setQuery(e.target.value)
-          setOpen(true)
-          if (!e.target.value.trim()) onChange('')
-        }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setOpen(false)
-          if (e.key === 'Enter' && showRegister) {
-            e.preventDefault()
-            void registerNew()
-          }
-        }}
-        placeholder={placeholder}
-        disabled={disabled || registering}
-        required={required}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        spellCheck={false}
-        className={fieldClass}
-        aria-autocomplete="list"
-        aria-expanded={open}
-      />
+      <div className="relative">
+        <input
+          type="text"
+          value={displayedQuery}
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setOpen(true)
+            if (!e.target.value.trim()) onChange('')
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setOpen(false)
+            if (e.key === 'Enter' && showRegister) {
+              e.preventDefault()
+              void registerNew()
+            }
+          }}
+          placeholder={placeholder}
+          disabled={disabled || registering}
+          required={required}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          className={`${fieldClass}${showClear ? ' pr-11' : ''}`}
+          aria-autocomplete="list"
+          aria-expanded={open}
+        />
+        {showClear ? (
+          <button
+            type="button"
+            data-no-trash-drag
+            aria-label={clearAriaLabel}
+            className="absolute right-0 top-1/2 inline-flex h-11 w-11 shrink-0 -translate-y-1/2 items-center justify-center rounded-md text-stone-600 hover:bg-stone-100"
+            onPointerDown={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            }}
+            onClick={clearSelection}
+          >
+            <CloseIcon className="h-4 w-4" />
+          </button>
+        ) : null}
+      </div>
       {open && !disabled && (
         <div
           className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-md border border-stone-200 bg-white shadow-lg"

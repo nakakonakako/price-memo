@@ -535,7 +535,9 @@ export function FolderMemoCard({
                 onChange={setCompareStore}
                 allowRegister={false}
                 candidateNames={compareStoreCandidates}
-                placeholder="未入力は全記録"
+                placeholder="全店舗の記録と比較"
+                clearable
+                clearAriaLabel="比較店舗をクリア"
                 className={fieldClass}
               />
             </label>

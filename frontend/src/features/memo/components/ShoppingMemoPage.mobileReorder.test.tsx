@@ -631,7 +631,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
+      expect(screen.getByPlaceholderText('全店舗の記録と比較')).toBeTruthy()
     })
     expect(reorderMemoItems).not.toHaveBeenCalled()
   })
@@ -676,11 +676,11 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
+      expect(screen.getByPlaceholderText('全店舗の記録と比較')).toBeTruthy()
     })
 
     const compareInput = screen.getByPlaceholderText(
-      '未入力は全記録',
+      '全店舗の記録と比較',
     ) as HTMLInputElement
     await act(async () => {
       fireEvent.change(compareInput, { target: { value: 'テスト店' } })
@@ -698,9 +698,9 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
+      expect(screen.getByPlaceholderText('全店舗の記録と比較')).toBeTruthy()
       expect(
-        (screen.getByPlaceholderText('未入力は全記録') as HTMLInputElement)
+        (screen.getByPlaceholderText('全店舗の記録と比較') as HTMLInputElement)
           .value,
       ).toBe('テスト店')
     })
