@@ -259,7 +259,7 @@ Relevant price-memo tests include `test_stale_cursor_session_does_not_block`,
 `test_associated_process_inspection_failure_refuses`, plus WT-06 companions
 `test_post_cwd_stat_failure_refuses_only_with_association_evidence`,
 `test_unassociated_initial_stat_failure_is_skipped`, and
-`test_unrelated_unreadable_cwd_does_not_block`. All nine names exist as test
+`test_unrelated_unreadable_cwd_does_not_block`. All eight names exist as test
 methods in `scripts/test-worktree-remove-guard.py` (25 methods total in that
 file); listing them does not prove every timing or group race is covered.
 `test_invalid_session_blocks_without_touching_file` and orphan harness cleanup
