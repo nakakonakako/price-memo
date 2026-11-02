@@ -6,10 +6,12 @@ const DIALOG_TITLE = 'データの取り扱い'
 
 type Props = {
   className?: string
+  linkLabel?: string
 }
 
-export function DataHandlingDisclosure({ className }: Props) {
+export function DataHandlingDisclosure({ className, linkLabel }: Props) {
   const [open, setOpen] = useState(false)
+  const buttonLabel = linkLabel ?? DIALOG_TITLE
 
   return (
     <>
@@ -21,7 +23,7 @@ export function DataHandlingDisclosure({ className }: Props) {
           'text-sm text-stone-600 underline decoration-stone-300 underline-offset-2 hover:text-stone-900'
         }
       >
-        {DIALOG_TITLE}
+        {buttonLabel}
       </button>
       <DialogShell
         open={open}

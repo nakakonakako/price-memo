@@ -36,6 +36,18 @@ describe('DataHandlingDisclosure', () => {
     expect(screen.queryByRole('button', { name: '削除を確定する' })).toBeNull()
   })
 
+  it('uses a custom link label while keeping the dialog title', () => {
+    render(
+      <DataHandlingDisclosure linkLabel="保存されるデータの取り扱いはこちら" />,
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '保存されるデータの取り扱いはこちら' }),
+    )
+
+    expect(screen.getByRole('dialog', { name: 'データの取り扱い' })).toBeTruthy()
+  })
+
   it('renders the approved user-facing data-handling copy', () => {
     render(<DataHandlingDisclosure />)
     fireEvent.click(screen.getByRole('button', { name: 'データの取り扱い' }))
