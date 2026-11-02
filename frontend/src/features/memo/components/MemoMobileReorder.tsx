@@ -24,6 +24,7 @@ import {
   MEMO_REORDER_GESTURE_WATCHDOG_MS,
   MEMO_REORDER_LONG_PRESS_MS,
 } from './memoMobileReorderGesture'
+import { logMemoReorderTrace } from './memoMobileReorderTrace'
 
 type ItemRect = {
   id: string
@@ -176,6 +177,7 @@ export function MemoMobileReorderProvider({
     touchId: -1,
     startX: 0,
     startY: 0,
+    touchStartAt: 0,
     lastClientY: 0,
     longPressTimer: null as ReturnType<typeof setTimeout> | null,
     longPressArmed: false,
@@ -230,6 +232,7 @@ export function MemoMobileReorderProvider({
       touchId: -1,
       startX: 0,
       startY: 0,
+      touchStartAt: 0,
       lastClientY: 0,
       longPressTimer: null,
       longPressArmed: false,
@@ -240,6 +243,36 @@ export function MemoMobileReorderProvider({
     }
     setGesturePhase('idle')
   }, [clearGestureWatchdog, clearLongPressTimer, detachDocumentTouchTracking])
+
+  const traceTouch = useCallback(
+    (
+      eventKind: 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel',
+      e: TouchEvent,
+      dx: number,
+      dy: number,
+    ) => {
+      const s = touchSessionRef.current
+      const inferredPhase = s.dragActive
+        ? 'dragging'
+        : s.longPressArmed
+          ? 'longPressArmed'
+          : s.longPressTimer != null
+            ? 'longPressPending'
+            : 'idle'
+      logMemoReorderTrace({
+        event: eventKind,
+        phase: inferredPhase,
+        elapsedMs: s.touchStartAt ? Date.now() - s.touchStartAt : 0,
+        dx,
+        dy,
+        cancelable: e.cancelable,
+        defaultPrevented: e.defaultPrevented,
+        dragActive: s.dragActive,
+        longPressArmed: s.longPressArmed,
+      })
+    },
+    [],
+  )
 
   const scheduleGestureWatchdog = useCallback(() => {
     clearGestureWatchdog()
@@ -405,51 +438,67 @@ export function MemoMobileReorderProvider({
       s.lastClientY = touch.clientY
       scheduleGestureWatchdog()
 
+      const dx = touch.clientX - s.startX
+      const dy = touch.clientY - s.startY
+
       if (!s.dragActive) {
-        const dx = touch.clientX - s.startX
-        const dy = touch.clientY - s.startY
         if (s.longPressArmed) {
           if (shouldActivateDrag(dx, dy)) {
             if (!e.cancelable) {
+              traceTouch('touchmove', e, dx, dy)
               resetTouchSession()
               return
             }
             if (!s.folderId || !s.cardEl) {
+              traceTouch('touchmove', e, dx, dy)
               resetTouchSession()
               return
             }
             activateDragFromLongPress(s.folderId, s.cardEl, touch.clientY)
+            e.preventDefault()
             moveActiveDrag(touch.clientY)
+            traceTouch('touchmove', e, dx, dy)
             return
           }
           if (shouldCancelArmedReorder(dx, dy)) {
+            traceTouch('touchmove', e, dx, dy)
             resetTouchSession()
             return
           }
+          traceTouch('touchmove', e, dx, dy)
           return
         }
         if (shouldCancelLongPress(dx, dy)) {
+          traceTouch('touchmove', e, dx, dy)
           resetTouchSession()
         }
         return
       }
 
       if (!e.cancelable) {
+        traceTouch('touchmove', e, dx, dy)
         cancelActiveDrag()
         return
       }
 
       e.preventDefault()
       moveActiveDrag(touch.clientY)
+      traceTouch('touchmove', e, dx, dy)
     }
 
     const onDocumentTouchEnd = (e: TouchEvent) => {
       const s = touchSessionRef.current
       if (s.touchId < 0) return
-      const ended = Array.from(e.changedTouches).some(
+      const endedTouch = Array.from(e.changedTouches).find(
         (t) => t.identifier === s.touchId,
       )
+      const traceDx = endedTouch ? endedTouch.clientX - s.startX : 0
+      const traceDy = endedTouch
+        ? endedTouch.clientY - s.startY
+        : s.lastClientY - s.startY
+      const ended = endedTouch != null
       if (ended) {
+        traceTouch('touchend', e, traceDx, traceDy)
         clearLongPressTimer()
         if (s.dragActive) {
           void endActiveDrag()
@@ -468,7 +517,8 @@ export function MemoMobileReorderProvider({
       }
     }
 
-    const onDocumentTouchCancel = () => {
+    const onDocumentTouchCancel = (e: TouchEvent) => {
+      traceTouch('touchcancel', e, 0, 0)
       clearLongPressTimer()
       if (touchSessionRef.current.dragActive) cancelActiveDrag()
       else resetTouchSession()
@@ -495,6 +545,7 @@ export function MemoMobileReorderProvider({
     moveActiveDrag,
     resetTouchSession,
     scheduleGestureWatchdog,
+    traceTouch,
   ])
 
   const attachCardGesture = useCallback(
@@ -542,6 +593,7 @@ export function MemoMobileReorderProvider({
           touchId: touch.identifier,
           startX: touch.clientX,
           startY: touch.clientY,
+          touchStartAt: Date.now(),
           lastClientY: touch.clientY,
           longPressTimer: null,
           longPressArmed: false,
@@ -553,6 +605,7 @@ export function MemoMobileReorderProvider({
         setGesturePhase('longPressPending')
         attachDocumentTouchTracking()
         scheduleGestureWatchdog()
+        traceTouch('touchstart', e, 0, 0)
 
         touchSessionRef.current.longPressTimer = setTimeout(() => {
           const s = touchSessionRef.current
@@ -585,6 +638,7 @@ export function MemoMobileReorderProvider({
       isSwipeDeleteBlocked,
       resetTouchSession,
       scheduleGestureWatchdog,
+      traceTouch,
     ],
   )
 

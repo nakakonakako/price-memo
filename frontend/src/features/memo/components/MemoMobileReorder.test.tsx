@@ -799,6 +799,54 @@ describe('MemoMobileReorder long-press gestures', () => {
     expect(onCommit).not.toHaveBeenCalled()
   })
 
+  it('calls preventDefault on the first vertical move that activates drag', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+    })
+
+    let preventDefaultCalls = 0
+    const originalPreventDefault = Event.prototype.preventDefault
+    const preventSpy = vi
+      .spyOn(Event.prototype, 'preventDefault')
+      .mockImplementation(function (this: Event) {
+        if (this.type === 'touchmove') preventDefaultCalls += 1
+        originalPreventDefault.call(this)
+      })
+
+    await act(async () => {
+      const touch = {
+        identifier: 1,
+        clientX: 100,
+        clientY: 188,
+        target: surface,
+      }
+      fireEvent.touchMove(document, {
+        touches: [touch],
+        targetTouches: [touch],
+        cancelable: true,
+      })
+    })
+    vi.useRealTimers()
+    preventSpy.mockRestore()
+
+    expect(preventDefaultCalls).toBeGreaterThanOrEqual(1)
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('dragging')
+  })
+
   it('cancels armed reorder on horizontal move without commit', async () => {
     const onCommit = vi.fn()
     render(
