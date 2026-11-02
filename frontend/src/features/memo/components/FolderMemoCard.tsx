@@ -30,8 +30,10 @@ import {
   canCompareToStats,
   computeAllFolderStats,
   defaultBasis,
+  comparisonDiffFontClass,
   diffVs,
-  formatDiff,
+  formatComparisonDiffLabel,
+  isSameComparisonDiff,
   parseTrialPriceInput,
   recordsForStoreScope,
   trialDisplayValue,
@@ -670,15 +672,12 @@ function MemoStatsGrid({
     : 'grid min-w-0 w-full max-w-full grid-cols-3 gap-x-1 gap-y-0.5'
   return (
     <div className="min-w-0">
-      {showStatDiffs ? (
-        <p className="mb-0.5 text-center text-[9px] text-stone-400">
-          {activeStats.valueLabel}
-        </p>
-      ) : null}
       <div className={gridClass}>
         <StatCell
           label="平均"
           value={activeStats.avg}
+          basisLabel={showStatDiffs ? activeStats.valueLabel : undefined}
+          desktop={desktop}
           trialDiff={
             showStatDiffs && trialValue != null
               ? diffVs(trialValue, activeStats.avg)
@@ -689,6 +688,7 @@ function MemoStatsGrid({
           label="最安"
           value={activeStats.min}
           highlightMin={!showStatDiffs}
+          desktop={desktop}
           trialDiff={
             showStatDiffs && trialValue != null
               ? diffVs(trialValue, activeStats.min)
@@ -698,6 +698,7 @@ function MemoStatsGrid({
         <StatCell
           label="直近"
           value={activeStats.latest}
+          desktop={desktop}
           trialDiff={
             showStatDiffs && trialValue != null
               ? diffVs(trialValue, activeStats.latest)
@@ -714,23 +715,29 @@ function StatCell({
   value,
   highlightMin,
   trialDiff,
+  basisLabel,
+  desktop = false,
 }: {
   label: string
   value: number
   highlightMin?: boolean
   trialDiff?: number
+  basisLabel?: string
+  desktop?: boolean
 }) {
   const comparing = trialDiff != null
   const cheaper = comparing && trialDiff < -0.005
-  const same =
-    comparing && trialDiff >= -0.005 && trialDiff <= 0.005
+  const same = comparing && isSameComparisonDiff(trialDiff)
   const displayLabel = comparing ? `${label}比` : label
+  const diffLabel = comparing
+    ? formatComparisonDiffLabel(trialDiff)
+    : null
 
-  const diffMainClass = same
-    ? 'text-base font-semibold tabular-nums leading-tight text-stone-500 sm:text-lg'
+  const diffColorClass = same
+    ? 'font-semibold text-stone-500'
     : cheaper
-      ? 'text-base font-bold tabular-nums leading-tight text-teal-800 sm:text-lg'
-      : 'text-base font-bold tabular-nums leading-tight text-amber-800 sm:text-lg'
+      ? 'font-bold text-teal-800'
+      : 'font-bold text-amber-800'
 
   const statMainClass = highlightMin
     ? 'text-lg font-bold tabular-nums leading-tight text-teal-800 sm:text-xl'
@@ -740,13 +747,16 @@ function StatCell({
     <div className="min-w-0 px-0.5">
       <p className="truncate text-[10px] tracking-wide text-stone-500">
         {displayLabel}
+        {basisLabel ? (
+          <span className="text-stone-400"> {basisLabel}</span>
+        ) : null}
       </p>
-      {comparing ? (
+      {comparing && diffLabel ? (
         <>
-          <p className={diffMainClass}>
-            {same
-              ? '±0'
-              : `${formatDiff(trialDiff, 1)}円${cheaper ? '↓' : '↑'}`}
+          <p
+            className={`${diffColorClass} ${comparisonDiffFontClass(diffLabel, desktop)}`}
+          >
+            {diffLabel}
           </p>
           <p className="truncate text-[9px] tabular-nums text-stone-400">
             {formatYen(value, 1)}

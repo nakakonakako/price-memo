@@ -285,7 +285,7 @@ describe('FolderMemoCard BL-10 record flow', () => {
     expect(screen.getByText('平均比')).toBeTruthy()
     expect(screen.getByText('最安比')).toBeTruthy()
     expect(screen.getByText('直近比')).toBeTruthy()
-    expect(screen.getByText('円/100g')).toBeTruthy()
+    expect(screen.getByText(/円\/100g/)).toBeTruthy()
     expect(screen.getByText('+75円↑')).toBeTruthy()
     expect(screen.getByText('+100円↑')).toBeTruthy()
     expect(screen.getByText('+50円↑')).toBeTruthy()
