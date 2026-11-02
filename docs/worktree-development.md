@@ -143,10 +143,12 @@ A symlink does not hide its target from a trusted Cursor workspace. Configure
 only development credentials required by the task. Do not link production
 credentials into a worker workspace.
 
-`remove` only accepts a clean, registered worktree below
-`~/worktrees/price-memo/`, prompts for the literal word `remove`, and uses
-non-forced `git worktree remove`. It does not delete the branch. It never runs
-automatically after a PR is merged.
+`remove` only accepts a clean worktree below `~/worktrees/price-memo/` whose
+Git common directory matches this repository, prompts for the literal word
+`remove`, and uses non-forced `git worktree remove`. The preflight does not
+independently prove registration via `git worktree list`; Git's non-forced
+remove remains the final validation. It does not delete the branch. It never
+runs automatically after a PR is merged.
 
 Before the confirmation prompt and again immediately before `git worktree remove`,
 `scripts/worktree-remove-inspect.py` scans for processes still using the target

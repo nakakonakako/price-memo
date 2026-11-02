@@ -47,12 +47,20 @@ against `git worktree list` or checking `--show-toplevel` equals the requested
 path. Do not describe that preflight as an explicit registration proof. A
 successful removal must still be accepted by Git as a removable worktree.
 
-Price-memo evidence: `canonical_worktree()` in `scripts/worktree.sh`,
-`test_symlink_alias_uses_canonical_worktree_path`, and
-`test_clean_remove_succeeds`. The alias test exercises canonicalization in the
-inspector; it does not prove the full remove wrapper removes through an alias.
-There is no dedicated negative test for another repository or a path outside
-the standard worktree area.
+- **Implementation guarantee (実装保証):** `canonical_worktree()` in
+  `scripts/worktree.sh`; path under the standard worktree area; Git common-dir
+  match with the invoking repository; non-forced `git worktree remove` as the
+  final Git step.
+- **Tests (実テスト名):** `test_clean_remove_succeeds`,
+  `test_symlink_alias_uses_canonical_worktree_path`,
+  `test_similar_directory_not_matched`.
+- **Verified scope (テストで確かめられる範囲):** Clean removal through the
+  wrapper; canonical path handling and prefix non-matching in inspection.
+- **Not exercised (未実施条件):** Full wrapper removal through a symlink alias;
+  dedicated refusal tests for another repository or a path outside the standard
+  area.
+- **Price-memo additional guarantees (price-memo固有追加保証):** None beyond
+  shared v1 WT-01.
 
 ### WT-02 — Protect uncommitted work
 
@@ -61,11 +69,17 @@ untracked changes. Use non-forced `git worktree remove`; do not delete the
 branch. The contract does not claim that ignored files are enumerated by the
 status precheck.
 
-Price-memo evidence: `test_dirty_worktree_still_rejected`,
-`test_clean_remove_succeeds`, `test_symlink_alias_uses_canonical_worktree_path`,
-and clean/dirty remove cases in `scripts/test-worktree.sh`. The guard test
-uses an untracked file; staged and unstaged variants are not separately
-covered. The shell test confirms branch retention for its clean removal case.
+- **Implementation guarantee (実装保証):** Refuse when `git status --porcelain` is
+  non-empty; non-forced `git worktree remove`; branch is not deleted.
+- **Tests (実テスト名):** `test_dirty_worktree_still_rejected`,
+  `test_clean_remove_succeeds`, `test_symlink_alias_uses_canonical_worktree_path`;
+  clean/dirty remove cases in `scripts/test-worktree.sh`.
+- **Verified scope (テストで確かめられる範囲):** Untracked dirty refusal; clean
+  removal; branch retention in the shell clean-removal case.
+- **Not exercised (未実施条件):** Separate staged-only and unstaged-only cases;
+  ignored-file enumeration (outside the precheck guarantee).
+- **Price-memo additional guarantees (price-memo固有追加保証):** None beyond
+  shared v1 WT-02.
 
 ### WT-03 — Require explicit confirmation and inspect twice
 
@@ -74,11 +88,19 @@ the prompt and again after confirmation immediately before deletion. If the
 inspector reports a blocked process or an inspection error, stop without
 calling Git removal.
 
-Price-memo evidence: `test_process_started_at_prompt_blocks_real_remove`,
-`test_proc_scan_failure_is_fail_closed`, and
-`test_second_inspection_catches_new_process`. Successful remove tests cover
-the positive path. A wrong or cancelled confirmation value has no dedicated
-regression test.
+- **Implementation guarantee (実装保証):** Literal `remove` confirmation; process
+  inspection immediately before the prompt and again before `git worktree remove`;
+  stop without Git removal on block or inspection error.
+- **Tests (実テスト名):** `test_process_started_at_prompt_blocks_real_remove`,
+  `test_proc_scan_failure_is_fail_closed`,
+  `test_second_inspection_catches_new_process`; successful remove tests for the
+  positive path.
+- **Verified scope (テストで確かめられる範囲):** Second inspection after
+  confirmation; `/proc` enumeration failure; process started while confirmation
+  is pending.
+- **Not exercised (未実施条件):** Wrong or cancelled confirmation input.
+- **Price-memo additional guarantees (price-memo固有追加保証):** None beyond
+  shared v1 WT-03.
 
 ### WT-04 — Detect live processes by cwd
 
@@ -86,10 +108,21 @@ Refuse removal when an inspectable, live process has a canonical cwd equal to
 the target worktree or a directory below it. Ignore zombies. Do not match a
 different worktree or a sibling whose name merely shares a path prefix.
 
-Price-memo evidence: `test_worktree_process_blocks_remove`,
-`test_subdir_cwd_detected`, `test_other_worktree_process_does_not_block_target`,
-`test_similar_directory_not_matched`, and
-`test_cwd_sample_is_discarded_when_pid_exits_is_reused_or_zombifies`.
+- **Implementation guarantee (実装保証):** Block when an inspectable live process
+  has canonical cwd in the target worktree or below; ignore zombies; do not match
+  siblings or prefix-similar paths.
+- **Tests (実テスト名):** `test_worktree_process_blocks_remove`,
+  `test_subdir_cwd_detected`, `test_other_worktree_process_does_not_block_target`,
+  `test_similar_directory_not_matched`,
+  `test_cwd_sample_is_discarded_when_pid_exits_is_reused_or_zombifies`;
+  also `test_external_process_does_not_block` and
+  `test_stable_external_cwd_does_not_block` for non-target cwd.
+- **Verified scope (テストで確かめられる範囲):** Target and subdirectory cwd;
+  other worktree and external cwd non-blocking; prefix safety; zombie/reuse
+  discard during cwd sampling.
+- **Not exercised (未実施条件):** Non-Linux `/proc` behavior.
+- **Price-memo additional guarantees (price-memo固有追加保証):** None beyond
+  shared v1 WT-04.
 
 ### WT-05 — Confirm PID identity around cwd inspection
 
@@ -100,10 +133,17 @@ non-zombie. A change between other live states, such as sleeping and running,
 is not by itself PID reuse. If the process exited, became a zombie, or the PID
 was reused, discard the old cwd observation.
 
-Price-memo evidence: `_same_process()` in
-`scripts/worktree-remove-inspect.py`,
-`test_stable_cwd_identity_blocks_and_allows_process_state_changes`, and
-`test_cwd_sample_is_discarded_when_pid_exits_is_reused_or_zombifies`.
+- **Implementation guarantee (実装保証):** `_same_process()` in
+  `scripts/worktree-remove-inspect.py`; stat–cwd–stat with matching start time
+  and non-zombie samples.
+- **Tests (実テスト名):**
+  `test_stable_cwd_identity_blocks_and_allows_process_state_changes`,
+  `test_cwd_sample_is_discarded_when_pid_exits_is_reused_or_zombifies`.
+- **Verified scope (テストで確かめられる範囲):** Stable start time across live
+  state changes; discard on exit, zombie, or PID reuse during sampling.
+- **Not exercised (未実施条件):** Exhaustive kernel timing races.
+- **Price-memo additional guarantees (price-memo固有追加保証):** None beyond
+  shared v1 WT-05.
 
 ### WT-06 — Handle inspection failures according to association evidence
 
@@ -128,13 +168,23 @@ This intentionally differs from receipt-manager, which fails closed for an
 initial same-user stat failure. Do not describe WT-06 as identical failure
 handling across the repositories.
 
-Price-memo evidence: `test_post_cwd_stat_failure_refuses_only_with_association_evidence`,
-`test_unassociated_initial_stat_failure_is_skipped`,
-`test_unrelated_unreadable_cwd_does_not_block`,
-`test_recorded_cursor_group_stat_recheck_failure_refuses`,
-`test_associated_process_inspection_failure_refuses`, and
-`test_proc_scan_failure_is_fail_closed`. Other `/proc` permission and race
-combinations are not exhaustively tested.
+- **Implementation guarantee (実装保証):** Behavior bullets above; fail-closed on
+  `/proc` enumeration failure; association-aware stat/cwd failures; recorded
+  Cursor candidates fail closed when inspection is unsafe.
+- **Tests (実テスト名):** `test_post_cwd_stat_failure_refuses_only_with_association_evidence`,
+  `test_unassociated_initial_stat_failure_is_skipped`,
+  `test_unrelated_unreadable_cwd_does_not_block`,
+  `test_recorded_cursor_group_stat_recheck_failure_refuses`,
+  `test_associated_process_inspection_failure_refuses`,
+  `test_proc_scan_failure_is_fail_closed`.
+- **Verified scope (テストで確かめられる範囲):** Skip vs refuse paths for
+  unassociated initial stat failure, target cwd with failed recheck, unrelated
+  unreadable cwd, recorded group recheck failure, associated inspection failure,
+  and `/proc` scan failure.
+- **Not exercised (未実施条件):** Every UID, permission, and timing combination.
+- **Price-memo additional guarantees (price-memo固有追加保証):** Recorded Cursor
+  PID/group/nonce association uses stricter fail-closed branches than
+  receipt-manager's same-user initial-stat rule (documented difference above).
 
 ### WT-07 — Do not interfere with processes or expose their data
 
@@ -143,12 +193,18 @@ other worktrees. It must not print or persist environment-variable values or
 full command lines. Printing a bounded PID list and generic inspection reasons
 is permitted.
 
-Price-memo evidence: `test_worktree_process_blocks_remove` and
-`test_other_worktree_process_does_not_block_target` verify relevant processes
-remain alive. The guard reads the dedicated Cursor session marker from
-`/proc/<pid>/environ` in memory for nonce comparison; it does not print or
-persist environment values. There is no dedicated synthetic-secret assertion
-for output and diagnostic non-disclosure.
+- **Implementation guarantee (実装保証):** No signals or kills; no changes to
+  other worktrees' processes; no printed or persisted environment values or full
+  command lines; bounded PID lists and generic reasons allowed.
+- **Tests (実テスト名):** `test_worktree_process_blocks_remove`,
+  `test_other_worktree_process_does_not_block_target`.
+- **Verified scope (テストで確かめられる範囲):** Target and other-worktree
+  processes remain alive after refusal paths exercised by those tests.
+- **Not exercised (未実施条件):** Synthetic-secret output assertion; every
+  diagnostic sink.
+- **Price-memo additional guarantees (price-memo固有追加保証):** Marker read from
+  `/proc/<pid>/environ` in memory for session nonce comparison only; values are
+  not logged or persisted (receipt-manager does not perform this read).
 
 ### WT-08 — State the detection limits
 
@@ -161,10 +217,18 @@ the worktree. The contract does not promise support on every OS, complete
 process-tree detection, or automatic recovery after forced termination. The
 guard never kills processes.
 
-Price-memo evidence: limitations documented in `docs/worktree-development.md`.
-`test_second_inspection_catches_new_process` verifies a process appearing
-while confirmation is pending; it cannot eliminate or fully test the final
-inspection-to-removal race.
+- **Implementation guarantee (実装保証):** Documented limits only; no promise of
+  complete process-tree detection, arbitrary moved-cwd detection, or OS coverage
+  beyond Linux `/proc` cwd inspection.
+- **Tests (実テスト名):** `test_second_inspection_catches_new_process`;
+  limitations narrative in `docs/worktree-development.md`.
+- **Verified scope (テストで確かめられる範囲):** Process appearing while
+  confirmation is pending is caught by the second inspection.
+- **Not exercised (未実施条件):** Final inspection-to-`git worktree remove`
+  race; general unrecorded process after cwd leaves the worktree.
+- **Price-memo additional guarantees (price-memo固有追加保証):** Recorded Cursor
+  session/group checks add partial moved-cwd/orphan coverage (see extension
+  section); they do not close WT-08 gaps for arbitrary processes.
 
 ## Price-memo Cursor devserver extension (not required by v1)
 
@@ -192,15 +256,28 @@ Relevant price-memo tests include `test_stale_cursor_session_does_not_block`,
 `test_reused_session_pid_does_not_trust_stale_group`,
 `test_orphaned_cursor_group_child_with_moved_cwd`,
 `test_recorded_cursor_group_stat_recheck_failure_refuses`, and
-`test_associated_process_inspection_failure_refuses`. These do not prove that
-every group race or marker-read timing is covered.
+`test_associated_process_inspection_failure_refuses`, plus WT-06 companions
+`test_post_cwd_stat_failure_refuses_only_with_association_evidence`,
+`test_unassociated_initial_stat_failure_is_skipped`, and
+`test_unrelated_unreadable_cwd_does_not_block`. All nine names exist as test
+methods in `scripts/test-worktree-remove-guard.py` (25 methods total in that
+file); listing them does not prove every timing or group race is covered.
+`test_invalid_session_blocks_without_touching_file` and orphan harness cleanup
+tests add further session coverage. These do not prove that every group race
+or marker-read timing is covered.
 
 ## Test execution and coverage
 
-The guard suite is `scripts/test-worktree-remove-guard.py`. It is called by
-`scripts/test-worktree.sh`, which is included in `npm run check` through
-`check:worktree`. The table maps contract conditions to observed tests; it does
-not upgrade untested edge cases to verified behavior.
+CI path (verified in this repository): `npm run check` → `check:worktree` →
+`bash scripts/test-worktree.sh` (which invokes
+`python3 scripts/test-worktree-remove-guard.py` among other worktree-related
+suites) plus additional scripts listed in `package.json` under
+`check:worktree`.
+
+The guard suite is `scripts/test-worktree-remove-guard.py` (**25** `test_*`
+methods). It is called from `scripts/test-worktree.sh`, which is included in
+`npm run check` through `check:worktree`. The table maps contract conditions to
+observed tests; it does not upgrade untested edge cases to verified behavior.
 
 | Contract | Price-memo tests | Verified scope and remaining coverage gaps |
 | --- | --- | --- |
