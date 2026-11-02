@@ -364,7 +364,8 @@ export function FolderMemoCard({
                     showStatDiffs={showStatDiffs}
                     trialValue={trialValue}
                   />
-                  {(compareStore.trim() || activeStats.latestDate) && (
+                  {!isOpen &&
+                    (compareStore.trim() || activeStats.latestDate) && (
                     <div className="mt-0.5 inline-grid grid-cols-3 gap-3">
                       {compareStore.trim() ? (
                         <p className="col-span-2 truncate text-[9px] text-stone-400">
@@ -446,7 +447,8 @@ export function FolderMemoCard({
                   trialValue={trialValue}
                   desktop
                 />
-                {(compareStore.trim() || activeStats.latestDate) && (
+                {!isOpen &&
+                  (compareStore.trim() || activeStats.latestDate) && (
                   <div className="mt-0.5 grid grid-cols-3 gap-3 sm:gap-4">
                     {compareStore.trim() ? (
                       <p className="col-span-2 truncate text-[9px] text-stone-400">

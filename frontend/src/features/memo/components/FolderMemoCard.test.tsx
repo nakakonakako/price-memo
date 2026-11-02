@@ -8,8 +8,10 @@ import {
   type RecordStoreCandidate,
 } from './FolderMemoCard'
 
+const useMediaQuery = vi.fn(() => false)
+
 vi.mock('@/hooks/useMediaQuery', () => ({
-  useMediaQuery: () => false,
+  useMediaQuery: (query: string) => useMediaQuery(query),
 }))
 
 vi.mock('@/components/catalog/DraggableCatalogItem', () => ({
@@ -103,7 +105,77 @@ describe('FolderMemoCard BL-10 record flow', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    useMediaQuery.mockImplementation(() => false)
     vi.stubGlobal('scrollTo', vi.fn())
+  })
+
+  describe.each([
+    { viewport: 'desktop', isMobile: false },
+    { viewport: 'mobile', isMobile: true },
+  ])('stats metadata row ($viewport)', ({ isMobile }) => {
+    beforeEach(() => {
+      useMediaQuery.mockImplementation((query: string) =>
+        query === '(max-width: 1023px)' ? isMobile : false,
+      )
+    })
+
+    it('shows compare store and latest date when collapsed', () => {
+      render(
+        <FolderMemoCard
+          folderId="f1"
+          folderName="牛乳"
+          records={sampleRecords}
+          onSaved={vi.fn()}
+        />,
+      )
+
+      expect(screen.getByText('2026-01-15')).toBeTruthy()
+    })
+
+    it('hides compare store and latest date when expanded without trial price', () => {
+      render(
+        <FolderMemoCard
+          folderId="f1"
+          folderName="牛乳"
+          records={sampleRecords}
+          onSaved={vi.fn()}
+        />,
+      )
+
+      fireEvent.click(screen.getByText('牛乳'))
+      fireEvent.change(screen.getByLabelText('compare-store'), {
+        target: { value: '店A' },
+      })
+
+      expect(screen.queryByText('2026-01-15')).toBeNull()
+      expect(screen.queryByText('店A', { selector: 'p' })).toBeNull()
+    })
+
+    it('hides compare store and latest date when expanded with trial price', () => {
+      render(
+        <FolderMemoCard
+          folderId="f1"
+          folderName="牛乳"
+          records={sampleRecords}
+          onSaved={vi.fn()}
+        />,
+      )
+
+      fireEvent.click(screen.getByText('牛乳'))
+      fireEvent.change(screen.getByLabelText('compare-store'), {
+        target: { value: '店A' },
+      })
+      fireEvent.change(screen.getByLabelText('値段'), {
+        target: { value: '200' },
+      })
+      fireEvent.change(screen.getByLabelText('内容量'), {
+        target: { value: '100' },
+      })
+
+      expect(screen.getByText('平均比')).toBeTruthy()
+      expect(screen.queryByText('2026-01-15')).toBeNull()
+      expect(screen.queryByText('店A', { selector: 'p' })).toBeNull()
+    })
   })
 
   it('scopes stats to compare store independently from record store on save', async () => {
