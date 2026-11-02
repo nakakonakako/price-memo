@@ -9,13 +9,15 @@ vi.mock('@/components/DialogShell', () => ({
     open,
     title,
     children,
+    width,
   }: {
     open: boolean
     title: string
     children: React.ReactNode
+    width?: 'default' | 'wide'
   }) =>
     open ? (
-      <div role="dialog" aria-label={title}>
+      <div role="dialog" aria-label={title} data-width={width ?? 'default'}>
         <h2>{title}</h2>
         {children}
       </div>
@@ -30,10 +32,24 @@ describe('DataHandlingDisclosure', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'データの取り扱い' }))
 
-    expect(screen.getByRole('dialog', { name: 'データの取り扱い' })).toBeTruthy()
+    const dialog = screen.getByRole('dialog', { name: 'データの取り扱い' })
+    expect(dialog).toBeTruthy()
+    expect(dialog.getAttribute('data-width')).toBe('wide')
     expect(screen.getByTestId(DATA_HANDLING_DISCLOSURE_TEST_ID)).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'すべてのデータを削除' })).toBeNull()
     expect(screen.queryByRole('button', { name: '削除を確定する' })).toBeNull()
+  })
+
+  it('uses a custom link label while keeping the dialog title', () => {
+    render(
+      <DataHandlingDisclosure linkLabel="保存されるデータの取り扱いはこちら" />,
+    )
+
+    fireEvent.click(
+      screen.getByRole('button', { name: '保存されるデータの取り扱いはこちら' }),
+    )
+
+    expect(screen.getByRole('dialog', { name: 'データの取り扱い' })).toBeTruthy()
   })
 
   it('renders the approved user-facing data-handling copy', () => {

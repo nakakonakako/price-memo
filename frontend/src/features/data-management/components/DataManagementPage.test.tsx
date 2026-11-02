@@ -55,10 +55,44 @@ describe('DataManagementPage', () => {
   it('opens the shared data-handling disclosure without calling delete RPC', () => {
     render(<DataManagementPage onDataDeleted={vi.fn()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'データの取り扱い' }))
+    fireEvent.click(
+      screen.getByRole('button', { name: '保存されるデータの取り扱いはこちら' }),
+    )
 
     expect(screen.getByTestId(DATA_HANDLING_DISCLOSURE_TEST_ID)).toBeTruthy()
     expect(rpc).not.toHaveBeenCalled()
+  })
+
+  it('shows user-facing delete copy without internal product or table names', () => {
+    render(<DataManagementPage onDataDeleted={vi.fn()} />)
+
+    expect(
+      screen.getByRole('heading', { name: '単価メモにおけるデータの全削除' }),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
+        'ログイン中のアカウントに保存されたフォルダ、価格記録、買い物メモ、店舗名をすべて削除します。',
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
+        '削除したデータは復元できません。ログインアカウントは削除されません。',
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/price_folders/)).toBeNull()
+    expect(screen.queryByText(/price-memo/)).toBeNull()
+  })
+
+  it('shows the specified final confirmation dialog copy', () => {
+    render(<DataManagementPage onDataDeleted={vi.fn()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'すべてのデータを削除' }))
+
+    expect(
+      screen.getByText(
+        '単価メモに保存されたフォルダ、価格記録、買い物メモ、店舗名をすべて削除します。この操作は取り消せません。',
+      ),
+    ).toBeTruthy()
   })
 
   it('requires confirmation, resets caches, and delegates success notification', async () => {

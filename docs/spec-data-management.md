@@ -1,6 +1,6 @@
 # 仕様: データ管理
 
-最終更新: 2026-10-31
+最終更新: 2026-11-02
 
 関連: [project-overview.md](./project-overview.md) / [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md)
 
@@ -14,7 +14,7 @@
 
 ## 2. 確認と結果
 
-- 操作前に4テーブルの範囲と復元できないことを表示し、最終確認ダイアログを出す。
+- データ管理画面の削除ブロック見出しは「単価メモにおけるデータの全削除」。操作前に、フォルダ・価格記録・買い物メモ・店舗名の削除範囲と復元できないことを表示し、最終確認ダイアログを出す。確認ダイアログのタイトルは「データをすべて削除しますか？」、確定ボタンは「削除を確定する」。
 - 実行中は送信を無効化する。
 - エラー時は成功扱いにせず、汎用エラーを表示する。
 - 成功時は店舗キャッシュを無効化し、買い物メモ・フォルダ・値段推移の画面状態を再生成して買い物メモへ戻る。セッションは維持する。
@@ -22,7 +22,7 @@
 
 ## 3. データの取り扱い（ユーザー向け説明）
 
-ログイン前（認証画面）とログイン後（データ管理画面）の両方から、同じ「データの取り扱い」ダイアログを開ける。本文は `frontend/src/features/data-management/components/DataHandlingDisclosureContent.tsx` に一元化し、`DataHandlingDisclosure` が `DialogShell` で表示する。
+ログイン前（認証画面）とログイン後（データ管理画面）の両方から、同じ「データの取り扱い」ダイアログを開ける。認証画面のリンク表示は「データの取り扱い」、データ管理画面では「保存されるデータの取り扱いはこちら」とし、ダイアログタイトルは共通で「データの取り扱い」とする。本文は `frontend/src/features/data-management/components/DataHandlingDisclosureContent.tsx` に一元化し、`DataHandlingDisclosure` が `DialogShell`（PC では最大幅おおよそ 720px、モバイルは全画面）で表示する。
 
 説明の要点（ユーザー向け本文と一致させる。3 節構成）:
 
