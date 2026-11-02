@@ -15,21 +15,29 @@ case is exercised.
 
 ## Version and adoption status
 
-Contract version: **v1 (adoption proposed by this PR)**. receipt-manager adopted
-v1 in PR #58, merged at `ab515fb7570c113bd5035204e08ce027a394a996`; its contract
-is the normative source. price-memo adoption takes effect only after this PR is
-merged and its CI result is recorded.
+Contract version: **v1**. Both repositories have adopted shared v1.
+receipt-manager's contract document is the normative source.
 
-| Repository | `origin/main` SHA | Status |
-| --- | --- | --- |
-| receipt-manager | `ab515fb7570c113bd5035204e08ce027a394a996` | v1 adopted by PR #58 |
-| price-memo | `3b71cd06f34f37b8de39b0bd592082e9f6aebdd6` | adoption proposed by this PR |
+### Comparison baseline at price-memo adoption
+
+These `origin/main` SHAs were the comparison baseline when price-memo adopted
+v1. They are not the price-memo adoption merge commit.
+
+| Repository | `origin/main` SHA (baseline) |
+| --- | --- |
+| receipt-manager | `ab515fb7570c113bd5035204e08ce027a394a996` |
+| price-memo | `3b71cd06f34f37b8de39b0bd592082e9f6aebdd6` |
 
 The price-memo PID identity implementation was merged in PR #57 at
 `3b71cd06f34f37b8de39b0bd592082e9f6aebdd6` (CI success was recorded for that
-PR). Record this adoption PR URL, merge commit, and CI result here only after
-merge and successful CI. Until then, do not describe both repositories as
-having completed adoption.
+PR).
+
+### Adoption record
+
+| Repository | PR | Merge commit | CI |
+| --- | --- | --- | --- |
+| receipt-manager | [#58](https://github.com/nakakonakako/receipt-manager/pull/58) | `ab515fb7570c113bd5035204e08ce027a394a996` | pr-quality success |
+| price-memo | [#58](https://github.com/nakakonakako/price-memo/pull/58) | `79dc066877a03030e1f490300ae56bc39713171e` | pr-quality success (workflow run [41426327954](https://github.com/nakakonakako/price-memo/actions/runs/41426327954)) |
 
 ## Contract v1: WT-01–WT-08
 
