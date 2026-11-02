@@ -115,6 +115,7 @@ describe('MemoMobileReorder long-press gestures', () => {
     }
     render(
       <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
         <ul>
           <Row id="a" name="A" />
           <Row id="b" name="B" />
@@ -136,6 +137,9 @@ describe('MemoMobileReorder long-press gestures', () => {
     await waitFor(() => {
       expect(onCommit).toHaveBeenCalledWith('b', 'a')
     })
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(screen.getByTestId('dragging').textContent).toBe('false')
+    expect(screen.getByTestId('active-id').textContent).toBe('null')
   })
 
   it('keeps tracking touchmove on document after long-press activation re-render', async () => {
@@ -233,6 +237,7 @@ describe('MemoMobileReorder long-press gestures', () => {
     withListRects(() => {
       render(
         <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+          <PhaseProbe />
           <ul>
             <Row id="a" name="A" />
             <Row id="b" name="B" />
@@ -252,6 +257,9 @@ describe('MemoMobileReorder long-press gestures', () => {
     vi.useRealTimers()
 
     expect(onCommit).not.toHaveBeenCalled()
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(screen.getByTestId('dragging').textContent).toBe('false')
+    expect(screen.getByTestId('active-id').textContent).toBe('null')
   })
 
   it('cancels active drag without commit on non-cancelable touchmove', async () => {
@@ -683,6 +691,46 @@ describe('MemoMobileReorder long-press gestures', () => {
       touchAt(surface, 'start', 200)
       vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
       fireEvent.touchMove(document, { touches: [], targetTouches: [] })
+    })
+    vi.useRealTimers()
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('recovers from a lost touchend when the next touch reuses its identifier', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+      touchAt(surface, 'move', 180)
+    })
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('dragging')
+    expect(screen.getByTestId('dragging').textContent).toBe('true')
+    expect(screen.getByTestId('active-id').textContent).toBe('b')
+
+    await act(async () => {
+      // The prior touchend is intentionally omitted; touchAt reuses identifier 1.
+      touchAt(screen.getByTestId('surface-b'), 'start', 200)
+    })
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('longPressPending')
+    expect(screen.getByTestId('dragging').textContent).toBe('false')
+    expect(screen.getByTestId('active-id').textContent).toBe('null')
+    await act(async () => {
+      touchAt(screen.getByTestId('surface-b'), 'end', 200)
     })
     vi.useRealTimers()
 

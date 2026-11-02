@@ -510,9 +510,28 @@ export function MemoMobileReorderProvider({
       }
 
       const onTouchStart = (e: TouchEvent) => {
-        if (disabled || e.touches.length !== 1) return
+        if (disabled) return
+
+        const session = touchSessionRef.current
+        let recoveredStaleDrag = false
+        if (session.dragActive && e.touches.length === 1) {
+          // A new single-finger touchstart means the previous contact is gone,
+          // even if the browser omitted touchend and reused its identifier.
+          cancelActiveDrag()
+          recoveredStaleDrag = true
+        } else if (
+          session.touchId >= 0 &&
+          !Array.from(e.touches).some(
+            (touch) => touch.identifier === session.touchId,
+          )
+        ) {
+          if (session.dragActive) cancelActiveDrag()
+          else resetTouchSession()
+        }
+
+        if (e.touches.length !== 1) return
         if (isInteractiveReorderTarget(e.target)) return
-        if (isSwipeDeleteBlocked()) return
+        if (!recoveredStaleDrag && isSwipeDeleteBlocked()) return
 
         const touch = e.touches[0]
         clearLongPressTimer()
@@ -560,9 +579,11 @@ export function MemoMobileReorderProvider({
     [
       attachDocumentTouchTracking,
       clearLongPressTimer,
+      cancelActiveDrag,
       detachDocumentTouchTracking,
       disabled,
       isSwipeDeleteBlocked,
+      resetTouchSession,
       scheduleGestureWatchdog,
     ],
   )

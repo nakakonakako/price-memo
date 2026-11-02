@@ -613,7 +613,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     expect(reorderMemoItems).not.toHaveBeenCalled()
   })
 
-  it('opens the card on a short tap on the title toggle region', async () => {
+  it('opens the card after a short touchstart/end and click on the title region', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
@@ -626,8 +626,13 @@ describe('ShoppingMemoPage mobile reorder', () => {
     const titleToggle = screen.getByText('B').closest('[data-memo-card-toggle]')
     expect(titleToggle).toBeTruthy()
 
-    await act(async () => {
-      fireEvent.click(titleToggle as HTMLElement)
+    await withLongPressTimers(async () => {
+      await act(async () => {
+        touchAt(titleToggle as HTMLElement, 'start', 240)
+        vi.advanceTimersByTime(100)
+        touchAt(titleToggle as HTMLElement, 'end', 240)
+        fireEvent.click(titleToggle as HTMLElement)
+      })
     })
 
     await waitFor(() => {
