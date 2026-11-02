@@ -200,13 +200,32 @@ one MCP browser may use the profile at a time.
   from `--trust`, sandbox settings, and the shell command allowlist.
 - If Playwright MCP tools are unavailable, repair the MCP environment and retry
   the official path. Do not fall back to another browser route.
-- Never automate Google OAuth. Never read, inspect, print, copy into the
-  repository, or include profile files, cookies, tokens, `localStorage`, or
-  `sessionStorage` in prompts or logs.
-- When the official path shows a Google login screen, treat the profile
-  authentication session as expired, report that fact, and stop for manual
-  re-login in the Playwright MCP browser. Do not continue UI verification until
-  authentication is restored manually.
+- Never automate Google OAuth. Workers must not click app login buttons or
+  otherwise drive OAuth re-authentication. Never read, inspect, print, copy
+  into the repository, or include profile files, cookies, tokens,
+  `localStorage`, or `sessionStorage` in prompts or logs.
+- Distinguish **app-side unauthenticated state** (for example, the price-memo
+  login screen with no Google account-selection or password dialog) from
+  **Google-side re-authentication** (Google account chooser, password, or other
+  Google interactive sign-in UI). Seeing only the app login screen does not, by
+  itself, prove that Google credentials in the shared profile are expired or
+  invalid.
+- When UI verification requires an authenticated in-app screen and that screen
+  cannot be confirmed, stop and report exactly:
+  `アプリ側は未認証、Google側のログイン状態は未確認`. Do not infer Google login
+  state from the app login screen alone. Do not continue UI verification until
+  an operator restores access manually in the Playwright MCP browser when needed.
+- When the official path shows Google interactive re-authentication (not merely
+  the app login screen), stop for manual operator re-login in the Playwright MCP
+  browser. Do not continue UI verification until authentication is restored
+  manually.
+- Operator observations outside a worker run (for example, that Google sign-in
+  still works in the shared profile) may indicate Google auth is intact, but they
+  do not authorize workers to automate OAuth and do not guarantee future MCP
+  sessions.
+- Keep the separation between unauthenticated MCP checks and authenticated MCP
+  verification as documented. Do not add automatic session recovery or silent
+  re-login behavior.
 
 ## Codex supervisor escalation (Luna → Sol)
 
