@@ -37,6 +37,7 @@ vi.mock('@/components/StoreField', () => ({
     onChange: (v: string) => void
     allowRegister?: boolean
     placeholder?: string
+    candidateNames?: readonly string[]
   }) => {
     const label =
       props.allowRegister === false ? 'compare-store' : 'record-store'
@@ -461,5 +462,184 @@ describe('FolderMemoCard BL-10 record flow', () => {
         '記録店',
       )
     })
+  })
+})
+
+describe('FolderMemoCard BL-11 compare store candidates', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    useMediaQuery.mockImplementation(() => false)
+    vi.stubGlobal('scrollTo', vi.fn())
+  })
+
+  const recordsTwoStores: PriceRecord[] = [
+    ...sampleRecords,
+    {
+      ...sampleRecords[0],
+      id: 'r3',
+      store_name: '店B',
+      recorded_at: '2026-01-20',
+    },
+  ]
+
+  it('passes record-derived store names to compare StoreField only', () => {
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="牛乳"
+        records={recordsTwoStores}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('牛乳'))
+
+    const compareProps = compareStoreField.mock.calls.at(-1)?.[0]
+    expect(compareProps?.candidateNames).toEqual(['店A', '店B'])
+    expect(compareProps?.allowRegister).toBe(false)
+
+    const recordProps = recordStoreField.mock.calls.at(-1)?.[0]
+    expect(recordProps?.candidateNames).toBeUndefined()
+    expect(recordProps?.allowRegister).not.toBe(false)
+  })
+
+  it('uses empty compare candidates when records are empty', () => {
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="牛乳"
+        records={[]}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('牛乳'))
+
+    expect(compareStoreField.mock.calls.at(-1)?.[0].candidateNames).toEqual([])
+  })
+
+  it('updates compare candidates after save adds a new store on the folder', async () => {
+    const { createRecord } = await import('@/features/records/api/recordsApi')
+    vi.mocked(createRecord).mockResolvedValue({
+      ...sampleRecords[0],
+      id: 'r-new',
+      store_name: '新店',
+    })
+
+    function Harness() {
+      const [records, setRecords] = useState<PriceRecord[]>(sampleRecords)
+      return (
+        <FolderMemoCard
+          folderId="f1"
+          folderName="牛乳"
+          records={records}
+          onSaved={(r) => setRecords((prev) => [...prev, r])}
+        />
+      )
+    }
+
+    render(<Harness />)
+    fireEvent.click(screen.getByText('牛乳'))
+
+    fireEvent.change(screen.getByLabelText('値段'), {
+      target: { value: '100' },
+    })
+    fireEvent.change(screen.getByLabelText('内容量'), {
+      target: { value: '100' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'この価格を記録' }))
+    fireEvent.change(screen.getByLabelText('record-store'), {
+      target: { value: '新店' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '統計に残す' }))
+
+    await waitFor(() => {
+      expect(compareStoreField.mock.calls.at(-1)?.[0].candidateNames).toEqual([
+        '店A',
+        '新店',
+      ])
+    })
+  })
+
+  it('clears compare store when its records are removed', () => {
+    function Harness() {
+      const [records, setRecords] = useState(recordsTwoStores)
+      return (
+        <>
+          <FolderMemoCard
+            folderId="f1"
+            folderName="牛乳"
+            records={records}
+            onSaved={vi.fn()}
+          />
+          <button
+            type="button"
+            onClick={() => setRecords(sampleRecords)}
+          >
+            drop店B
+          </button>
+        </>
+      )
+    }
+
+    render(<Harness />)
+    fireEvent.click(screen.getByText('牛乳'))
+    fireEvent.change(screen.getByLabelText('compare-store'), {
+      target: { value: '店B' },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'drop店B' }))
+
+    expect((screen.getByLabelText('compare-store') as HTMLInputElement).value).toBe(
+      '',
+    )
+  })
+
+  it('includes legacy store names missing from master in compare candidates', () => {
+    const legacyRecords: PriceRecord[] = [
+      {
+        ...sampleRecords[0],
+        store_name: 'マスタ未登録店',
+      },
+    ]
+
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="牛乳"
+        records={legacyRecords}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('牛乳'))
+
+    expect(compareStoreField.mock.calls.at(-1)?.[0].candidateNames).toEqual([
+      'マスタ未登録店',
+    ])
+  })
+
+  it('does not put other folders stores into compare candidates', () => {
+    render(
+      <FolderMemoCard
+        folderId="f1"
+        folderName="品目A"
+        records={sampleRecords}
+        onSaved={vi.fn()}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('品目A'))
+
+    expect(compareStoreField.mock.calls.at(-1)?.[0].candidateNames).toEqual([
+      '店A',
+    ])
+    expect(
+      compareStoreField.mock.calls.at(-1)?.[0].candidateNames,
+    ).not.toContain('店B')
   })
 })

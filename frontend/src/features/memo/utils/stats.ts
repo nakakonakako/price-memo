@@ -45,6 +45,19 @@ export function recordsForStoreScope(
   return records.filter((r) => r.store_name === name)
 }
 
+/** 当該フォルダ記録に実在する store_name の重複なし一覧（出現順）。 */
+export function uniqueStoreNamesInRecords(records: PriceRecord[]): string[] {
+  const seen = new Set<string>()
+  const names: string[] = []
+  for (const r of records) {
+    const name = r.store_name
+    if (!name.trim() || seen.has(name)) continue
+    seen.add(name)
+    names.push(name)
+  }
+  return names
+}
+
 export function computeStatsForUnit(
   records: PriceRecord[],
   unit: PriceUnit,

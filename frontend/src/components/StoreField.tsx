@@ -22,6 +22,8 @@ type Props = {
   placeholder?: string
   /** false … 既存店舗の選択のみ（比較店舗など） */
   allowRegister?: boolean
+  /** 指定時は店舗マスタではなくこの名前だけを候補にする（検索は従来どおり kanaSearch） */
+  candidateNames?: readonly string[]
 }
 
 export function StoreField({
@@ -32,6 +34,7 @@ export function StoreField({
   className = '',
   placeholder = '店舗名で検索',
   allowRegister = true,
+  candidateNames,
 }: Props) {
   const [stores, setStores] = useState<PriceStore[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,7 +44,18 @@ export function StoreField({
   const [fieldError, setFieldError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
 
+  const candidateStores = useMemo((): PriceStore[] | null => {
+    if (candidateNames == null) return null
+    return candidateNames.map((name, index) => ({
+      id: `candidate:${index}:${name}`,
+      user_id: '',
+      name,
+      created_at: '',
+    }))
+  }, [candidateNames])
+
   useEffect(() => {
+    if (candidateNames != null) return
     let cancelled = false
     const unsubscribe = subscribeCatalogRevisions(() => {
       const current = peekStoresCache()
@@ -63,7 +77,10 @@ export function StoreField({
       unsubscribe()
       unsubscribeRealtimeRefresh()
     }
-  }, [])
+  }, [candidateNames])
+
+  const listStores = candidateStores ?? stores
+  const listLoading = candidateStores ? false : loading
 
   useEffect(() => {
     if (!open) return
@@ -76,16 +93,16 @@ export function StoreField({
 
   const displayedQuery = open ? query : value
   const filtered = useMemo(
-    () => filterStores(stores, displayedQuery),
-    [stores, displayedQuery],
+    () => filterStores(listStores, displayedQuery),
+    [listStores, displayedQuery],
   )
-  const exact = findStoreByName(stores, displayedQuery)
+  const exact = findStoreByName(listStores, displayedQuery)
   const trimmedQuery = displayedQuery.trim()
   const showRegister =
     allowRegister &&
     trimmedQuery.length > 0 &&
     !exact &&
-    !loading &&
+    !listLoading &&
     !registering
 
   const fieldClass =
@@ -148,13 +165,17 @@ export function StoreField({
         <div
           className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-md border border-stone-200 bg-white shadow-lg"
         >
-          {loading ? (
+          {listLoading ? (
             <p className="px-3 py-2 text-sm text-stone-500">読み込み中...</p>
           ) : filtered.length === 0 && !showRegister ? (
             <p className="px-3 py-2 text-sm text-stone-500">
-              {stores.length === 0
-                ? '店舗がまだありません。名前を入力して登録してください。'
-                : '一致する店舗がありません。'}
+              {candidateStores
+                ? candidateStores.length === 0
+                  ? 'この品目の記録にある店舗がありません。'
+                  : '一致する店舗がありません。'
+                : listStores.length === 0
+                  ? '店舗がまだありません。名前を入力して登録してください。'
+                  : '一致する店舗がありません。'}
             </p>
           ) : (
             <ul className="max-h-44 overflow-y-auto py-1">

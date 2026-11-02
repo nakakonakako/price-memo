@@ -37,6 +37,7 @@ import {
   parseTrialPriceInput,
   recordsForStoreScope,
   trialDisplayValue,
+  uniqueStoreNamesInRecords,
   unitsInRecords,
   type FolderStats,
 } from '../utils/stats'
@@ -104,6 +105,20 @@ export function FolderMemoCard({
   const [error, setError] = useState<string | null>(null)
   const [savedMsg, setSavedMsg] = useState<string | null>(null)
   const [statsUnit, setStatsUnit] = useState<PriceUnit | null>(null)
+
+  const compareStoreCandidates = useMemo(
+    () => uniqueStoreNamesInRecords(records),
+    [records],
+  )
+
+  const [recordsSnapshot, setRecordsSnapshot] = useState(records)
+  if (records !== recordsSnapshot) {
+    setRecordsSnapshot(records)
+    const selected = compareStore.trim()
+    if (selected && !records.some((r) => r.store_name === selected)) {
+      setCompareStore('')
+    }
+  }
 
   const statsRecords = useMemo(
     () => recordsForStoreScope(records, compareStore),
@@ -519,6 +534,7 @@ export function FolderMemoCard({
                 value={compareStore}
                 onChange={setCompareStore}
                 allowRegister={false}
+                candidateNames={compareStoreCandidates}
                 placeholder="未入力は全記録"
                 className={fieldClass}
               />
