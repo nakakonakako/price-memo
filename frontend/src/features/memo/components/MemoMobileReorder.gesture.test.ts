@@ -5,6 +5,7 @@ import {
   MEMO_REORDER_LONG_PRESS_MS,
   isInteractiveReorderTarget,
   shouldActivateDrag,
+  shouldCancelArmedReorder,
   shouldCancelLongPress,
 } from './memoMobileReorderGesture'
 
@@ -24,6 +25,11 @@ describe('memo mobile reorder gesture thresholds', () => {
   it('activates drag on small vertical move after long press', () => {
     expect(shouldActivateDrag(0, 8)).toBe(true)
     expect(shouldActivateDrag(20, 4)).toBe(false)
+  })
+
+  it('cancels armed reorder on horizontal-dominant move', () => {
+    expect(shouldCancelArmedReorder(8, 0)).toBe(true)
+    expect(shouldCancelArmedReorder(0, 8)).toBe(false)
   })
 
   it('allows long-press reorder from card title toggle regions', () => {

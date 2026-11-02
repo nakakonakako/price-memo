@@ -1,6 +1,10 @@
 import { createContext, useContext } from 'react'
 
-export type MemoReorderGesturePhase = 'idle' | 'longPressPending' | 'dragging'
+export type MemoReorderGesturePhase =
+  | 'idle'
+  | 'longPressPending'
+  | 'longPressArmed'
+  | 'dragging'
 
 export type MobileReorderContextValue = {
   registerItem: (id: string, el: HTMLElement | null) => void

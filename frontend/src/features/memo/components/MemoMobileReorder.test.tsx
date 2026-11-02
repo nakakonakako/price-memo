@@ -8,12 +8,18 @@ import {
   MemoMobileReorderItemRegistrar,
   MemoMobileReorderProvider,
 } from './MemoMobileReorder'
-import { MEMO_REORDER_LONG_PRESS_MS } from './memoMobileReorderGesture'
+import { MEMO_REORDER_GESTURE_WATCHDOG_MS, MEMO_REORDER_LONG_PRESS_MS } from './memoMobileReorderGesture'
 import { useMobileReorder } from './MemoMobileReorderContext'
 
 function PhaseProbe() {
-  const { gesturePhase } = useMobileReorder()
-  return <div data-testid="gesture-phase">{gesturePhase}</div>
+  const { gesturePhase, dragging, activeId } = useMobileReorder()
+  return (
+    <>
+      <div data-testid="gesture-phase">{gesturePhase}</div>
+      <div data-testid="dragging">{String(dragging)}</div>
+      <div data-testid="active-id">{activeId ?? 'null'}</div>
+    </>
+  )
 }
 
 function Row({ id, name }: { id: string; name: string }) {
@@ -532,5 +538,242 @@ describe('MemoMobileReorder long-press gestures', () => {
     expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
     addSpy.mockRestore()
     removeSpy.mockRestore()
+  })
+
+  it('does not enter drag at 349ms; release returns to idle without commit', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS - 1)
+      touchAt(surface, 'end', 200)
+    })
+    vi.useRealTimers()
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(screen.getByTestId('dragging').textContent).toBe('false')
+    expect(screen.getByTestId('active-id').textContent).toBe('null')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('arms reorder at 350ms without lifting the card', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+    })
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('longPressArmed')
+    expect(screen.getByTestId('dragging').textContent).toBe('false')
+    expect(screen.getByTestId('active-id').textContent).toBe('null')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('returns to idle when releasing while armed without vertical activation move', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+      touchAt(surface, 'end', 200)
+    })
+    vi.useRealTimers()
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(screen.getByTestId('dragging').textContent).toBe('false')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('cancels pending hold on touchcancel before arm', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      touchAt(surface, 'cancel', 200)
+    })
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('cancels armed hold on touchcancel without commit', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+      touchAt(surface, 'cancel', 200)
+    })
+    vi.useRealTimers()
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('resets when the tracked touch disappears from touchmove', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+      fireEvent.touchMove(document, { touches: [], targetTouches: [] })
+    })
+    vi.useRealTimers()
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('resets armed session on visibility hidden without commit', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+    })
+
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'hidden',
+    })
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+    })
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    })
+    vi.useRealTimers()
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('resets inactive armed session when the gesture watchdog fires', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+      vi.advanceTimersByTime(MEMO_REORDER_GESTURE_WATCHDOG_MS)
+    })
+    vi.useRealTimers()
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('cancels armed reorder on horizontal move without commit', async () => {
+    const onCommit = vi.fn()
+    render(
+      <MemoMobileReorderProvider folderIds={['a', 'b']} onCommit={onCommit}>
+        <PhaseProbe />
+        <ul>
+          <Row id="a" name="A" />
+          <Row id="b" name="B" />
+        </ul>
+      </MemoMobileReorderProvider>,
+    )
+
+    const surface = screen.getByTestId('surface-b')
+    vi.useFakeTimers()
+    await act(async () => {
+      touchAt(surface, 'start', 200)
+      vi.advanceTimersByTime(MEMO_REORDER_LONG_PRESS_MS)
+      touchAt(surface, 'move', 200, { clientX: 120 })
+      touchAt(surface, 'end', 200, { clientX: 120 })
+    })
+    vi.useRealTimers()
+
+    expect(screen.getByTestId('gesture-phase').textContent).toBe('idle')
+    expect(onCommit).not.toHaveBeenCalled()
   })
 })
