@@ -71,7 +71,7 @@ export function FolderTrendPanel({
   const storeFilterSlotClass =
     'flex w-full min-h-[2.25rem] items-center text-sm text-stone-600'
   /** Reserves space for PointDetail including a wrapped store name (2 lines). */
-  const detailSlotClass = 'min-h-[7rem]'
+  const detailSlotClass = 'flex min-h-[7rem] flex-col justify-end'
 
   const usesExternalRecords = recordsProp !== undefined
   const fetchGenerationRef = useRef(0)
@@ -543,7 +543,7 @@ function StoreList({
 
   if (useCards) {
     return (
-      <div className="space-y-2">
+      <div className="mt-2.5 space-y-2">
         <h4 className="text-base font-medium text-stone-800">店舗一覧</h4>
         <ul className={isMobile ? 'space-y-2' : 'grid grid-cols-2 gap-2'}>
           {summaries.map((s) => {
@@ -573,7 +573,7 @@ function StoreList({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="mt-2.5 space-y-1">
       <h4 className="text-base font-medium text-stone-800">店舗一覧</h4>
       <div
         className={`overflow-x-auto border border-stone-200 bg-white/70 ${
