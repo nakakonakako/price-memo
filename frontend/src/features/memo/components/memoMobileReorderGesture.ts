@@ -4,32 +4,9 @@ export const MEMO_REORDER_LONG_PRESS_MS = 350
 export const MEMO_REORDER_COMPACT_ROW_FALLBACK_PX = 56
 /** Movement before long-press completes cancels the hold (scroll / swipe win). */
 export const MEMO_REORDER_LONG_PRESS_MOVE_CANCEL_PX = 10
-/** Movement required after long-press to enter free drag (vertical-dominant). */
-export const MEMO_REORDER_DRAG_ACTIVATION_PX = 8
-/** Inactivity limit for pending / armed / drag touch sessions (fail-safe). */
-export const MEMO_REORDER_GESTURE_WATCHDOG_MS = 60_000
-
-function isVerticalDominant(dx: number, dy: number): boolean {
-  return Math.abs(dy) > Math.abs(dx)
-}
 
 export function shouldCancelLongPress(dx: number, dy: number): boolean {
   return Math.hypot(dx, dy) > MEMO_REORDER_LONG_PRESS_MOVE_CANCEL_PX
-}
-
-export function shouldActivateDrag(dx: number, dy: number): boolean {
-  return (
-    isVerticalDominant(dx, dy) &&
-    Math.abs(dy) >= MEMO_REORDER_DRAG_ACTIVATION_PX
-  )
-}
-
-/** Horizontal move after long-press is armed yields to swipe / scroll. */
-export function shouldCancelArmedReorder(dx: number, dy: number): boolean {
-  return (
-    !isVerticalDominant(dx, dy) &&
-    Math.abs(dx) >= MEMO_REORDER_DRAG_ACTIVATION_PX
-  )
 }
 
 export function isInteractiveReorderTarget(target: EventTarget | null): boolean {

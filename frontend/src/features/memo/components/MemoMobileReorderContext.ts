@@ -3,7 +3,6 @@ import { createContext, useContext } from 'react'
 export type MemoReorderGesturePhase =
   | 'idle'
   | 'longPressPending'
-  | 'longPressArmed'
   | 'dragging'
 
 export type MobileReorderContextValue = {
@@ -14,7 +13,6 @@ export type MobileReorderContextValue = {
   /** All list rows use compact chrome while any row is dragged */
   compactListDisplay: boolean
   gesturePhase: MemoReorderGesturePhase
-  gestureFolderId: string | null
   /** Compact list-row height (px) for the lifted item placeholder */
   activePlaceholderHeight: number | null
   requestStepMove: (
