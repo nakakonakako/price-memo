@@ -6,6 +6,8 @@ declare const __MEMO_REORDER_DIAG_GIT_SHA__: string
 export const MEMO_REORDER_DIAG_RING_MAX = 48
 /** Short-lived raw / handler samples for correlation. */
 export const MEMO_REORDER_DIAG_RAW_SAMPLE_MAX = 10
+export const MEMO_REORDER_DIAG_MOVE_SAMPLE_INTERVAL_MS = 100
+export const MEMO_REORDER_DIAG_TIMELINE_MAX = 14
 
 export type MemoReorderDiagTimerState = 'idle' | 'pending'
 
@@ -56,9 +58,14 @@ export type MemoReorderDiagRingEntry = {
 export type MemoReorderDiagRawSample = {
   seq: number
   tMs: number
-  source: 'window' | 'docEntry'
+  source: 'window' | 'docEntry' | 'handler'
   kind: string
   detail: string
+}
+
+export type MemoReorderDiagTimelineItem = {
+  seq: number
+  line: string
 }
 
 function changedTouchIdList(
@@ -82,9 +89,11 @@ export function resetMemoReorderDiagQueryCacheForTests(): void {
 function resetMemoReorderDiagStateForTests(): void {
   ring.length = 0
   rawSamples.length = 0
-  ringSeq = 0
-  rawSampleSeq = 0
+  diagSeq = 0
   sessionOriginMs = 0
+  lastWindowTouchMoveSampleClock = -1
+  lastWindowPointerMoveSampleClock = -1
+  lastHandlerMoveSampleClock = -1
   runtimeSnapshot = defaultRuntimeSnapshot()
   Object.assign(rawCounters, emptyRawCounters())
   listeners.clear()
@@ -143,9 +152,11 @@ function emptyRawCounters(): MemoReorderDiagRawCounters {
 const ring: MemoReorderDiagRingEntry[] = []
 const rawSamples: MemoReorderDiagRawSample[] = []
 const rawCounters: MemoReorderDiagRawCounters = emptyRawCounters()
-let ringSeq = 0
-let rawSampleSeq = 0
+let diagSeq = 0
 let sessionOriginMs = 0
+let lastWindowTouchMoveSampleClock = -1
+let lastWindowPointerMoveSampleClock = -1
+let lastHandlerMoveSampleClock = -1
 let runtimeSnapshot: MemoReorderDiagRuntimeSnapshot = defaultRuntimeSnapshot()
 
 function setDiagTimerState(timerState: MemoReorderDiagTimerState): void {
@@ -191,6 +202,36 @@ function relMs(): number {
   return sessionOriginMs > 0 ? Date.now() - sessionOriginMs : 0
 }
 
+function nextDiagSeq(): number {
+  return ++diagSeq
+}
+
+function moveSampleClockMs(): number {
+  return sessionOriginMs > 0 ? relMs() : Date.now()
+}
+
+function shouldTakeMoveSample(lastClock: number): { take: boolean; nextLast: number } {
+  const now = moveSampleClockMs()
+  if (lastClock < 0) return { take: true, nextLast: now }
+  if (now - lastClock >= MEMO_REORDER_DIAG_MOVE_SAMPLE_INTERVAL_MS) {
+    return { take: true, nextLast: now }
+  }
+  return { take: false, nextLast: lastClock }
+}
+
+function resetMoveSampleClocks(): void {
+  lastWindowTouchMoveSampleClock = -1
+  lastWindowPointerMoveSampleClock = -1
+  lastHandlerMoveSampleClock = -1
+}
+
+function pushRawSample(
+  fields: Omit<MemoReorderDiagRawSample, 'seq'>,
+): void {
+  rawSamples.push({ ...fields, seq: nextDiagSeq() })
+  while (rawSamples.length > MEMO_REORDER_DIAG_RAW_SAMPLE_MAX) rawSamples.shift()
+}
+
 function pushImportantEntry(
   kind: string,
   reason: string,
@@ -209,7 +250,7 @@ function pushImportantEntry(
   const dx = fields.dx ?? 0
   const dy = fields.dy ?? 0
   const entry: MemoReorderDiagRingEntry = {
-    seq: ++ringSeq,
+    seq: nextDiagSeq(),
     tMs: relMs(),
     kind,
     reason,
@@ -244,7 +285,7 @@ function pushSilentRingEntry(
   const dx = fields.dx ?? 0
   const dy = fields.dy ?? 0
   const entry: MemoReorderDiagRingEntry = {
-    seq: ++ringSeq,
+    seq: nextDiagSeq(),
     tMs: relMs(),
     kind,
     reason,
@@ -337,6 +378,30 @@ export function bumpMemoReorderDiagRawCounter(
   }
 }
 
+function formatRawWindowSampleDetail(fields: {
+  eventPhase: number
+  cancelable: boolean
+  defaultPrevented: boolean
+  touchIds?: string
+  pointerId?: number
+  pointerType?: string
+  tag: string
+  scrollX: number
+  scrollY: number
+}): string {
+  const parts = [
+    `ph=${fields.eventPhase}`,
+    `c=${fields.cancelable ? 1 : 0}`,
+    `dp=${fields.defaultPrevented ? 1 : 0}`,
+    fields.touchIds != null ? `ids=${fields.touchIds}` : null,
+    fields.pointerId != null ? `pid=${fields.pointerId}` : null,
+    fields.pointerType != null ? `pt=${fields.pointerType}` : null,
+    `tag=${fields.tag}`,
+    `scr=${round1(fields.scrollX)},${round1(fields.scrollY)}`,
+  ].filter((p): p is string => p != null)
+  return parts.join(' ')
+}
+
 export function memoReorderDiagPushRawWindowSample(fields: {
   source: 'window' | 'docEntry'
   kind: string
@@ -351,25 +416,76 @@ export function memoReorderDiagPushRawWindowSample(fields: {
   scrollY: number
 }): void {
   if (!isMemoReorderDiagEnabled()) return
-  const parts = [
-    `ph=${fields.eventPhase}`,
-    `c=${fields.cancelable ? 1 : 0}`,
-    `dp=${fields.defaultPrevented ? 1 : 0}`,
-    fields.touchIds != null ? `ids=${fields.touchIds}` : null,
-    fields.pointerId != null ? `pid=${fields.pointerId}` : null,
-    fields.pointerType != null ? `pt=${fields.pointerType}` : null,
-    `tag=${fields.tag}`,
-    `scr=${round1(fields.scrollX)},${round1(fields.scrollY)}`,
-  ].filter((p): p is string => p != null)
-  const sample: MemoReorderDiagRawSample = {
-    seq: ++rawSampleSeq,
+  pushRawSample({
     tMs: relMs(),
     source: fields.source,
     kind: fields.kind,
-    detail: parts.join(' '),
-  }
-  rawSamples.push(sample)
-  while (rawSamples.length > MEMO_REORDER_DIAG_RAW_SAMPLE_MAX) rawSamples.shift()
+    detail: formatRawWindowSampleDetail(fields),
+  })
+}
+
+export function memoReorderDiagMaybePushWindowTouchMoveSample(fields: {
+  eventPhase: number
+  cancelable: boolean
+  defaultPrevented: boolean
+  touchIds: string
+  tag: string
+  scrollX: number
+  scrollY: number
+}): void {
+  if (!isMemoReorderDiagEnabled()) return
+  const decision = shouldTakeMoveSample(lastWindowTouchMoveSampleClock)
+  lastWindowTouchMoveSampleClock = decision.nextLast
+  if (!decision.take) return
+  pushRawSample({
+    tMs: relMs(),
+    source: 'window',
+    kind: 'touchmove',
+    detail: formatRawWindowSampleDetail(fields),
+  })
+}
+
+export function memoReorderDiagMaybePushWindowPointerMoveSample(fields: {
+  eventPhase: number
+  cancelable: boolean
+  defaultPrevented: boolean
+  pointerId: number
+  pointerType: string
+  tag: string
+  scrollX: number
+  scrollY: number
+}): void {
+  if (!isMemoReorderDiagEnabled()) return
+  const decision = shouldTakeMoveSample(lastWindowPointerMoveSampleClock)
+  lastWindowPointerMoveSampleClock = decision.nextLast
+  if (!decision.take) return
+  pushRawSample({
+    tMs: relMs(),
+    source: 'window',
+    kind: 'pointermove',
+    detail: formatRawWindowSampleDetail(fields),
+  })
+}
+
+function memoReorderDiagPushHandlerMoveSample(
+  reason: string,
+  e: Pick<TouchEvent, 'cancelable' | 'defaultPrevented'>,
+  dx: number,
+  dy: number,
+): void {
+  if (!isMemoReorderDiagEnabled()) return
+  const decision = shouldTakeMoveSample(lastHandlerMoveSampleClock)
+  lastHandlerMoveSampleClock = decision.nextLast
+  if (!decision.take) return
+  pushRawSample({
+    tMs: relMs(),
+    source: 'handler',
+    kind: 'touchmove',
+    detail:
+      `rs=${reason} d(${round1(dx)},${round1(dy)})=` +
+      `${round1(Math.hypot(dx, dy))} c=${e.cancelable ? 1 : 0} ` +
+      `dp=${e.defaultPrevented ? 1 : 0}`,
+  })
 }
 
 export function memoReorderDiagSyncRuntime(
@@ -431,6 +547,7 @@ export function memoReorderDiagNoteGesture(
 export function memoReorderDiagTouchSessionBegin(folderId: string): void {
   if (!isMemoReorderDiagEnabled()) return
   sessionOriginMs = Date.now()
+  resetMoveSampleClocks()
   const scrollBaseX = typeof window !== 'undefined' ? window.scrollX : 0
   const scrollBaseY = typeof window !== 'undefined' ? window.scrollY : 0
   runtimeSnapshot = {
@@ -515,12 +632,7 @@ export function memoReorderDiagTouchEvent(
   dy: number,
 ): void {
   if (kind === 'touchmove') {
-    pushSilentRingEntry(kind, reason, {
-      dx,
-      dy,
-      cancelable: e.cancelable,
-      defaultPrevented: e.defaultPrevented,
-    })
+    memoReorderDiagPushHandlerMoveSample(reason, e, dx, dy)
     return
   }
   pushImportantEntry(kind, reason, {
@@ -620,4 +732,19 @@ export function formatMemoReorderDiagCounterLine(
     `pc=${counters.windowPointercancel} ` +
     `doc tm=${counters.docTouchmove} te=${counters.docTouchend} tc=${counters.docTouchcancel}`
   )
+}
+
+export function getMemoReorderDiagMergedTimeline(
+  maxItems: number = MEMO_REORDER_DIAG_TIMELINE_MAX,
+): MemoReorderDiagTimelineItem[] {
+  const items: MemoReorderDiagTimelineItem[] = []
+  for (const entry of ring) {
+    items.push({ seq: entry.seq, line: formatMemoReorderDiagRingLine(entry) })
+  }
+  for (const sample of rawSamples) {
+    items.push({ seq: sample.seq, line: formatMemoReorderDiagRawSampleLine(sample) })
+  }
+  items.sort((a, b) => a.seq - b.seq)
+  if (items.length <= maxItems) return items
+  return items.slice(-maxItems)
 }

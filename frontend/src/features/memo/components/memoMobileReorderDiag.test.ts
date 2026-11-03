@@ -1,16 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  MEMO_REORDER_DIAG_MOVE_SAMPLE_INTERVAL_MS,
   MEMO_REORDER_DIAG_RING_MAX,
+  MEMO_REORDER_DIAG_TIMELINE_MAX,
   bumpMemoReorderDiagRawCounter,
   formatMemoReorderDiagCounterLine,
   formatMemoReorderDiagRingLine,
+  getMemoReorderDiagMergedTimeline,
   getMemoReorderDiagRawCounters,
+  getMemoReorderDiagRawSamples,
   getMemoReorderDiagRing,
   getMemoReorderDiagRuntimeSnapshot,
   isMemoReorderDiagEnabled,
   memoReorderDiagDocumentTouchEntry,
   memoReorderDiagDrag,
   memoReorderDiagListener,
+  memoReorderDiagMaybePushWindowTouchMoveSample,
+  memoReorderDiagPushRawWindowSample,
   memoReorderDiagSessionReset,
   memoReorderDiagStateReset,
   memoReorderDiagSyncRuntime,
@@ -198,5 +204,104 @@ describe('memoMobileReorderDiag', () => {
     expect(snap.timerState).toBe('idle')
     expect(snap.documentTouchListening).toBe(false)
     expect(snap.windowCaptureMounted).toBe(false)
+  })
+
+  it('rate-limits raw window touchmove detail samples', () => {
+    import.meta.env.DEV = true
+    vi.useFakeTimers()
+    const t0 = 1_700_000_000_000
+    vi.setSystemTime(t0)
+    vi.stubGlobal('window', {
+      location: { search: '?memoReorderDiag=1' },
+      scrollX: 0,
+      scrollY: 0,
+    })
+    memoReorderDiagTouchSessionBegin('folder-a')
+    const sampleFields = {
+      eventPhase: 2,
+      cancelable: true,
+      defaultPrevented: false,
+      touchIds: '0',
+      tag: 'DIV',
+      scrollX: 0,
+      scrollY: 0,
+    }
+    memoReorderDiagMaybePushWindowTouchMoveSample(sampleFields)
+    expect(getMemoReorderDiagRawSamples()).toHaveLength(1)
+    expect(getMemoReorderDiagRawSamples()[0].detail).toMatch(/ph=2.*ids=0/)
+
+    vi.advanceTimersByTime(MEMO_REORDER_DIAG_MOVE_SAMPLE_INTERVAL_MS - 1)
+    memoReorderDiagMaybePushWindowTouchMoveSample(sampleFields)
+    expect(getMemoReorderDiagRawSamples()).toHaveLength(1)
+
+    vi.advanceTimersByTime(1)
+    memoReorderDiagMaybePushWindowTouchMoveSample(sampleFields)
+    expect(getMemoReorderDiagRawSamples()).toHaveLength(2)
+    vi.useRealTimers()
+  })
+
+  it('does not push matched document touchmove into the important ring', () => {
+    import.meta.env.DEV = true
+    vi.stubGlobal('window', {
+      location: { search: '?memoReorderDiag=1' },
+      scrollX: 0,
+      scrollY: 0,
+    })
+    memoReorderDiagTouchSessionBegin('folder-a')
+    memoReorderDiagTimer('start', 'longPress')
+    const touchEventStub = {
+      cancelable: true,
+      defaultPrevented: true,
+      touches: [] as unknown as TouchList,
+      changedTouches: [] as unknown as TouchList,
+      eventPhase: 2,
+    }
+    const ctx = {
+      trackedTouchId: 0,
+      touchIds: '0',
+      changedTouchIds: '0',
+      outcome: 'proceed' as const,
+    }
+    for (let i = 0; i < 60; i += 1) {
+      memoReorderDiagDocumentTouchEntry('touchmove', touchEventStub, ctx)
+      memoReorderDiagTouchEvent('touchmove', 'document:pending', touchEventStub, i, i)
+    }
+    const ring = getMemoReorderDiagRing()
+    expect(ring.some((e) => e.kind === 'touchmove')).toBe(false)
+    expect(ring.some((e) => e.kind === 'timerStart' && e.reason === 'longPress')).toBe(true)
+    expect(getMemoReorderDiagRawCounters().docTouchmove).toBe(60)
+    expect(getMemoReorderDiagRawSamples().some((s) => s.source === 'handler')).toBe(true)
+  })
+
+  it('merges ring and raw samples into chronological timeline', () => {
+    import.meta.env.DEV = true
+    vi.stubGlobal('window', {
+      location: { search: '?memoReorderDiag=1' },
+      scrollX: 0,
+      scrollY: 0,
+    })
+    memoReorderDiagTouchSessionBegin('folder-a')
+    memoReorderDiagTimer('start', 'longPress')
+    memoReorderDiagPushRawWindowSample({
+      source: 'window',
+      kind: 'touchstart',
+      eventPhase: 2,
+      cancelable: true,
+      defaultPrevented: false,
+      touchIds: '0',
+      tag: 'DIV',
+      scrollX: 0,
+      scrollY: 0,
+    })
+    memoReorderDiagTimer('fire', 'longPress')
+    const merged = getMemoReorderDiagMergedTimeline(100)
+    for (let i = 1; i < merged.length; i += 1) {
+      expect(merged[i].seq).toBeGreaterThan(merged[i - 1].seq)
+    }
+    expect(merged.some((item) => item.line.includes('raw/window:touchstart'))).toBe(true)
+    expect(merged.some((item) => item.line.includes('timerFire/longPress'))).toBe(true)
+    expect(getMemoReorderDiagMergedTimeline().length).toBeLessThanOrEqual(
+      MEMO_REORDER_DIAG_TIMELINE_MAX,
+    )
   })
 })

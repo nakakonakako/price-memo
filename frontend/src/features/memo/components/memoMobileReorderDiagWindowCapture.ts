@@ -2,6 +2,8 @@ import {
   bumpMemoReorderDiagRawCounter,
   isMemoReorderDiagEnabled,
   memoReorderDiagListener,
+  memoReorderDiagMaybePushWindowPointerMoveSample,
+  memoReorderDiagMaybePushWindowTouchMoveSample,
   memoReorderDiagPushRawWindowSample,
   memoReorderDiagSetWindowCaptureMounted,
   touchTagName,
@@ -13,7 +15,18 @@ type WindowHandler = (e: Event) => void
 function onRawTouch(e: TouchEvent): void {
   const kind = e.type as 'touchstart' | 'touchmove' | 'touchend' | 'touchcancel'
   bumpMemoReorderDiagRawCounter('window', kind)
-  if (kind === 'touchmove') return
+  if (kind === 'touchmove') {
+    memoReorderDiagMaybePushWindowTouchMoveSample({
+      eventPhase: e.eventPhase,
+      cancelable: e.cancelable,
+      defaultPrevented: e.defaultPrevented,
+      touchIds: touchIdList(e),
+      tag: touchTagName(e.target),
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    })
+    return
+  }
   memoReorderDiagPushRawWindowSample({
     source: 'window',
     kind,
@@ -30,6 +43,16 @@ function onRawTouch(e: TouchEvent): void {
 function onRawPointer(e: PointerEvent): void {
   if (e.type === 'pointermove') {
     bumpMemoReorderDiagRawCounter('window', 'pointermove')
+    memoReorderDiagMaybePushWindowPointerMoveSample({
+      eventPhase: e.eventPhase,
+      cancelable: e.cancelable,
+      defaultPrevented: e.defaultPrevented,
+      pointerId: e.pointerId,
+      pointerType: e.pointerType,
+      tag: touchTagName(e.target),
+      scrollX: window.scrollX,
+      scrollY: window.scrollY,
+    })
     return
   }
   const kind = e.type as 'pointerup' | 'pointercancel'
