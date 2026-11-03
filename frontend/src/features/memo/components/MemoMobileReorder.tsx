@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/immutability -- touchSessionRef is mutable gesture session state updated during native touch handlers */
 import {
   createContext,
   useCallback,
@@ -201,6 +200,7 @@ export function MemoMobileReorderProvider({
     const s = touchSessionRef.current
     if (s.longPressTimer != null) {
       clearTimeout(s.longPressTimer)
+      // eslint-disable-next-line react-hooks/immutability -- touchSessionRef is the existing mutable native gesture session.
       s.longPressTimer = null
       memoReorderDiagTimer('cancel', reason ?? 'clearLongPressTimer')
     }
@@ -228,6 +228,7 @@ export function MemoMobileReorderProvider({
     (reason?: string) => {
       clearLongPressTimer('resetTouchSession')
       detachDocumentTouchTracking()
+      // eslint-disable-next-line react-hooks/immutability -- reset the existing native gesture session in place.
       touchSessionRef.current = {
         folderId: '',
         cardEl: null,
@@ -253,6 +254,7 @@ export function MemoMobileReorderProvider({
     (reason?: string) => {
       if (touchSessionRef.current.dragActive) return
       clearLongPressTimer('cancelPendingLongPress')
+      // eslint-disable-next-line react-hooks/immutability -- touchId tracks the existing native gesture session.
       touchSessionRef.current.touchId = -1
       setGesturePhase('idle')
       memoReorderDiagNoteGesture('idle', false, null)
@@ -316,6 +318,7 @@ export function MemoMobileReorderProvider({
     (folderId: string, cardEl: HTMLElement, clientY: number) => {
       const rect = cardEl.getBoundingClientRect()
       const s = touchSessionRef.current
+      // eslint-disable-next-line react-hooks/immutability -- update the existing native gesture session.
       s.dragActive = true
       s.offsetY = clientY - rect.top
       s.lastClientY = clientY
@@ -340,6 +343,7 @@ export function MemoMobileReorderProvider({
     (clientY: number) => {
       const s = touchSessionRef.current
       if (!s.dragActive || !s.folderId || !s.cardEl) return
+      // eslint-disable-next-line react-hooks/immutability -- update the existing native gesture session.
       s.lastClientY = clientY
       setInsertTarget(resolveInsertBefore(clientY, s.folderId))
       syncLiftPreview(s.cardEl, clientY)
