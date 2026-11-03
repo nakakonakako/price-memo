@@ -45,7 +45,6 @@ import {
   MemoMobileReorderLiveRegion,
   MemoMobileReorderProvider,
 } from './MemoMobileReorder'
-import { MemoMobileReorderDiagPanel } from './MemoMobileReorderDiagPanel'
 import { useMemoItemReorder } from '../hooks/useMemoItemReorder'
 import { useTrashDrag } from '@/components/trash/TrashDragContext'
 
@@ -872,7 +871,6 @@ export function ShoppingMemoPage({
             >
               {memoList}
             </MemoMobileReorderProvider>
-            <MemoMobileReorderDiagPanel />
           </>
         ) : (
           memoList

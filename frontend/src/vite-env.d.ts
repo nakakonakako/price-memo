@@ -8,5 +8,3 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
-
-declare const __MEMO_REORDER_DIAG_GIT_SHA__: string
