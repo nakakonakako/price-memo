@@ -45,6 +45,7 @@ import {
   MemoMobileReorderLiveRegion,
   MemoMobileReorderProvider,
 } from './MemoMobileReorder'
+import { MemoMobileReorderDiagPanel } from './MemoMobileReorderDiagPanel'
 import { useMemoItemReorder } from '../hooks/useMemoItemReorder'
 import { useTrashDrag } from '@/components/trash/TrashDragContext'
 
@@ -860,16 +861,19 @@ export function ShoppingMemoPage({
             まだメモがありません
           </p>
         ) : isMobile ? (
-          <MemoMobileReorderProvider
-            folderIds={dragIds}
-            disabled={interactionsLocked}
-            onCommit={(draggedId, beforeId) => {
-              void handleMobileReorderCommit(draggedId, beforeId)
-            }}
-            onAnnounce={setReorderAnnouncement}
-          >
-            {memoList}
-          </MemoMobileReorderProvider>
+          <>
+            <MemoMobileReorderProvider
+              folderIds={dragIds}
+              disabled={interactionsLocked}
+              onCommit={(draggedId, beforeId) => {
+                void handleMobileReorderCommit(draggedId, beforeId)
+              }}
+              onAnnounce={setReorderAnnouncement}
+            >
+              {memoList}
+            </MemoMobileReorderProvider>
+            <MemoMobileReorderDiagPanel />
+          </>
         ) : (
           memoList
         )}
