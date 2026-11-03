@@ -1,11 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   MEMO_REORDER_DIAG_RING_MAX,
+  bumpMemoReorderDiagRawCounter,
+  formatMemoReorderDiagCounterLine,
   formatMemoReorderDiagRingLine,
+  getMemoReorderDiagRawCounters,
   getMemoReorderDiagRing,
   getMemoReorderDiagRuntimeSnapshot,
   isMemoReorderDiagEnabled,
+  memoReorderDiagDocumentTouchEntry,
   memoReorderDiagDrag,
+  memoReorderDiagListener,
   memoReorderDiagSessionReset,
   memoReorderDiagStateReset,
   memoReorderDiagSyncRuntime,
@@ -22,6 +27,8 @@ describe('memoMobileReorderDiag', () => {
     resetMemoReorderDiagQueryCacheForTests()
     vi.stubGlobal('window', {
       location: { search: '' },
+      scrollX: 0,
+      scrollY: 0,
     })
   })
 
@@ -35,6 +42,8 @@ describe('memoMobileReorderDiag', () => {
     import.meta.env.DEV = false
     vi.stubGlobal('window', {
       location: { search: '?memoReorderDiag=1' },
+      scrollX: 0,
+      scrollY: 0,
     })
     expect(isMemoReorderDiagEnabled()).toBe(false)
     memoReorderDiagTimer('start', 'test')
@@ -52,6 +61,8 @@ describe('memoMobileReorderDiag', () => {
     import.meta.env.DEV = true
     vi.stubGlobal('window', {
       location: { search: '?memoReorderDiag=1' },
+      scrollX: 12,
+      scrollY: 3,
     })
     expect(isMemoReorderDiagEnabled()).toBe(true)
 
@@ -78,30 +89,83 @@ describe('memoMobileReorderDiag', () => {
     expect(ring.length).toBeGreaterThan(0)
     for (const entry of ring) {
       expect(entry.reason).not.toMatch(/password|cookie|token/i)
-      expect(Object.keys(entry)).toEqual([
-        'seq',
-        'tMs',
-        'kind',
-        'reason',
-        'dx',
-        'dy',
-        'dist',
-        'cancelable',
-        'defaultPrevented',
-        'gesturePhase',
-        'dragging',
-        'activeId',
-      ])
+      expect(entry.detail ?? '').not.toMatch(/password|cookie|token/i)
+      expect(JSON.stringify(entry)).not.toMatch(/value=|input|商品|店舗|¥/)
     }
     const line = formatMemoReorderDiagRingLine(ring[ring.length - 1])
     expect(line).toMatch(/gp=/)
     expect(line).not.toMatch(/商品|店舗|¥/)
   })
 
+  it('records document handler entry on ID mismatch without hiding outcome', () => {
+    import.meta.env.DEV = true
+    vi.stubGlobal('window', {
+      location: { search: '?memoReorderDiag=1' },
+      scrollX: 0,
+      scrollY: 0,
+    })
+    memoReorderDiagDocumentTouchEntry(
+      'touchmove',
+      {
+        cancelable: false,
+        defaultPrevented: false,
+        touches: [] as unknown as TouchList,
+        changedTouches: [] as unknown as TouchList,
+        eventPhase: 1,
+      },
+      {
+        trackedTouchId: 2,
+        touchIds: '0',
+        changedTouchIds: '0',
+        outcome: 'touchLost',
+      },
+    )
+    const ring = getMemoReorderDiagRing()
+    expect(ring.some((e) => e.kind === 'docEntry:touchmove' && e.reason === 'touchLost')).toBe(
+      true,
+    )
+    expect(getMemoReorderDiagRawCounters().docTouchmove).toBe(1)
+  })
+
+  it('aggregates raw window moves without ring spam', () => {
+    import.meta.env.DEV = true
+    vi.stubGlobal('window', {
+      location: { search: '?memoReorderDiag=1' },
+      scrollX: 0,
+      scrollY: 0,
+    })
+    for (let i = 0; i < 200; i += 1) {
+      bumpMemoReorderDiagRawCounter('window', 'touchmove')
+    }
+    expect(getMemoReorderDiagRawCounters().windowTouchmove).toBe(200)
+    expect(getMemoReorderDiagRing()).toHaveLength(0)
+    expect(formatMemoReorderDiagCounterLine(getMemoReorderDiagRawCounters())).toMatch(/tm=200/)
+  })
+
+  it('logs listener attach/detach and cancel drag reason', () => {
+    import.meta.env.DEV = true
+    vi.stubGlobal('window', {
+      location: { search: '?memoReorderDiag=1' },
+      scrollX: 0,
+      scrollY: 0,
+    })
+    memoReorderDiagListener('attach', 'document', 'testAttach')
+    memoReorderDiagDrag('cancel', 'docMove:notCancelable', 'folder-x')
+    memoReorderDiagListener('detach', 'document', 'testDetach')
+    const ring = getMemoReorderDiagRing()
+    expect(ring.some((e) => e.kind === 'listenerAttach')).toBe(true)
+    expect(ring.some((e) => e.kind === 'dragCancel' && e.reason === 'docMove:notCancelable')).toBe(
+      true,
+    )
+    expect(getMemoReorderDiagRuntimeSnapshot().documentTouchListening).toBe(false)
+  })
+
   it('drops oldest ring entries beyond the cap', () => {
     import.meta.env.DEV = true
     vi.stubGlobal('window', {
       location: { search: '?memoReorderDiag=1' },
+      scrollX: 0,
+      scrollY: 0,
     })
     for (let i = 0; i < MEMO_REORDER_DIAG_RING_MAX + 5; i += 1) {
       memoReorderDiagStateReset(`r${i}`)
@@ -118,6 +182,8 @@ describe('memoMobileReorderDiag', () => {
     import.meta.env.DEV = true
     vi.stubGlobal('window', {
       location: { search: '?memoReorderDiag=1' },
+      scrollX: 1,
+      scrollY: 2,
     })
     memoReorderDiagSyncRuntime({
       gesturePhase: 'dragging',
@@ -125,11 +191,12 @@ describe('memoMobileReorderDiag', () => {
       activeId: 'id-1',
       timerState: 'idle',
     })
-    expect(getMemoReorderDiagRuntimeSnapshot()).toEqual({
-      gesturePhase: 'dragging',
-      dragging: true,
-      activeId: 'id-1',
-      timerState: 'idle',
-    })
+    const snap = getMemoReorderDiagRuntimeSnapshot()
+    expect(snap.gesturePhase).toBe('dragging')
+    expect(snap.dragging).toBe(true)
+    expect(snap.activeId).toBe('id-1')
+    expect(snap.timerState).toBe('idle')
+    expect(snap.documentTouchListening).toBe(false)
+    expect(snap.windowCaptureMounted).toBe(false)
   })
 })

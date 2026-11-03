@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import {
+  formatMemoReorderDiagCounterLine,
+  formatMemoReorderDiagRawSampleLine,
   formatMemoReorderDiagRingLine,
   getMemoReorderDiagGitSha,
+  getMemoReorderDiagRawCounters,
+  getMemoReorderDiagRawSamples,
   getMemoReorderDiagRing,
   getMemoReorderDiagRuntimeSnapshot,
   isMemoReorderDiagEnabled,
@@ -28,7 +32,13 @@ export function MemoMobileReorderDiagPanel() {
   void tick
   const snap = getMemoReorderDiagRuntimeSnapshot()
   const ring = getMemoReorderDiagRing()
+  const rawSamples = getMemoReorderDiagRawSamples()
+  const counters = getMemoReorderDiagRawCounters()
   const sha = getMemoReorderDiagGitSha()
+  const scrollDelta =
+    snap.scrollBaseX != null && snap.scrollBaseY != null
+      ? `${Math.round((snap.scrollX - snap.scrollBaseX) * 10) / 10},${Math.round((snap.scrollY - snap.scrollBaseY) * 10) / 10}`
+      : '-'
 
   return (
     <div
@@ -39,9 +49,15 @@ export function MemoMobileReorderDiagPanel() {
     >
       <div className="truncate opacity-90">
         {`sha=${sha} gp=${snap.gesturePhase} drag=${snap.dragging ? 1 : 0} ` +
-          `id=${snap.activeId ?? '-'} timer=${snap.timerState}`}
+          `id=${snap.activeId ?? '-'} timer=${snap.timerState} tid=${snap.trackedTouchId ?? '-'}`}
       </div>
-      <div className="mt-1 max-h-[30vh] overflow-hidden opacity-85">
+      <div className="truncate opacity-85">
+        {`docL=${snap.documentTouchListening ? 1 : 0} winL=${snap.windowCaptureMounted ? 1 : 0} ` +
+          `cardL=${snap.cardTouchListeners} scr=${Math.round(snap.scrollX * 10) / 10},${Math.round(snap.scrollY * 10) / 10} ` +
+          `dScr=${scrollDelta}`}
+      </div>
+      <div className="truncate opacity-80">{formatMemoReorderDiagCounterLine(counters)}</div>
+      <div className="mt-1 max-h-[22vh] overflow-hidden opacity-85">
         {ring.length === 0 ? (
           <div className="text-stone-400">(no events yet)</div>
         ) : (
@@ -52,6 +68,15 @@ export function MemoMobileReorderDiagPanel() {
           ))
         )}
       </div>
+      {rawSamples.length > 0 ? (
+        <div className="mt-0.5 max-h-[8vh] overflow-hidden opacity-75">
+          {rawSamples.map((sample) => (
+            <div key={sample.seq} className="truncate">
+              {formatMemoReorderDiagRawSampleLine(sample)}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

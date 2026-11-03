@@ -22,14 +22,23 @@ import {
   MEMO_REORDER_LONG_PRESS_MS,
 } from './memoMobileReorderGesture'
 import {
+  isMemoReorderDiagEnabled,
+  memoReorderDiagDocumentTouchEntry,
   memoReorderDiagDrag,
+  memoReorderDiagListener,
   memoReorderDiagSessionReset,
+  memoReorderDiagSetCardTouchListenerCount,
+  memoReorderDiagSetTrackedTouchId,
   memoReorderDiagStateReset,
   memoReorderDiagNoteGesture,
+  memoReorderDiagScrollEvent,
   memoReorderDiagTimer,
   memoReorderDiagTouchEvent,
   memoReorderDiagTouchSessionBegin,
+  touchChangedIdList,
+  touchIdList,
 } from './memoMobileReorderDiag'
+import { mountMemoReorderDiagWindowCapture } from './memoMobileReorderDiagWindowCapture'
 
 type ItemRect = {
   id: string
@@ -167,19 +176,22 @@ export function MemoMobileReorderProvider({
     [onCommit, setInsertTarget],
   )
 
-  const cancelDrag = useCallback(() => {
-    const folderId = touchSessionRef.current.folderId || null
-    setDragging(false)
-    setActiveId(null)
-    setGesturePhase('idle')
-    setActivePlaceholderHeight(null)
-    scrollAnchorViewportTopRef.current = null
-    setInsertTarget(undefined)
-    setLiftPreview(null)
-    suppressClickUntilRef.current = Date.now() + 400
-    memoReorderDiagNoteGesture('idle', false, null)
-    memoReorderDiagDrag('cancel', 'cancelDrag', folderId)
-  }, [setInsertTarget])
+  const cancelDrag = useCallback(
+    (diagReason = 'cancelDrag') => {
+      const folderId = touchSessionRef.current.folderId || null
+      setDragging(false)
+      setActiveId(null)
+      setGesturePhase('idle')
+      setActivePlaceholderHeight(null)
+      scrollAnchorViewportTopRef.current = null
+      setInsertTarget(undefined)
+      setLiftPreview(null)
+      suppressClickUntilRef.current = Date.now() + 400
+      memoReorderDiagNoteGesture('idle', false, null)
+      memoReorderDiagDrag('cancel', diagReason, folderId)
+    },
+    [setInsertTarget],
+  )
 
   const touchSessionRef = useRef({
     folderId: '',
@@ -213,7 +225,7 @@ export function MemoMobileReorderProvider({
   } | null>(null)
   const documentTouchTrackingRef = useRef(false)
 
-  const detachDocumentTouchTracking = useCallback(() => {
+  const detachDocumentTouchTracking = useCallback((reason?: string) => {
     if (!documentTouchTrackingRef.current) return
     documentTouchTrackingRef.current = false
     const handlers = documentTouchHandlersRef.current
@@ -222,6 +234,11 @@ export function MemoMobileReorderProvider({
     document.removeEventListener('touchend', handlers.end, true)
     document.removeEventListener('touchcancel', handlers.cancel, true)
     documentTouchHandlersRef.current = null
+    memoReorderDiagListener(
+      'detach',
+      'document',
+      reason ?? 'detachDocumentTouchTracking',
+    )
   }, [])
 
   const resetTouchSession = useCallback(
@@ -246,6 +263,7 @@ export function MemoMobileReorderProvider({
       setGesturePhase('idle')
       memoReorderDiagNoteGesture('idle', false, null)
       memoReorderDiagSessionReset(reason ?? 'resetTouchSession')
+      memoReorderDiagSetTrackedTouchId(null)
     },
     [clearLongPressTimer, detachDocumentTouchTracking],
   )
@@ -362,10 +380,13 @@ export function MemoMobileReorderProvider({
     await finishDrag(folderId)
   }, [finishDrag, resetTouchSession])
 
-  const cancelActiveDrag = useCallback(() => {
-    if (touchSessionRef.current.dragActive) cancelDrag()
-    resetTouchSession('cancelActiveDrag')
-  }, [cancelDrag, resetTouchSession])
+  const cancelActiveDrag = useCallback(
+    (diagReason = 'cancelActiveDrag') => {
+      if (touchSessionRef.current.dragActive) cancelDrag(diagReason)
+      resetTouchSession(diagReason)
+    },
+    [cancelDrag, resetTouchSession],
+  )
 
   const cardBindingsRef = useRef(
     new Map<
@@ -385,6 +406,31 @@ export function MemoMobileReorderProvider({
 
     const onDocumentTouchMove = (e: TouchEvent) => {
       const s = touchSessionRef.current
+      let docOutcome:
+        | 'proceed'
+        | 'touchIdUnset'
+        | 'touchMissing'
+        | 'touchLost' = 'proceed'
+      if (s.touchId < 0) {
+        docOutcome = 'touchIdUnset'
+      } else {
+        const touch = Array.from(e.touches).find(
+          (t) => t.identifier === s.touchId,
+        )
+        if (!touch) {
+          const stillTracked = Array.from(e.touches).some(
+            (t) => t.identifier === s.touchId,
+          )
+          docOutcome = stillTracked ? 'touchMissing' : 'touchLost'
+        }
+      }
+      memoReorderDiagDocumentTouchEntry('touchmove', e, {
+        trackedTouchId: s.touchId,
+        touchIds: touchIdList(e),
+        changedTouchIds: touchChangedIdList(e),
+        outcome: docOutcome,
+      })
+
       if (s.touchId < 0) return
 
       const touch = Array.from(e.touches).find((t) => t.identifier === s.touchId)
@@ -393,7 +439,7 @@ export function MemoMobileReorderProvider({
           (t) => t.identifier === s.touchId,
         )
         if (!stillTracked) {
-          if (s.dragActive) cancelActiveDrag()
+          if (s.dragActive) cancelActiveDrag('docMove:touchIdentifierLost')
           else resetTouchSession('docMove:touchIdentifierLost')
         }
         return
@@ -419,7 +465,7 @@ export function MemoMobileReorderProvider({
       }
 
       if (!e.cancelable) {
-        cancelActiveDrag()
+        cancelActiveDrag('docMove:notCancelable')
         return
       }
 
@@ -429,6 +475,32 @@ export function MemoMobileReorderProvider({
 
     const onDocumentTouchEnd = (e: TouchEvent) => {
       const s = touchSessionRef.current
+      let docOutcome:
+        | 'proceed'
+        | 'touchIdUnset'
+        | 'matchedEnd'
+        | 'touchLost' = 'proceed'
+      if (s.touchId < 0) {
+        docOutcome = 'touchIdUnset'
+      } else {
+        const endedTouch = Array.from(e.changedTouches).find(
+          (t) => t.identifier === s.touchId,
+        )
+        if (endedTouch != null) docOutcome = 'matchedEnd'
+        else {
+          const stillTracked = Array.from(e.touches).some(
+            (t) => t.identifier === s.touchId,
+          )
+          if (!stillTracked) docOutcome = 'touchLost'
+        }
+      }
+      memoReorderDiagDocumentTouchEntry('touchend', e, {
+        trackedTouchId: s.touchId,
+        touchIds: touchIdList(e),
+        changedTouchIds: touchChangedIdList(e),
+        outcome: docOutcome,
+      })
+
       if (s.touchId < 0) return
       const endedTouch = Array.from(e.changedTouches).find(
         (t) => t.identifier === s.touchId,
@@ -455,15 +527,22 @@ export function MemoMobileReorderProvider({
       if (!stillTracked) {
         memoReorderDiagTouchEvent('touchend', 'document:touchLost', e, 0, 0)
         clearLongPressTimer('docEnd:touchLost')
-        if (s.dragActive) cancelActiveDrag()
+        if (s.dragActive) cancelActiveDrag('docEnd:touchLost')
         else resetTouchSession('docEnd:touchLost')
       }
     }
 
     const onDocumentTouchCancel = (e: TouchEvent) => {
+      const s = touchSessionRef.current
+      memoReorderDiagDocumentTouchEntry('touchcancel', e, {
+        trackedTouchId: s.touchId,
+        touchIds: touchIdList(e),
+        changedTouchIds: touchChangedIdList(e),
+        outcome: 'handler',
+      })
       memoReorderDiagTouchEvent('touchcancel', 'document', e, 0, 0)
       clearLongPressTimer('docCancel')
-      if (touchSessionRef.current.dragActive) cancelActiveDrag()
+      if (touchSessionRef.current.dragActive) cancelActiveDrag('docCancel')
       else resetTouchSession('docCancel')
     }
 
@@ -480,6 +559,7 @@ export function MemoMobileReorderProvider({
     document.addEventListener('touchend', handlers.end, { capture: true })
     document.addEventListener('touchcancel', handlers.cancel, { capture: true })
     documentTouchTrackingRef.current = true
+    memoReorderDiagListener('attach', 'document', 'touchmove/touchend/touchcancel capture')
   }, [
     cancelActiveDrag,
     cancelPendingLongPress,
@@ -499,6 +579,8 @@ export function MemoMobileReorderProvider({
         const { handlers } = existing
         surfaceEl.removeEventListener('touchstart', handlers.touchstart)
         cardBindingsRef.current.delete(existingKey)
+        memoReorderDiagListener('detach', 'card', `touchstart:${folderId}:replace`)
+        memoReorderDiagSetCardTouchListenerCount(cardBindingsRef.current.size)
       }
 
       const onTouchStart = (e: TouchEvent) => {
@@ -509,7 +591,7 @@ export function MemoMobileReorderProvider({
         if (session.dragActive && e.touches.length === 1) {
           // A new single-finger touchstart means the previous contact is gone,
           // even if the browser omitted touchend and reused its identifier.
-          cancelActiveDrag()
+          cancelActiveDrag('cardStart:staleDragRecovery')
           recoveredStaleDrag = true
         } else if (
           session.touchId >= 0 &&
@@ -517,7 +599,7 @@ export function MemoMobileReorderProvider({
             (touch) => touch.identifier === session.touchId,
           )
         ) {
-          if (session.dragActive) cancelActiveDrag()
+          if (session.dragActive) cancelActiveDrag('cardStart:orphanTouchId')
           else resetTouchSession('cardStart:orphanTouchId')
         }
 
@@ -527,7 +609,7 @@ export function MemoMobileReorderProvider({
 
         const touch = e.touches[0]
         clearLongPressTimer('cardTouchStart')
-        detachDocumentTouchTracking()
+        detachDocumentTouchTracking('cardTouchStart:replaceDocumentListeners')
         touchSessionRef.current = {
           folderId,
           cardEl,
@@ -544,6 +626,7 @@ export function MemoMobileReorderProvider({
         }
         setGesturePhase('longPressPending')
         attachDocumentTouchTracking()
+        memoReorderDiagSetTrackedTouchId(touch.identifier)
         memoReorderDiagNoteGesture('longPressPending', false, folderId)
         memoReorderDiagTouchSessionBegin(folderId)
         memoReorderDiagTouchEvent('touchstart', 'card', e, 0, 0)
@@ -562,6 +645,8 @@ export function MemoMobileReorderProvider({
       }
 
       surfaceEl.addEventListener('touchstart', onTouchStart, { passive: true })
+      memoReorderDiagListener('attach', 'card', `touchstart:${folderId}`)
+      memoReorderDiagSetCardTouchListenerCount(cardBindingsRef.current.size + 1)
 
       cardBindingsRef.current.set(`${folderId}:${surfaceEl}`, {
         surfaceEl,
@@ -589,11 +674,13 @@ export function MemoMobileReorderProvider({
       const { handlers } = binding
       surfaceEl.removeEventListener('touchstart', handlers.touchstart)
       cardBindingsRef.current.delete(key)
+      memoReorderDiagListener('detach', 'card', `touchstart:${folderId}`)
+      memoReorderDiagSetCardTouchListenerCount(cardBindingsRef.current.size)
 
       const s = touchSessionRef.current
       if (s.folderId !== folderId) return
       if (s.dragActive) {
-        cancelActiveDrag()
+        cancelActiveDrag('detachCardGesture')
         return
       }
       if (s.touchId >= 0 || s.longPressTimer != null) {
@@ -608,7 +695,7 @@ export function MemoMobileReorderProvider({
     const abortAmbientGesture = (reason: 'visibilityHidden' | 'windowBlur') => {
       const s = touchSessionRef.current
       if (s.dragActive) {
-        cancelActiveDrag()
+        cancelActiveDrag(reason)
         return
       }
       if (s.touchId >= 0 || s.longPressTimer != null) {
@@ -625,16 +712,31 @@ export function MemoMobileReorderProvider({
     }
     document.addEventListener('visibilitychange', onVisibilityChange)
     window.addEventListener('blur', onWindowBlur)
+    let unmountWindowDiag: (() => void) | undefined
+    let onScroll: (() => void) | undefined
+    if (isMemoReorderDiagEnabled()) {
+      unmountWindowDiag = mountMemoReorderDiagWindowCapture()
+      onScroll = () => memoReorderDiagScrollEvent()
+      window.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    }
+
     return () => {
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('blur', onWindowBlur)
+      if (onScroll) {
+        window.removeEventListener('scroll', onScroll, true)
+      }
+      unmountWindowDiag?.()
       for (const [, binding] of bindings) {
         const { surfaceEl, handlers } = binding
         surfaceEl.removeEventListener('touchstart', handlers.touchstart)
+        memoReorderDiagListener('detach', 'card', 'providerEffectCleanup')
       }
       bindings.clear()
-      clearLongPressTimer()
-      detachDocumentTouchTracking()
+      memoReorderDiagSetCardTouchListenerCount(0)
+      clearLongPressTimer('providerEffectCleanup')
+      detachDocumentTouchTracking('providerEffectCleanup')
+      memoReorderDiagListener('detach', 'provider', 'effectCleanup')
     }
   }, [
     cancelActiveDrag,
