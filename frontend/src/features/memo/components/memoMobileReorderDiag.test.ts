@@ -17,6 +17,7 @@ import {
   memoReorderDiagListener,
   memoReorderDiagMaybePushWindowTouchMoveSample,
   memoReorderDiagPushRawWindowSample,
+  memoReorderDiagScrollEvent,
   memoReorderDiagSessionReset,
   memoReorderDiagStateReset,
   memoReorderDiagSyncRuntime,
@@ -155,15 +156,60 @@ describe('memoMobileReorderDiag', () => {
       scrollX: 0,
       scrollY: 0,
     })
-    memoReorderDiagListener('attach', 'document', 'testAttach')
+    memoReorderDiagListener(
+      'attach',
+      'document',
+      'touchmove capture=true passive=false; touchend capture=true passive=true; touchcancel capture=true passive=true',
+    )
+    memoReorderDiagListener('attach', 'card', 'touchstart passive=true bubble')
     memoReorderDiagDrag('cancel', 'docMove:notCancelable', 'folder-x')
     memoReorderDiagListener('detach', 'document', 'testDetach')
     const ring = getMemoReorderDiagRing()
-    expect(ring.some((e) => e.kind === 'listenerAttach')).toBe(true)
+    const docAttach = ring.find(
+      (e) => e.kind === 'listenerAttach' && e.reason.startsWith('document:'),
+    )
+    expect(docAttach?.reason).toContain('passive=false')
+    expect(docAttach?.reason).toContain('passive=true')
+    expect(
+      ring.some(
+        (e) =>
+          e.kind === 'listenerAttach' &&
+          e.reason === 'card:touchstart passive=true bubble',
+      ),
+    ).toBe(true)
     expect(ring.some((e) => e.kind === 'dragCancel' && e.reason === 'docMove:notCancelable')).toBe(
       true,
     )
     expect(getMemoReorderDiagRuntimeSnapshot().documentTouchListening).toBe(false)
+  })
+
+  it('aggregates scroll events without evicting important ring entries', () => {
+    import.meta.env.DEV = true
+    vi.useFakeTimers()
+    const t0 = 1_700_000_000_000
+    vi.setSystemTime(t0)
+    let scrollY = 0
+    vi.stubGlobal('window', {
+      location: { search: '?memoReorderDiag=1' },
+      get scrollX() {
+        return 0
+      },
+      get scrollY() {
+        return scrollY
+      },
+    })
+    memoReorderDiagTouchSessionBegin('folder-a')
+    memoReorderDiagTimer('start', 'longPress')
+    for (let i = 0; i < 500; i += 1) {
+      scrollY = i + 10
+      memoReorderDiagScrollEvent()
+    }
+    const ring = getMemoReorderDiagRing()
+    expect(ring.some((e) => e.kind === 'scroll')).toBe(false)
+    expect(ring.some((e) => e.kind === 'timerStart' && e.reason === 'longPress')).toBe(true)
+    expect(getMemoReorderDiagRawCounters().windowScroll).toBe(500)
+    expect(getMemoReorderDiagRawSamples().some((s) => s.kind === 'scroll')).toBe(true)
+    vi.useRealTimers()
   })
 
   it('drops oldest ring entries beyond the cap', () => {

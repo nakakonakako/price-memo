@@ -34,6 +34,7 @@ export type MemoReorderDiagRawCounters = {
   windowPointermove: number
   windowPointerup: number
   windowPointercancel: number
+  windowScroll: number
   docTouchmove: number
   docTouchend: number
   docTouchcancel: number
@@ -143,6 +144,7 @@ function emptyRawCounters(): MemoReorderDiagRawCounters {
     windowPointermove: 0,
     windowPointerup: 0,
     windowPointercancel: 0,
+    windowScroll: 0,
     docTouchmove: 0,
     docTouchend: 0,
     docTouchcancel: 0,
@@ -157,6 +159,7 @@ let sessionOriginMs = 0
 let lastWindowTouchMoveSampleClock = -1
 let lastWindowPointerMoveSampleClock = -1
 let lastHandlerMoveSampleClock = -1
+let lastScrollSampleClock = -1
 let runtimeSnapshot: MemoReorderDiagRuntimeSnapshot = defaultRuntimeSnapshot()
 
 function setDiagTimerState(timerState: MemoReorderDiagTimerState): void {
@@ -223,6 +226,7 @@ function resetMoveSampleClocks(): void {
   lastWindowTouchMoveSampleClock = -1
   lastWindowPointerMoveSampleClock = -1
   lastHandlerMoveSampleClock = -1
+  lastScrollSampleClock = -1
 }
 
 function pushRawSample(
@@ -270,39 +274,6 @@ function pushImportantEntry(
   notifyListeners()
 }
 
-function pushSilentRingEntry(
-  kind: string,
-  reason: string,
-  fields: {
-    dx?: number
-    dy?: number
-    cancelable?: boolean | null
-    defaultPrevented?: boolean | null
-    detail?: string | null
-  },
-): void {
-  if (!isMemoReorderDiagEnabled()) return
-  const dx = fields.dx ?? 0
-  const dy = fields.dy ?? 0
-  const entry: MemoReorderDiagRingEntry = {
-    seq: nextDiagSeq(),
-    tMs: relMs(),
-    kind,
-    reason,
-    dx: round1(dx),
-    dy: round1(dy),
-    dist: round1(Math.hypot(dx, dy)),
-    cancelable: fields.cancelable ?? null,
-    defaultPrevented: fields.defaultPrevented ?? null,
-    gesturePhase: runtimeSnapshot.gesturePhase,
-    dragging: runtimeSnapshot.dragging,
-    activeId: runtimeSnapshot.activeId,
-    detail: fields.detail ?? null,
-  }
-  ring.push(entry)
-  while (ring.length > MEMO_REORDER_DIAG_RING_MAX) ring.shift()
-}
-
 export function touchTagName(target: EventTarget | null): string {
   if (!(target instanceof Element)) return '-'
   return target.tagName
@@ -324,7 +295,8 @@ export function bumpMemoReorderDiagRawCounter(
     | 'touchcancel'
     | 'pointermove'
     | 'pointerup'
-    | 'pointercancel',
+    | 'pointercancel'
+    | 'scroll',
 ): void
 export function bumpMemoReorderDiagRawCounter(
   scope: 'doc',
@@ -357,6 +329,9 @@ export function bumpMemoReorderDiagRawCounter(
         break
       case 'pointercancel':
         rawCounters.windowPointercancel += 1
+        break
+      case 'scroll':
+        rawCounters.windowScroll += 1
         break
       default:
         break
@@ -575,11 +550,17 @@ export function memoReorderDiagScrollEvent(): void {
   const dx = scrollX - baseX
   const dy = scrollY - baseY
   if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) return
-  pushSilentRingEntry('scroll', 'window', {
-    dx,
-    dy,
-    detail: `scr=${round1(scrollX)},${round1(scrollY)} d=${round1(dx)},${round1(dy)}`,
-  })
+  bumpMemoReorderDiagRawCounter('window', 'scroll')
+  const sample = shouldTakeMoveSample(lastScrollSampleClock)
+  lastScrollSampleClock = sample.nextLast
+  if (sample.take) {
+    pushRawSample({
+      tMs: relMs(),
+      source: 'window',
+      kind: 'scroll',
+      detail: `scr=${round1(scrollX)},${round1(scrollY)} d=${round1(dx)},${round1(dy)}`,
+    })
+  }
 }
 
 export function memoReorderDiagDocumentTouchEntry(
@@ -729,7 +710,7 @@ export function formatMemoReorderDiagCounterLine(
     `win ts=${counters.windowTouchstart} tm=${counters.windowTouchmove} ` +
     `te=${counters.windowTouchend} tc=${counters.windowTouchcancel} ` +
     `pm=${counters.windowPointermove} pu=${counters.windowPointerup} ` +
-    `pc=${counters.windowPointercancel} ` +
+    `pc=${counters.windowPointercancel} wsc=${counters.windowScroll} ` +
     `doc tm=${counters.docTouchmove} te=${counters.docTouchend} tc=${counters.docTouchcancel}`
   )
 }

@@ -559,7 +559,11 @@ export function MemoMobileReorderProvider({
     document.addEventListener('touchend', handlers.end, { capture: true })
     document.addEventListener('touchcancel', handlers.cancel, { capture: true })
     documentTouchTrackingRef.current = true
-    memoReorderDiagListener('attach', 'document', 'touchmove/touchend/touchcancel capture')
+    memoReorderDiagListener(
+      'attach',
+      'document',
+      'touchmove capture=true passive=false; touchend capture=true passive=true; touchcancel capture=true passive=true',
+    )
   }, [
     cancelActiveDrag,
     cancelPendingLongPress,
@@ -579,7 +583,7 @@ export function MemoMobileReorderProvider({
         const { handlers } = existing
         surfaceEl.removeEventListener('touchstart', handlers.touchstart)
         cardBindingsRef.current.delete(existingKey)
-        memoReorderDiagListener('detach', 'card', `touchstart:${folderId}:replace`)
+        memoReorderDiagListener('detach', 'card', 'touchstart passive=true bubble:replace')
         memoReorderDiagSetCardTouchListenerCount(cardBindingsRef.current.size)
       }
 
@@ -645,7 +649,7 @@ export function MemoMobileReorderProvider({
       }
 
       surfaceEl.addEventListener('touchstart', onTouchStart, { passive: true })
-      memoReorderDiagListener('attach', 'card', `touchstart:${folderId}`)
+      memoReorderDiagListener('attach', 'card', 'touchstart passive=true bubble')
       memoReorderDiagSetCardTouchListenerCount(cardBindingsRef.current.size + 1)
 
       cardBindingsRef.current.set(`${folderId}:${surfaceEl}`, {
@@ -674,7 +678,7 @@ export function MemoMobileReorderProvider({
       const { handlers } = binding
       surfaceEl.removeEventListener('touchstart', handlers.touchstart)
       cardBindingsRef.current.delete(key)
-      memoReorderDiagListener('detach', 'card', `touchstart:${folderId}`)
+      memoReorderDiagListener('detach', 'card', 'touchstart passive=true bubble')
       memoReorderDiagSetCardTouchListenerCount(cardBindingsRef.current.size)
 
       const s = touchSessionRef.current
