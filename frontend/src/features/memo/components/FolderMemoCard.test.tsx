@@ -146,6 +146,34 @@ describe('FolderMemoCard BL-10 record flow', () => {
       expect(screen.getByText('2026-01-15')).toBeTruthy()
     })
 
+    it('aligns collapsed metadata row with mobile stats grid when mobile', () => {
+      if (!isMobile) {
+        return
+      }
+
+      render(
+        <FolderMemoCard
+          folderId="f1"
+          folderName="牛乳"
+          records={sampleRecords}
+          onSaved={vi.fn()}
+        />,
+      )
+
+      const latestLabel = screen.getByText('直近')
+      const statsGrid = latestLabel.closest('div')?.parentElement
+      expect(statsGrid?.className).toContain('w-full')
+      expect(statsGrid?.className).toContain('grid-cols-3')
+      expect(statsGrid?.className).not.toContain('inline-grid')
+
+      const dateEl = screen.getByText('2026-01-15')
+      const metadataRow = dateEl.parentElement
+      expect(metadataRow?.className).toContain('w-full')
+      expect(metadataRow?.className).toContain('grid-cols-3')
+      expect(metadataRow?.className).not.toContain('inline-grid')
+      expect(dateEl.className).toContain('text-center')
+    })
+
     it('hides compare store and latest date when expanded without trial price', () => {
       render(
         <FolderMemoCard

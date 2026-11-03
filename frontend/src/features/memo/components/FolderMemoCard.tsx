@@ -381,16 +381,18 @@ export function FolderMemoCard({
                   />
                   {!isOpen &&
                     (compareStore.trim() || activeStats.latestDate) && (
-                    <div className="mt-0.5 inline-grid grid-cols-3 gap-3">
+                    <div
+                      className={`mt-0.5 ${MOBILE_MEMO_STATS_GRID_CLASS}`}
+                    >
                       {compareStore.trim() ? (
-                        <p className="col-span-2 truncate text-[9px] text-stone-400">
+                        <p className="col-span-2 truncate text-left text-[9px] text-stone-400">
                           {compareStore.trim()}
                         </p>
                       ) : (
                         <div className="col-span-2" aria-hidden />
                       )}
                       {activeStats.latestDate ? (
-                        <p className="text-[9px] text-stone-400">
+                        <p className="text-center text-[9px] text-stone-400">
                           {activeStats.latestDate}
                         </p>
                       ) : (
@@ -677,6 +679,9 @@ export function FolderMemoCard({
   )
 }
 
+const MOBILE_MEMO_STATS_GRID_CLASS =
+  'grid min-w-0 w-full max-w-full grid-cols-3 gap-x-1 gap-y-0.5'
+
 function MemoStatsGrid({
   activeStats,
   showStatDiffs,
@@ -690,7 +695,7 @@ function MemoStatsGrid({
 }) {
   const gridClass = desktop
     ? 'grid min-w-0 grid-cols-3 gap-x-1 gap-y-0.5 sm:gap-x-4'
-    : 'grid min-w-0 w-full max-w-full grid-cols-3 gap-x-1 gap-y-0.5'
+    : MOBILE_MEMO_STATS_GRID_CLASS
   return (
     <div className="min-w-0">
       <div className={gridClass}>
