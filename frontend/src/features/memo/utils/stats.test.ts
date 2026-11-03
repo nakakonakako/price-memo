@@ -4,7 +4,47 @@ import {
   formatComparisonDiffLabel,
   parseTrialPriceInput,
   trialDisplayValue,
+  uniqueStoreNamesInRecords,
 } from './stats'
+import type { PriceRecord } from '@/features/records/types'
+
+describe('uniqueStoreNamesInRecords', () => {
+  const base: PriceRecord = {
+    id: 'r1',
+    folder_id: 'f1',
+    recorded_at: '2026-01-10',
+    store_name: '店A',
+    price: 100,
+    amount: 100,
+    unit: 'g',
+    note: null,
+    created_at: '2026-01-10T00:00:00Z',
+    updated_at: '2026-01-10T00:00:00Z',
+    user_id: 'u1',
+  }
+
+  it('dedupes store names in first-seen order', () => {
+    expect(
+      uniqueStoreNamesInRecords([
+        base,
+        { ...base, id: 'r2', store_name: '店B' },
+        { ...base, id: 'r3', store_name: '店A' },
+      ]),
+    ).toEqual(['店A', '店B'])
+  })
+
+  it('returns empty when there are no records', () => {
+    expect(uniqueStoreNamesInRecords([])).toEqual([])
+  })
+
+  it('keeps names not present in store master', () => {
+    expect(
+      uniqueStoreNamesInRecords([
+        { ...base, store_name: '過去だけの店' },
+      ]),
+    ).toEqual(['過去だけの店'])
+  })
+})
 
 describe('formatComparisonDiffLabel', () => {
   it('uses explicit yen for equal diffs', () => {

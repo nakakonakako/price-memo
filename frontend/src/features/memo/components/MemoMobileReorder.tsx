@@ -173,6 +173,7 @@ export function MemoMobileReorderProvider({
     touchId: -1,
     startX: 0,
     startY: 0,
+    touchStartAt: 0,
     lastClientY: 0,
     longPressTimer: null as ReturnType<typeof setTimeout> | null,
     dragActive: false,
@@ -216,6 +217,7 @@ export function MemoMobileReorderProvider({
       touchId: -1,
       startX: 0,
       startY: 0,
+      touchStartAt: 0,
       lastClientY: 0,
       longPressTimer: null,
       dragActive: false,
@@ -352,13 +354,24 @@ export function MemoMobileReorderProvider({
     const onDocumentTouchMove = (e: TouchEvent) => {
       const s = touchSessionRef.current
       if (s.touchId < 0) return
+
       const touch = Array.from(e.touches).find((t) => t.identifier === s.touchId)
-      if (!touch) return
+      if (!touch) {
+        const stillTracked = Array.from(e.touches).some(
+          (t) => t.identifier === s.touchId,
+        )
+        if (!stillTracked) {
+          if (s.dragActive) cancelActiveDrag()
+          else resetTouchSession()
+        }
+        return
+      }
+
       s.lastClientY = touch.clientY
+      const dx = touch.clientX - s.startX
+      const dy = touch.clientY - s.startY
 
       if (!s.dragActive) {
-        const dx = touch.clientX - s.startX
-        const dy = touch.clientY - s.startY
         if (shouldCancelLongPress(dx, dy)) {
           cancelPendingLongPress()
           resetTouchSession()
@@ -378,15 +391,25 @@ export function MemoMobileReorderProvider({
     const onDocumentTouchEnd = (e: TouchEvent) => {
       const s = touchSessionRef.current
       if (s.touchId < 0) return
-      const ended = Array.from(e.changedTouches).some(
+      const endedTouch = Array.from(e.changedTouches).find(
         (t) => t.identifier === s.touchId,
       )
-      if (!ended) return
-      clearLongPressTimer()
-      if (s.dragActive) {
-        void endActiveDrag()
-      } else {
-        resetTouchSession()
+      if (endedTouch != null) {
+        clearLongPressTimer()
+        if (s.dragActive) {
+          void endActiveDrag()
+        } else {
+          resetTouchSession()
+        }
+        return
+      }
+      const stillTracked = Array.from(e.touches).some(
+        (t) => t.identifier === s.touchId,
+      )
+      if (!stillTracked) {
+        clearLongPressTimer()
+        if (s.dragActive) cancelActiveDrag()
+        else resetTouchSession()
       }
     }
 
@@ -431,9 +454,28 @@ export function MemoMobileReorderProvider({
       }
 
       const onTouchStart = (e: TouchEvent) => {
-        if (disabled || e.touches.length !== 1) return
+        if (disabled) return
+
+        const session = touchSessionRef.current
+        let recoveredStaleDrag = false
+        if (session.dragActive && e.touches.length === 1) {
+          // A new single-finger touchstart means the previous contact is gone,
+          // even if the browser omitted touchend and reused its identifier.
+          cancelActiveDrag()
+          recoveredStaleDrag = true
+        } else if (
+          session.touchId >= 0 &&
+          !Array.from(e.touches).some(
+            (touch) => touch.identifier === session.touchId,
+          )
+        ) {
+          if (session.dragActive) cancelActiveDrag()
+          else resetTouchSession()
+        }
+
+        if (e.touches.length !== 1) return
         if (isInteractiveReorderTarget(e.target)) return
-        if (isSwipeDeleteBlocked()) return
+        if (!recoveredStaleDrag && isSwipeDeleteBlocked()) return
 
         const touch = e.touches[0]
         clearLongPressTimer()
@@ -444,6 +486,7 @@ export function MemoMobileReorderProvider({
           touchId: touch.identifier,
           startX: touch.clientX,
           startY: touch.clientY,
+          touchStartAt: Date.now(),
           lastClientY: touch.clientY,
           longPressTimer: null,
           dragActive: false,
@@ -477,9 +520,11 @@ export function MemoMobileReorderProvider({
       activateDragFromLongPress,
       attachDocumentTouchTracking,
       clearLongPressTimer,
+      cancelActiveDrag,
       detachDocumentTouchTracking,
       disabled,
       isSwipeDeleteBlocked,
+      resetTouchSession,
     ],
   )
 
@@ -491,13 +536,46 @@ export function MemoMobileReorderProvider({
       const { handlers } = binding
       surfaceEl.removeEventListener('touchstart', handlers.touchstart)
       cardBindingsRef.current.delete(key)
+
+      const s = touchSessionRef.current
+      if (s.folderId !== folderId) return
+      if (s.dragActive) {
+        cancelActiveDrag()
+        return
+      }
+      if (s.touchId >= 0 || s.longPressTimer != null) {
+        resetTouchSession()
+      }
     },
-    [],
+    [cancelActiveDrag, resetTouchSession],
   )
 
   useEffect(() => {
     const bindings = cardBindingsRef.current
+    const abortAmbientGesture = () => {
+      const s = touchSessionRef.current
+      if (s.dragActive) {
+        cancelActiveDrag()
+        return
+      }
+      if (s.touchId >= 0 || s.longPressTimer != null) {
+        resetTouchSession()
+      }
+    }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        abortAmbientGesture()
+      }
+    }
+    const onWindowBlur = () => {
+      abortAmbientGesture()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('blur', onWindowBlur)
+
     return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('blur', onWindowBlur)
       for (const [, binding] of bindings) {
         const { surfaceEl, handlers } = binding
         surfaceEl.removeEventListener('touchstart', handlers.touchstart)
@@ -506,7 +584,12 @@ export function MemoMobileReorderProvider({
       clearLongPressTimer()
       detachDocumentTouchTracking()
     }
-  }, [clearLongPressTimer, detachDocumentTouchTracking])
+  }, [
+    cancelActiveDrag,
+    clearLongPressTimer,
+    detachDocumentTouchTracking,
+    resetTouchSession,
+  ])
 
   const requestStepMove = useCallback(
     (folderId: string, direction: 'up' | 'down' | 'start' | 'end') => {

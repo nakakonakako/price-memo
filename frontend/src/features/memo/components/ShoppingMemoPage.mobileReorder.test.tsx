@@ -613,7 +613,7 @@ describe('ShoppingMemoPage mobile reorder', () => {
     expect(reorderMemoItems).not.toHaveBeenCalled()
   })
 
-  it('opens the card on a short tap on the title toggle region', async () => {
+  it('opens the card after a short touchstart/end and click on the title region', async () => {
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-b', 1)])
     reorderMemoItems.mockResolvedValue(undefined)
 
@@ -626,12 +626,17 @@ describe('ShoppingMemoPage mobile reorder', () => {
     const titleToggle = screen.getByText('B').closest('[data-memo-card-toggle]')
     expect(titleToggle).toBeTruthy()
 
-    await act(async () => {
-      fireEvent.click(titleToggle as HTMLElement)
+    await withLongPressTimers(async () => {
+      await act(async () => {
+        touchAt(titleToggle as HTMLElement, 'start', 240)
+        vi.advanceTimersByTime(100)
+        touchAt(titleToggle as HTMLElement, 'end', 240)
+        fireEvent.click(titleToggle as HTMLElement)
+      })
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
+      expect(screen.getByPlaceholderText('全店舗の記録と比較')).toBeTruthy()
     })
     expect(reorderMemoItems).not.toHaveBeenCalled()
   })
@@ -676,11 +681,11 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
+      expect(screen.getByPlaceholderText('全店舗の記録と比較')).toBeTruthy()
     })
 
     const compareInput = screen.getByPlaceholderText(
-      '未入力は全記録',
+      '全店舗の記録と比較',
     ) as HTMLInputElement
     await act(async () => {
       fireEvent.change(compareInput, { target: { value: 'テスト店' } })
@@ -698,9 +703,9 @@ describe('ShoppingMemoPage mobile reorder', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText('未入力は全記録')).toBeTruthy()
+      expect(screen.getByPlaceholderText('全店舗の記録と比較')).toBeTruthy()
       expect(
-        (screen.getByPlaceholderText('未入力は全記録') as HTMLInputElement)
+        (screen.getByPlaceholderText('全店舗の記録と比較') as HTMLInputElement)
           .value,
       ).toBe('テスト店')
     })
