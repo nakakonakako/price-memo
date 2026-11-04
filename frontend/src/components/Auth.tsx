@@ -25,14 +25,12 @@ export function Auth() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4">
-      <div className="w-full max-w-sm space-y-4 text-center">
-        <p className="text-xs tracking-wide text-stone-500">機能 B · 厳密単価比較</p>
+      <div className="w-full max-w-sm space-y-3 text-center">
         <h1 className="text-2xl font-semibold tracking-tight text-stone-900">
           単価メモ
         </h1>
-        <p className="text-sm text-stone-600">
-          比較したい商品を手動フォルダで管理するためにログインしてください。
-          （AI家計簿と同じ Google アカウントで入れます）
+        <p className="text-sm leading-snug text-stone-600">
+          買い物メモと商品の単価比較ができます。
         </p>
         <button
           type="button"

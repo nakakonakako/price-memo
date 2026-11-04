@@ -37,6 +37,11 @@ describe('Auth', () => {
   it('shows the data-handling disclosure before login', () => {
     render(<Auth />)
 
+    expect(
+      screen.getByText('買い物メモと商品の単価比較ができます。'),
+    ).toBeTruthy()
+    expect(screen.queryByText(/機能 B/)).toBeNull()
+
     fireEvent.click(screen.getByRole('button', { name: 'データの取り扱い' }))
 
     expect(screen.getByTestId(DATA_HANDLING_DISCLOSURE_TEST_ID)).toBeTruthy()

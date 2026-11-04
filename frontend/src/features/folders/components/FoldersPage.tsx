@@ -313,8 +313,8 @@ export function FoldersPage({
   const catalogSearchRef = useRef<HTMLInputElement>(null)
   const [folderSort, setFolderSort] = useState<CatalogSort>('added')
   const [catalogView, setCatalogView] = useState<CatalogView>('folder')
-  const [stores, setStores] = useState<PriceStore[]>([])
-  const [storesLoading, setStoresLoading] = useState(true)
+  const [stores, setStores] = useState<PriceStore[]>(() => peekStoresCache() ?? [])
+  const [storesLoading, setStoresLoading] = useState(() => peekStoresCache() == null)
   const [storesError, setStoresError] = useState<string | null>(null)
   const [storeSort, setStoreSort] = useState<CatalogSort>('added')
   const [editingStoreId, setEditingStoreId] = useState<string | null>(null)
@@ -416,11 +416,11 @@ export function FoldersPage({
   const refreshStores = useCallback(
     async (options?: { force?: boolean }): Promise<PriceStore[] | null> => {
       const epoch = getStoresCacheEpoch()
-      setStoresLoading(true)
       setStoresError(null)
       try {
         const list = await getStoresCached({ force: options?.force })
         if (epoch !== getStoresCacheEpoch()) return null
+        if (list == null) return null
         setStoresCache(list, epoch)
         setStores(list)
         return list
@@ -495,7 +495,7 @@ export function FoldersPage({
       cancelled = true
       cancelAnimationFrame(frame)
     }
-  }, [refreshStores, refreshAllRecords])
+  }, [refreshAllRecords, refreshStores])
 
   const storeRevSeen = useRef(getCatalogRevisions().stores)
   useEffect(
@@ -512,6 +512,7 @@ export function FoldersPage({
   useEffect(
     () =>
       subscribeStoresCacheRefresh((current) => {
+        if (current == null) return
         setStores(current)
         setStoresError(null)
         setStoresLoading(false)
@@ -574,6 +575,7 @@ export function FoldersPage({
       ) {
         return
       }
+      if (list == null) return
       setStoresCache(list, storesEpoch)
       setStores(list)
     } catch {
