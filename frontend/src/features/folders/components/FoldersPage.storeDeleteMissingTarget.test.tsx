@@ -13,6 +13,7 @@ const {
   deleteStore,
   folderFixture,
   getStoresCached,
+  refreshFolders,
   removeFromStoresCache,
   storeFixture,
 } = vi.hoisted(() => ({
@@ -25,6 +26,7 @@ const {
     created_at: '2026-01-01T00:00:00Z',
   },
   getStoresCached: vi.fn(),
+  refreshFolders: vi.fn(),
   removeFromStoresCache: vi.fn(),
   storeFixture: {
     id: 'store-1',
@@ -79,7 +81,7 @@ vi.mock('../hooks/useFolders', () => ({
     create: vi.fn(),
     rename: vi.fn(),
     remove: vi.fn(),
-    refresh: vi.fn(),
+    refresh: refreshFolders,
   }),
 }))
 
@@ -152,7 +154,7 @@ async function attemptDelete(path: DeletePath, result: RefreshResult) {
   deleteStore.mockRejectedValue(createMissingTargetError())
 
   render(<FoldersPage />)
-  await waitFor(() => expect(getStoresCached).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(getStoresCached.mock.calls.length).toBeGreaterThanOrEqual(1))
   fireEvent.click(screen.getByRole('button', { name: '店名' }))
   await screen.findByText(store.name)
   fireEvent.click(screen.getByRole('button', { name: 'delete-store-1' }))
@@ -161,8 +163,17 @@ async function attemptDelete(path: DeletePath, result: RefreshResult) {
     fireEvent.click(await screen.findByRole('button', { name: '削除する' }))
   }
 
-  await waitFor(() => expect(getStoresCached).toHaveBeenCalledTimes(2))
+  await waitFor(() =>
+    expect(
+      getStoresCached.mock.calls.some(([options]) => options?.force === true),
+    ).toBe(true),
+  )
   await waitFor(() => expect(deleteStore).toHaveBeenCalledWith(store.id))
+  if (result === 'absent') {
+    await waitFor(() => expect(screen.queryByText(store.name)).toBeNull())
+  } else {
+    await waitFor(() => expect(screen.getByText(MISSING_TARGET_MESSAGE)).toBeTruthy())
+  }
 }
 
 describe('FoldersPage store deletion after MissingTarget', () => {
@@ -174,6 +185,7 @@ describe('FoldersPage store deletion after MissingTarget', () => {
     })
     deleteStore.mockReset()
     getStoresCached.mockReset()
+    getStoresCached.mockResolvedValue([storeFixture])
     removeFromStoresCache.mockReset()
     listAllRecords.mockReset()
   })

@@ -138,6 +138,9 @@ export function ShoppingMemoPage({
     null,
   )
   const deletedFolderTombstonesRef = useRef(new Set<string>())
+  const allFoldersLoadGenerationRef = useRef(0)
+  const allFoldersLoadedRef = useRef(false)
+  const allFoldersLoadPromiseRef = useRef<Promise<PriceFolder[]> | null>(null)
 
   const withoutTombstonedFolders = useCallback(
     <T extends { id: string }>(folders: T[]): T[] => {
@@ -170,11 +173,13 @@ export function ShoppingMemoPage({
     async (opts?: {
       silent?: boolean
       preserveError?: boolean
+      includeAllFolders?: boolean
     }): Promise<'ok' | 'aborted' | 'error'> => {
       const generation = loadGenerationRef.current
       const reorderGeneration = reorderGenerationRef.current
       const userIdAtStart = getCurrentAuthUserId()
       if (!userIdAtStart) return 'aborted'
+      const includeAllFolders = opts?.includeAllFolders ?? true
       const startedVisibleLoad = !opts?.silent
       if (startedVisibleLoad) {
         visibleLoadRef.current.begin()
@@ -182,17 +187,23 @@ export function ShoppingMemoPage({
       }
       if (!opts?.preserveError) setError(null)
       try {
-        const fetchSnapshot = async () => {
-          const [folderList, memoList] = await Promise.all([
-            listFolders(),
-            listMemoItems(),
+        const fetchSnapshot = async (snapshotOpts: {
+          includeAllFolders: boolean
+        }) => {
+          const memoListPromise = listMemoItems()
+          const foldersPromise = snapshotOpts.includeAllFolders
+            ? listFolders()
+            : Promise.resolve(null as PriceFolder[] | null)
+          const memoList = await memoListPromise
+          const [folderList, recordList] = await Promise.all([
+            foldersPromise,
+            listRecordsForFolders(memoList.map((m) => m.folder_id)),
           ])
-          const recordList = await listRecordsForFolders(
-            memoList.map((m) => m.folder_id),
-          )
           return { folderList, memoList, recordList }
         }
-        let { folderList, memoList, recordList } = await fetchSnapshot()
+        let { folderList, memoList, recordList } = await fetchSnapshot({
+          includeAllFolders,
+        })
         if (
           loadGenerationRef.current !== generation ||
           getCurrentAuthUserId() !== userIdAtStart
@@ -202,10 +213,10 @@ export function ShoppingMemoPage({
 
         const tombstones = [...deletedFolderTombstonesRef.current]
         const returnedDeletedFolders = tombstones.filter((folderId) =>
-          hasDeletedFolder(folderId, folderList, memoList),
+          hasDeletedFolder(folderId, folderList ?? [], memoList),
         )
         if (returnedDeletedFolders.length > 0) {
-          const retrySnapshot = await fetchSnapshot()
+          const retrySnapshot = await fetchSnapshot({ includeAllFolders: true })
           folderList = retrySnapshot.folderList
           memoList = retrySnapshot.memoList
           recordList = retrySnapshot.recordList
@@ -216,7 +227,7 @@ export function ShoppingMemoPage({
             return 'aborted'
           }
           const stillPresent = returnedDeletedFolders.filter((folderId) =>
-            hasDeletedFolder(folderId, folderList, memoList),
+            hasDeletedFolder(folderId, folderList ?? [], memoList),
           )
           for (const folderId of stillPresent) {
             deletedFolderTombstonesRef.current.delete(folderId)
@@ -233,7 +244,11 @@ export function ShoppingMemoPage({
           !skipPreserveMemoOrderRef.current &&
           (reorderGenerationRef.current !== reorderGeneration ||
             reorderInFlightRef.current)
-        setAllFolders(withoutTombstonedFolders(folderList))
+        setAllFolders((current) => {
+          if (folderList == null) return current
+          allFoldersLoadedRef.current = true
+          return withoutTombstonedFolders(folderList)
+        })
         setMemoItems((current) => {
           const visible = withoutTombstonedMemoItems(memoList)
           return preserveMemoOrder
@@ -280,6 +295,54 @@ export function ShoppingMemoPage({
     reorderGenerationRef.current += 1
     reorderInFlightRef.current = false
   }, [])
+
+  const ensureAllFoldersLoaded = useCallback(async (): Promise<PriceFolder[]> => {
+    if (allFoldersLoadedRef.current) {
+      return allFolders
+    }
+    if (allFoldersLoadPromiseRef.current) {
+      return allFoldersLoadPromiseRef.current
+    }
+    const generation = ++allFoldersLoadGenerationRef.current
+    const userIdAtStart = getCurrentAuthUserId()
+    if (!userIdAtStart) return []
+    const request = (async () => {
+      try {
+        const folderList = await listFolders()
+        if (
+          generation !== allFoldersLoadGenerationRef.current ||
+          getCurrentAuthUserId() !== userIdAtStart
+        ) {
+          throw new Error('認証状態が変更されたため、フォルダの読み込みを中断しました。')
+        }
+        const visible = withoutTombstonedFolders(folderList)
+        allFoldersLoadedRef.current = true
+        setAllFolders(visible)
+        return visible
+      } catch (err) {
+        if (
+          generation === allFoldersLoadGenerationRef.current &&
+          getCurrentAuthUserId() === userIdAtStart
+        ) {
+          setError(toUserMessage(err, 'フォルダの読み込みに失敗しました。'))
+        }
+        throw err
+      }
+    })()
+    allFoldersLoadPromiseRef.current = request
+    try {
+      return await request
+    } finally {
+      if (allFoldersLoadPromiseRef.current === request) {
+        allFoldersLoadPromiseRef.current = null
+      }
+    }
+  }, [allFolders, withoutTombstonedFolders])
+
+  useEffect(() => {
+    if (!addOpen || !authUserId) return
+    void ensureAllFoldersLoaded().catch(() => {})
+  }, [addOpen, authUserId, ensureAllFoldersLoaded])
 
   const refreshAfterMemoMutation = useCallback(() => {
     invalidateInFlightLoads()
@@ -330,6 +393,9 @@ export function ShoppingMemoPage({
     reorderGenerationRef.current += 1
     reorderInFlightRef.current = false
     deletedFolderTombstonesRef.current = new Set()
+    allFoldersLoadGenerationRef.current += 1
+    allFoldersLoadedRef.current = false
+    allFoldersLoadPromiseRef.current = null
 
     if (!authUserId) {
       catalogRevSeen.current = null
@@ -356,7 +422,7 @@ export function ShoppingMemoPage({
       setAllFolders([])
       setMemoItems([])
       setRecords([])
-      const result = await load()
+      const result = await load({ includeAllFolders: false })
       if (result === 'ok') {
         catalogRevSeen.current = getCatalogRevisions()
       }
@@ -609,9 +675,11 @@ export function ShoppingMemoPage({
     if (!trimmed) return
     setError(null)
     setMutating(true)
-    let folder: PriceFolder | undefined = findFolderByName(allFolders, trimmed)
+    let folder: PriceFolder | undefined
     let createdNewFolder = false
     try {
+      const folderCatalog = await ensureAllFoldersLoaded()
+      folder = findFolderByName(folderCatalog, trimmed)
       if (!folder) {
         folder = await createFolder(trimmed, newReading.trim() || null)
         createdNewFolder = true

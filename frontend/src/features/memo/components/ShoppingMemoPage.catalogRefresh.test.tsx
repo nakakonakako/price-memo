@@ -377,7 +377,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     })
 
     expect(listMemoItems).toHaveBeenCalledTimes(2)
-    expect(listFolders).toHaveBeenCalledTimes(2)
+    expect(listFolders).toHaveBeenCalledTimes(1)
   })
 
   it('refreshes memo items and records without reloading folders on records-only revision', async () => {
@@ -402,7 +402,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     })
 
     expect(listMemoItems).toHaveBeenCalledTimes(2)
-    expect(listFolders).toHaveBeenCalledTimes(1)
+    expect(listFolders).toHaveBeenCalledTimes(0)
   })
 
   it('removes a folder from the memo without deleting folders or unrelated memo data', async () => {
@@ -422,7 +422,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     })
 
     expect(removeMemoItem).toHaveBeenCalledWith('folder-b')
-    expect(listFolders).toHaveBeenCalledTimes(2)
+    expect(listFolders).toHaveBeenCalledTimes(1)
     expect(listMemoItems).toHaveBeenCalledTimes(2)
   })
 
@@ -601,7 +601,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     act(() => {
       publishFolderDeleted({ folderId: 'folder-b', userId: 'user-a' })
     })
-    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(1))
 
     await act(async () => {
       screen.getByRole('button', { name: /メモを追加/ }).click()
@@ -662,7 +662,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     act(() => {
       publishFolderDeleted({ folderId: 'folder-b', userId: 'user-a' })
     })
-    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(1))
     expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
 
     fireEvent.click(screen.getByTestId('remove-folder-a'))
@@ -681,7 +681,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     })
 
     await waitFor(() => {
-      expect(listFolders).toHaveBeenCalledTimes(3)
+      expect(listFolders).toHaveBeenCalledTimes(2)
       expect(listRecordsForFolders).toHaveBeenCalledTimes(3)
     })
     expect(screen.queryByTestId('memo-card-folder-a')).toBeNull()
@@ -852,7 +852,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     )
 
     await waitFor(() => {
-      expect(listFolders).toHaveBeenCalledTimes(3)
+      expect(listFolders).toHaveBeenCalledTimes(2)
       expect(listRecordsForFolders).toHaveBeenCalledTimes(2)
       expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
       expect(
@@ -882,7 +882,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     )
 
     await waitFor(() => {
-      expect(listFolders).toHaveBeenCalledTimes(4)
+      expect(listFolders).toHaveBeenCalledTimes(3)
       expect(screen.getByTestId('memo-card-folder-b')).toBeTruthy()
     })
   })
@@ -907,7 +907,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('memo-card-folder-b')).toBeNull()
-      expect(listFolders).toHaveBeenCalledTimes(3)
+      expect(listFolders).toHaveBeenCalledTimes(2)
     })
     expect(screen.queryByText(/削除したフォルダがまだ残っています/)).toBeNull()
 
@@ -934,7 +934,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     )
 
     await waitFor(() => {
-      expect(listFolders).toHaveBeenCalledTimes(4)
+      expect(listFolders).toHaveBeenCalledTimes(3)
       expect(screen.getByTestId('memo-card-folder-b')).toBeTruthy()
     })
   })
@@ -958,7 +958,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     })
 
     await waitFor(() => {
-      expect(listFolders).toHaveBeenCalledTimes(3)
+      expect(listFolders).toHaveBeenCalledTimes(2)
       expect(screen.getByTestId('memo-card-folder-b')).toBeTruthy()
       expect(
         screen.getByText(
@@ -1066,7 +1066,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
       publishFolderDeleted({ folderId: 'folder-b', userId: 'user-a' })
     })
     await waitFor(() => {
-      expect(listFolders).toHaveBeenCalledTimes(2)
+      expect(listFolders).toHaveBeenCalledTimes(1)
     })
     listFolders.mockResolvedValue([folderA, folderC])
     listMemoItems.mockResolvedValue([memoItem('folder-a', 0), memoItem('folder-c', 1)])
@@ -1237,7 +1237,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
     )
 
     await waitFor(() => {
-      expect(listFolders).toHaveBeenCalledTimes(2)
+      expect(listFolders).toHaveBeenCalledTimes(1)
     })
 
     fireEvent.click(screen.getByTestId('save-folder-a'))
@@ -1308,7 +1308,7 @@ describe('ShoppingMemoPage catalog refresh', () => {
       </AuthProvider>,
     )
 
-    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(listFolders).toHaveBeenCalledTimes(1))
 
     await act(async () => {
       resolveReorder()
