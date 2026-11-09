@@ -233,6 +233,8 @@ cd .. && npm run dev
 
 ### 7.2 環境変数
 
+Cursor CLI の明示的な利用枠切れ時は、現在の Codex Supervisor が既存変更を保護して同じ worktree で実装と検証を引き継ぐ。ブラウザーを利用できない場合は UI 検証を未確認として報告する。詳細は [cursor-delegation.md](./cursor-delegation.md)。
+
 追加worktreeの保存先、環境変数symlink、依存関係セットアップ、Cursor委譲の手順は [worktree-development.md](./worktree-development.md) を参照。
 
 **フロント**（A の Dev/Prod と同じ値でよい。本番は Docker build-arg）
