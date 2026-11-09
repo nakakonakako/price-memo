@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -27,6 +28,18 @@ FORBIDDEN_ENV = (
 
 
 def main() -> None:
+    codex = tomllib.loads((ROOT / ".codex/config.toml").read_text())
+    assert codex["agents"]["enabled"] is True
+    assert codex["agents"]["max_concurrent_threads_per_session"] == 1
+    for name in ("playwright", "playwright-unauth"):
+        server = codex["mcp_servers"][name]
+        assert server["command"] == "bash"
+        assert server["args"] == [f".cursor/{name}-mcp.sh"]
+        assert "cwd" not in server
+    assert codex["mcp_servers"]["playwright-unauth"]["enabled_tools"] == [
+        "browser_navigate", "browser_snapshot", "browser_close"
+    ]
+
     mcp_config = json.loads((ROOT / ".cursor/mcp.json").read_text())
     servers = mcp_config["mcpServers"]
     assert servers["playwright"] == {

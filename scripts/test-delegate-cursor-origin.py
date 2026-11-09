@@ -121,6 +121,10 @@ class DelegateCursorOriginTests(unittest.TestCase):
             " f.write(json.dumps(record) + '\\n')\n"
             "open(os.environ['WORKER_MARKER'], 'w').write('started')\n"
             "mode = os.environ.get('MOCK_WORKER_MODE', 'success')\n"
+            "if mode == 'usage':\n"
+            " open('partial.txt', 'w').write('partial')\n"
+            " print(\"ActionRequiredError: limit. You're out of usage.\", file=sys.stderr)\n"
+            " raise SystemExit(1)\n"
             "if mode == 'hold': time.sleep(30)\n"
             "if mode == 'fail':\n"
             " print(json.dumps({'type':'result','subtype':'error','is_error':True,'result':'VERIFICATION RESULTS\\nCOVERAGE: INCOMPLETE\\nFAIL: mock criterion — observed failure\\nEND VERIFICATION RESULTS'}), flush=True)\n"
@@ -226,6 +230,25 @@ class DelegateCursorOriginTests(unittest.TestCase):
             encoding="utf-8",
         )
         (workspace / "scripts/worktree.sh").chmod(0o755)
+
+    def test_launcher_usage_handoff_preserves_worker_workspace(self) -> None:
+        workspace = self.root / "worker"
+        subprocess.run(["git", "-C", str(self.main_origin), "worktree", "add", "-b", "worker", str(workspace)], check=True, capture_output=True)
+        (workspace / "fixture.txt").write_text("staged\n")
+        subprocess.run(["git", "-C", str(workspace), "add", "fixture.txt"], check=True)
+        (workspace / "fixture.txt").write_text("unstaged\n")
+        (workspace / "existing.txt").write_text("existing")
+        result = self.delegate(self.feature_origin, "--workspace", str(workspace), "--allow-dirty", "--prompt", "fixture", env_extra={"MOCK_WORKER_MODE": "usage"})
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("outcome: cursor_usage_exhausted", result.stdout)
+        self.assertEqual(len(self.call_records(self.worker_call_log)), 1)
+        self.assertEqual((workspace / "partial.txt").read_text(), "partial")
+        self.assertEqual((workspace / "existing.txt").read_text(), "existing")
+        self.assertEqual((workspace / "fixture.txt").read_text(), "unstaged\n")
+        staged = subprocess.check_output(["git", "-C", str(workspace), "show", ":fixture.txt"], text=True)
+        self.assertEqual(staged, "staged\n")
+        (workspace / "supervisor.txt").write_text("continued")
+        self.assertEqual((workspace / "partial.txt").read_text(), "partial")
 
     def test_direct_checkout_uses_same_canonical_path_for_origin_and_worker(self) -> None:
         result = self.delegate(

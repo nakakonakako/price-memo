@@ -316,6 +316,17 @@ acceptance criteria, so it is not the default fallback. These routes are now
 available only through the explicit options above; the delegate never switches
 to Other Models automatically.
 
+Codex CLI 0.167.0 loads the two project MCP registrations from
+`.codex/config.toml` when the project is trusted. Start or restart Codex from
+the target worktree root so the relative launcher paths resolve there; verify
+with `codex mcp list`. Existing sessions do not gain newly configured tools
+automatically. Cursor MCP approvals and Codex tool approvals are separate;
+never approve all servers or alter approval policy automatically. The isolated
+`playwright-unauth` server avoids the shared authenticated profile. In Codex
+it exposes navigation and snapshot, plus `browser_close` to close its own
+browser. If Codex cannot load the tools, report the cause and UI checks as
+UNCONFIRMED.
+
 When the monitor reports `cursor_usage_exhausted`, stop Cursor retries and
 announce that the current Codex Supervisor is taking over because the CLI usage
 limit was confirmed. Inspect `git status --short`, `git diff --cached`,
