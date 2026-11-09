@@ -522,6 +522,8 @@ def classify_outcome(exit_code: int, result_status: str, result_is_error: bool |
         return "interrupted"
     if exit_code == 0 and result_status == "success" and result_is_error is not True:
         return "success"
+    if result_status != "success" and categories.get("cursor_usage_exhausted", 0):
+        return "cursor_usage_exhausted"
     if workspace_mode and categories.get("worktree_setup", 0):
         return "worktree_setup"
     if workspace_mode and categories.get("worktree_creation", 0):
@@ -725,8 +727,11 @@ class StreamMonitor:
         )
         self.assistant_updates_reported = self.assistant_updates
 
-    def _record_error_line(self, raw: bytes) -> None:
+    def _record_error_line(self, raw: bytes, *, truncated: bool = False) -> None:
         text = raw[:MAX_STDERR_LINE_BYTES].decode("utf-8", errors="ignore").lower()
+        clean = ANSI_RE.sub("", text).strip()
+        if not truncated and re.match(r"^actionrequirederror:.{0,2048}\byou\x27re out of usage\.", clean):
+            self.error_categories["cursor_usage_exhausted"] += 1
         for category, pattern in ERROR_PATTERNS.items():
             if pattern.search(text) and len(self.error_categories) < MAX_ERROR_CATEGORIES:
                 self.error_categories[category] += 1
@@ -794,7 +799,7 @@ class StreamMonitor:
             if newline >= 0:
                 segment = remaining[:newline]
                 if len(self._stderr_buffer) + len(segment) > MAX_STDERR_LINE_BYTES:
-                    self._record_error_line(bytes(self._stderr_buffer))
+                    self._record_error_line(bytes(self._stderr_buffer), truncated=True)
                 else:
                     self._stderr_buffer.extend(segment)
                     self._record_error_line(bytes(self._stderr_buffer))
@@ -802,7 +807,7 @@ class StreamMonitor:
                 remaining = remaining[newline + 1:]
                 continue
             if len(self._stderr_buffer) + len(remaining) > MAX_STDERR_LINE_BYTES:
-                self._record_error_line(bytes(self._stderr_buffer))
+                self._record_error_line(bytes(self._stderr_buffer), truncated=True)
                 self._stderr_buffer.clear()
                 self._stderr_discard = True
             else:
@@ -891,6 +896,8 @@ class StreamMonitor:
                 self._stderr_buffer.clear()
             exit_code = self._child.wait()
             signal_number = self.received_signal
+            if signal_number is not None or self.result_status == "success":
+                self.error_categories.pop("cursor_usage_exhausted", None)
             outcome = classify_outcome(
                 exit_code, self.result_status, self.result_is_error,
                 self.error_categories, self.args.workspace_mode, signal_number,

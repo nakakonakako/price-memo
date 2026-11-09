@@ -153,23 +153,23 @@ affected screen before considering the task complete.
 
 ### Roles
 
-- **Cursor worker**: the only official actor for live UI verification in this
-  repository. Workers run the path below and report what they observed.
-- **Codex / Luna supervisor**: does not operate a browser. Reviews the worker
-  diff and completion report. A supervisor session without browser tools is not
-  a verification failure. Delegate additional UI checks to a verification-only
-  Cursor worker instead of attempting browser work from the supervisor.
+- **Cursor worker**: normally performs live UI verification using the path below.
+- **Codex / Luna supervisor**: normally delegates browser verification. After
+  confirmed Cursor usage exhaustion, performs it using the project browser
+  path under the same profile, port, and server ownership restrictions below.
+  If unavailable, report the affected UI as UNCONFIRMED.
+
 - **Human developers**: use `npm run dev` at `http://localhost:5173` for local
   development and manual browser debugging. This is not the Codex supervisor UI
   verification path and not a supervisor fallback when MCP is unavailable.
 
-### Official verification path (Cursor worker only)
+### Official verification path
 
 Use this path end to end; do not substitute standalone Playwright CLI,
 `npx playwright`, system Chrome, or other browser tools:
 
 1. `npm run devserver:ensure`
-2. Cursor Playwright MCP selected by purpose (`playwright` for authenticated
+2. Playwright MCP selected by purpose (`playwright` for authenticated
    UI, `playwright-unauth` for login/pre-auth UI)
 3. The matching launcher from `.cursor/mcp.json`
    (`.cursor/playwright-mcp.sh` or `.cursor/playwright-unauth-mcp.sh`)
@@ -395,21 +395,27 @@ and retry with `normal`, then use `hard` only if medium still cannot complete
 for implementation reasons. Tooling or environment failures do not justify a
 model escalation. Do not use `fast`, `xhigh`, or other model families by default.
 
-Composer and Grok are both in Cursor Models. Switching between them does not
-provide a quota fallback. The CLI does not expose a verified quota-specific
-error signal, so never grep guessed quota strings or automatically switch model
-pools. Only the Supervisor may select an explicit Other Models route after
-reviewing evidence of either a Cursor Models usage/quota limit or a persistent
-Cursor service/model-side failure (for example, repeated `resource_exhausted`
-errors). A single error is not enough: confirm the same failure in a second
-independent, bounded normal-route run, and do not retry indefinitely. Repair
-MCP, network, worktree, dev server, browser, or other tooling/environment
-failures first; those do not justify fallback. Keep quota exhaustion distinct
-from service capacity or other model-side failures, and do not label an
-ambiguous failure as quota exhaustion. Other Models runs use the same Cursor
-CLI infrastructure, so fallback is not guaranteed to succeed. They may incur
-on-demand charges; the Supervisor and delegate must not enable or change
-billing settings.
+When the monitor reports `cursor_usage_exhausted`, stop Cursor retries and
+announce that the current Codex Supervisor is taking over because the CLI usage
+limit was confirmed. Inspect `git status --short`, `git diff --cached`,
+`git diff`, and untracked paths before working; preserve all existing staged,
+unstaged and untracked changes. Continue in the same worker worktree, without
+reset, clean, stash or removal. Do not launch another Codex process or switch
+models. Implement, run the normal quality checks, verify affected UI in a real
+browser, and perform the final review under the same criteria as a Cursor worker.
+For UI checks use the existing project Playwright MCP launcher and devserver
+helper if available, with the dedicated verification port, one authenticated
+profile user at a time, no credential inspection or OAuth automation, and stop
+only servers owned by the session. If browser operation is unavailable, report
+UI behavior as UNCONFIRMED with the cause and required setup; never claim PASS.
+The monitor recognizes the observed `ActionRequiredError` usage message only on
+failure, after ANSI removal. It does not infer quota from `resource_exhausted`,
+capacity, network, authentication, MCP, or implementation failures. The
+structured quota error format is unverified. Other Models options remain
+explicit and are never selected automatically. For other persistent service or
+model failures, confirm the same failure in one independent bounded normal-route
+run before considering an explicit Other Models route. Repair environment
+failures separately. Never enable or change billing settings.
 
 Explicit routes are `--fallback-tier light` → `gemini-3.8-flash-low` and
 `--fallback-tier normal` → `claude-sonnet-5-5-medium`. The reserve

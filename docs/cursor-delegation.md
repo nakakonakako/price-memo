@@ -61,8 +61,7 @@ Use `light` by default. Select tiers via the delegation script:
 | `normal` | `grok-4.7-medium` |
 | `hard` | `grok-4.7-high` |
 
-The script also supports an explicit Other Models route, selected only by the
-Supervisor after diagnosing a likely Cursor Models usage/quota failure:
+The script also supports an explicit Other Models route selected by the Supervisor:
 
 | Option | Model |
 |---|---|
@@ -248,7 +247,7 @@ Current triage boundaries:
 | `worktree_setup` / `worktree_creation` | Categorized setup or Git worktree signals from stderr, when available |
 | `tooling_environment_failure` | Supervisor diagnosis from bounded event/tool metadata and categorized stderr signals |
 | `implementation_difficulty` | Explicit worker completion/failure report, if available; do not infer it from a generic CLI error |
-| `cursor_models_usage_quota_limit` | Supervisor diagnosis supported by evidence of usage/quota exhaustion; the CLI does not currently expose a verified quota-specific signal |
+| `cursor_usage_exhausted` | Observed explicit CLI usage error on a failed run; Codex takes over |
 | `cursor_service_model_failure` | Supervisor diagnosis of a persistent service/model-side failure, such as repeated `resource_exhausted`; this is not itself proof of quota exhaustion |
 | `cursor_agent_unclassified` | Any remaining failed or incomplete run; use bounded metadata and do not model-fallback automatically |
 
@@ -317,20 +316,35 @@ acceptance criteria, so it is not the default fallback. These routes are now
 available only through the explicit options above; the delegate never switches
 to Other Models automatically.
 
-The current CLI help documents `--model`, while `--output-format stream-json`
-provides a final result event with success/error status. Neither `agent models`
-nor this result event exposes a verified quota-specific error code or remaining
-pool balance. The script does not grep guessed quota text or retry a failed
-worker on another model. The Supervisor reviews retained logs and may explicitly
-select a fallback for either supported usage/quota evidence or a recurring
-service/model-side failure after one bounded confirmation run. The latter does
-not establish quota exhaustion; capacity and quota must not be conflated. MCP,
-network, worktree, dev server, browser, and other tooling/environment failures
-remain issues to repair first. All failed runs are returned as ordinary
-failures with logs retained. Other Models uses the same Cursor CLI
-infrastructure, so success is not guaranteed. Billing and on-demand settings
-are never changed by the script; the chosen route may still be subject to the
-account's existing billing configuration.
+Codex CLI 0.167.0 loads the two project MCP registrations from
+`.codex/config.toml` when the project is trusted. Start or restart Codex from
+the target worktree root so the relative launcher paths resolve there; verify
+with `codex mcp list`. Existing sessions do not gain newly configured tools
+automatically. Cursor MCP approvals and Codex tool approvals are separate;
+never approve all servers or alter approval policy automatically. The isolated
+`playwright-unauth` server avoids the shared authenticated profile. In Codex
+it exposes navigation, snapshot, resize and screenshot, plus `browser_close`
+to close its own browser. If Codex cannot load the tools, report the cause and
+UI checks as UNCONFIRMED.
+
+When the monitor reports `cursor_usage_exhausted`, stop Cursor retries and
+announce that the current Codex Supervisor is taking over because the CLI usage
+limit was confirmed. Inspect `git status --short`, `git diff --cached`,
+`git diff`, and untracked paths before working; preserve all existing staged,
+unstaged and untracked changes. Continue in the same worker worktree, without
+reset, clean, stash or removal. Do not launch another Codex process or switch
+models. Implement, run the normal quality checks, verify affected UI in a real
+browser, and perform the final review under the same criteria as a Cursor worker.
+For UI checks use the existing project Playwright MCP launcher and devserver
+helper if available, with the dedicated verification port, one authenticated
+profile user at a time, no credential inspection or OAuth automation, and stop
+only servers owned by the session. If browser operation is unavailable, report
+UI behavior as UNCONFIRMED with the cause and required setup; never claim PASS.
+The monitor recognizes the observed `ActionRequiredError` usage message only on
+failure, after ANSI removal. It does not infer quota from `resource_exhausted`,
+capacity, network, authentication, MCP, or implementation failures. The
+structured quota error format is unverified. Other Models options remain
+explicit and are never selected automatically.
 
 ## Supervisor-only / supervisor-first areas
 
@@ -392,24 +406,23 @@ automatically.
 
 ### Roles
 
-- **Cursor worker**: the only official actor for live UI verification. Workers
-  execute the path below and report what they observed.
-- **Codex / Luna supervisor**: does not operate a browser. Reviews the worker
-  diff and completion report. Missing browser tools in a supervisor session is
-  not a verification failure. Delegate additional UI checks to a
-  verification-only Cursor worker; do not attempt supervisor-side browser work.
+- **Cursor worker**: normally executes live UI verification and reports evidence.
+- **Codex / Luna supervisor**: after confirmed Cursor usage exhaustion, uses
+  the same project browser path and restrictions; unavailable checks are
+  UNCONFIRMED. Otherwise, delegate browser verification to Cursor.
+
 - **Human developers**: use `npm run dev` at `http://localhost:5173` for local
   development and manual browser debugging. This is not the Codex supervisor UI
   verification path and not a supervisor fallback when MCP is unavailable.
   `npm run dev:playwright` remains available for ordinary manual use only.
 
-### Official verification path (Cursor worker only)
+### Official verification path
 
 Use this path end to end; do not substitute standalone Playwright CLI,
 `npx playwright`, system Chrome, or other browser tools:
 
 1. `npm run devserver:ensure`
-2. Cursor Playwright MCP selected by purpose (`playwright` for authenticated
+2. Playwright MCP selected by purpose (`playwright` for authenticated
    UI, `playwright-unauth` for login/pre-auth UI)
 3. The matching launcher from `.cursor/mcp.json`
    (`.cursor/playwright-mcp.sh` or `.cursor/playwright-unauth-mcp.sh`)
@@ -491,5 +504,5 @@ and browser revision together after checking the package metadata and
 - `light` struggles with implementation: clarify the work order and retry as `normal`.
 - `normal` struggles after a clarified work order: retry as `hard`.
 - `hard` still cannot complete due to implementation difficulty: escalate to the Sol supervisor before another implementation attempt.
-- Cursor Models usage/quota limit: do not try another Cursor Models tier (same pool) or silently switch to Other Models. The Supervisor may explicitly choose `--fallback-tier light|normal` after reviewing the failure; no quota string matching is used. For partial work, use `--workspace` so the worker reviews and preserves the existing diff. Tooling/environment failures are repaired without fallback. Other Models failures are returned normally; billing settings are never changed.
+- Cursor usage exhaustion: stop Cursor retries and follow the Codex handoff above.
 - High-risk areas listed above should receive Codex review even if Cursor succeeds.
