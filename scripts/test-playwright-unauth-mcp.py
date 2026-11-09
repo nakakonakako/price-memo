@@ -37,7 +37,8 @@ def main() -> None:
         assert server["args"] == [f".cursor/{name}-mcp.sh"]
         assert "cwd" not in server
     assert codex["mcp_servers"]["playwright-unauth"]["enabled_tools"] == [
-        "browser_navigate", "browser_snapshot", "browser_close"
+        "browser_navigate", "browser_snapshot", "browser_close",
+        "browser_resize", "browser_take_screenshot"
     ]
 
     mcp_config = json.loads((ROOT / ".cursor/mcp.json").read_text())

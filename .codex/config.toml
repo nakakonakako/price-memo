@@ -11,4 +11,4 @@ args = [".cursor/playwright-mcp.sh"]
 [mcp_servers.playwright-unauth]
 command = "bash"
 args = [".cursor/playwright-unauth-mcp.sh"]
-enabled_tools = ["browser_navigate", "browser_snapshot", "browser_close"]
+enabled_tools = ["browser_navigate", "browser_snapshot", "browser_close", "browser_resize", "browser_take_screenshot"]

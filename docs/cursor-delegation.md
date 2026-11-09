@@ -323,9 +323,9 @@ with `codex mcp list`. Existing sessions do not gain newly configured tools
 automatically. Cursor MCP approvals and Codex tool approvals are separate;
 never approve all servers or alter approval policy automatically. The isolated
 `playwright-unauth` server avoids the shared authenticated profile. In Codex
-it exposes navigation and snapshot, plus `browser_close` to close its own
-browser. If Codex cannot load the tools, report the cause and UI checks as
-UNCONFIRMED.
+it exposes navigation, snapshot, resize and screenshot, plus `browser_close`
+to close its own browser. If Codex cannot load the tools, report the cause and
+UI checks as UNCONFIRMED.
 
 When the monitor reports `cursor_usage_exhausted`, stop Cursor retries and
 announce that the current Codex Supervisor is taking over because the CLI usage
