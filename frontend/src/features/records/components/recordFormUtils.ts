@@ -12,7 +12,6 @@ export type RecordFormState = {
   amount: string
   unit: PriceUnit
   note: string
-  receipt_item_id: string | null
 }
 
 export function emptyRecordForm(): RecordFormState {
@@ -23,7 +22,6 @@ export function emptyRecordForm(): RecordFormState {
     amount: '',
     unit: 'g',
     note: '',
-    receipt_item_id: null,
   }
 }
 
@@ -35,7 +33,6 @@ export function recordToFormState(record: PriceRecord): RecordFormState {
     amount: String(record.amount),
     unit: record.unit,
     note: record.note ?? '',
-    receipt_item_id: record.receipt_item_id,
   }
 }
 
@@ -48,7 +45,6 @@ export function recordToCopyFormState(record: PriceRecord): RecordFormState {
     amount: String(record.amount),
     unit: record.unit,
     note: record.note ?? '',
-    receipt_item_id: null,
   }
 }
 
@@ -72,6 +68,5 @@ export function parseRecordForm(
     amount,
     unit: form.unit.trim(),
     note: form.note,
-    receipt_item_id: form.receipt_item_id,
   }
 }

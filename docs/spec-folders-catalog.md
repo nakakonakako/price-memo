@@ -132,7 +132,7 @@ PC の削除ゾーン（`MemoTrashZone`）はコンテンツ右端〜画面右�
 
 ## 3. 記録の追加・編集モーダル
 
-- `RecordForm` … 購入日とレシート検索の開始日・終了日は `DateInput`（`grid-cols-1` / `sm:grid-cols-2`、列は `min-width: 0`）。枠線・余白はラッパー側。ネイティブ日付入力に padding は付けない
+- `RecordForm` … 購入日は `DateInput`（`grid-cols-1` / `sm:grid-cols-2`、列は `min-width: 0`）。枠線・余白はラッパー側。ネイティブ日付入力に padding は付けない
 - 数量と単位は横並び。単位列はやや広め（`6.5rem`）
 - 単位「その他…」は内容量行の下にインライン入力（`UnitField`、モーダルなし）
 
