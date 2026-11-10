@@ -74,7 +74,7 @@ describe('DataHandlingDisclosure', () => {
     expect(text).toMatch(/ログイン状態の維持に必要な情報はブラウザに保存され/)
     expect(text).toMatch(/アプリの利用中に一時的に保持されます/)
     expect(text).toMatch(
-      /レシート明細の検索を実行した場合に限り、当該利用者の購入履歴を参照します/,
+      /レシート管理アプリの購入履歴を検索・参照する機能は現在提供していません/,
     )
     expect(text).toMatch(/本アプリからGoogle Geminiへのデータ送信は行いません/)
 

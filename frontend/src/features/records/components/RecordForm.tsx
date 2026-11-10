@@ -3,8 +3,7 @@ import { DateInput } from '@/components/DateInput'
 import { FolderField } from '@/components/FolderField'
 import { StoreField } from '@/components/StoreField'
 import type { PriceFolder } from '@/features/folders/types'
-import { searchReceiptItems } from '../api/recordsApi'
-import type { PriceRecordInput, PriceUnit, ReceiptItemRef } from '../types'
+import type { PriceRecordInput, PriceUnit } from '../types'
 import {
   formatYen,
   perHundredPrice,
@@ -40,7 +39,6 @@ type Props = {
   preferredUnits?: PriceUnit[]
   busy?: boolean
   submitLabel?: string
-  /** create shows receipt draft tools; edit starts from initial */
   mode?: 'create' | 'edit'
   initial?: RecordFormState
   /** Folder-tab create: on narrow viewports show price before quantity/unit (DOM + tab order). */
@@ -77,7 +75,6 @@ export function RecordForm({
     () => initial ?? emptyRecordForm(),
   )
   const [formError, setFormError] = useState<string | null>(null)
-  const [showReceiptSearch, setShowReceiptSearch] = useState(false)
 
   const resolvedFolderId =
     folderPicker != null
@@ -90,14 +87,6 @@ export function RecordForm({
   const storeFixed = fixedStoreName != null && fixedStoreName.length > 0
   const resolvedSubmitLabel =
     submitLabel ?? (isEdit ? '保存する' : '追加する')
-  const [q, setQ] = useState('')
-  const [store, setStore] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
-  const [results, setResults] = useState<ReceiptItemRef[]>([])
-  const [searching, setSearching] = useState(false)
-  const [searchError, setSearchError] = useState<string | null>(null)
-
   const previewPrice = Number(form.price)
   const previewAmount = Number(form.amount)
   const showPreview =
@@ -186,33 +175,6 @@ export function RecordForm({
     }
   }
 
-  const runSearch = async (e: FormEvent) => {
-    e.preventDefault()
-    setSearching(true)
-    setSearchError(null)
-    try {
-      const rows = await searchReceiptItems({
-        q,
-        store,
-        from: from || undefined,
-        to: to || undefined,
-        limit: 40,
-      })
-      setResults(rows)
-      if (rows.length === 0) {
-        setSearchError(
-          '見つかりませんでした。購入日・店・値段は下のフォームに手動で入れてください。',
-        )
-      }
-    } catch (err) {
-      setSearchError(
-        toUserMessage(err, 'レシート検索に失敗しました。'),
-      )
-    } finally {
-      setSearching(false)
-    }
-  }
-
   return (
     <div className="space-y-3" data-edit-surface>
       {isEdit && folderOptions && folderOptions.length > 0 ? (
@@ -249,122 +211,9 @@ export function RecordForm({
         )
       )}
 
-      {!isEdit && (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-medium text-stone-800">新規レコード</h3>
-          <button
-            type="button"
-            onClick={() => setShowReceiptSearch((v) => !v)}
-            className="rounded-md px-2.5 py-1 text-xs text-stone-700 hover:bg-stone-100"
-          >
-            {showReceiptSearch
-              ? 'レシート検索を閉じる'
-              : '（任意）レシート管理から下書き'}
-          </button>
-        </div>
-      )}
-
-      {!isEdit && showReceiptSearch && (
-        <div className="space-y-3 rounded-md border border-dashed border-stone-300 bg-stone-50/80 p-3">
-          <p className="text-xs text-stone-600">
-            レシート管理アプリの明細から購入日・店・値段を下書きできます。数量は常に手入力です。
-          </p>
-          <form
-            onSubmit={(e) => void runSearch(e)}
-            className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2"
-          >
-            <input
-              className={fieldClass}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="商品名"
-            />
-            <input
-              className={fieldClass}
-              value={store}
-              onChange={(e) => setStore(e.target.value)}
-              placeholder="店舗名"
-            />
-            <DateInput
-              wrapClassName="px-3"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              aria-label="検索開始日"
-            />
-            <DateInput
-              wrapClassName="px-3"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              aria-label="検索終了日"
-            />
-            <button
-              type="submit"
-              disabled={searching}
-              className="rounded-md bg-stone-800 px-3 py-2 text-sm text-white hover:bg-stone-700 disabled:opacity-50 sm:col-span-2 sm:w-fit"
-            >
-              {searching ? '検索中...' : '検索'}
-            </button>
-          </form>
-          {searchError && (
-            <p className="text-xs text-amber-800">{searchError}</p>
-          )}
-          {results.length > 0 && (
-            <ul className="max-h-40 divide-y divide-stone-200 overflow-y-auto border border-stone-200 bg-white">
-              {results.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center justify-between gap-2 px-2 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-stone-900">
-                      {item.item_name} · {formatYen(item.price, 0)}
-                    </p>
-                    <p className="truncate text-xs text-stone-500">
-                      {item.receipts?.date ?? '-'} ·{' '}
-                      {item.receipts?.store_name ?? '-'}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="shrink-0 rounded-md px-2 py-1 text-xs text-stone-800 hover:bg-stone-100"
-                    onClick={() => {
-                      setForm((s) => ({
-                        ...s,
-                        recorded_at: item.receipts?.date ?? s.recorded_at,
-                        store_name: item.receipts?.store_name ?? s.store_name,
-                        price: String(item.price),
-                        receipt_item_id: item.id,
-                        note: s.note || item.item_name,
-                      }))
-                      setShowReceiptSearch(false)
-                      setFormError(null)
-                    }}
-                  >
-                    下書きに使う
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      )}
+      {!isEdit && <h3 className="text-sm font-medium text-stone-800">新規レコード</h3>}
 
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
-        {form.receipt_item_id && (
-          <div className="flex flex-wrap items-center gap-2 rounded-md bg-stone-100 px-3 py-2 text-xs text-stone-700">
-            <span>
-              レシート明細を参照中（{form.receipt_item_id.slice(0, 8)}…）
-            </span>
-            <button
-              type="button"
-              onClick={() => setForm((s) => ({ ...s, receipt_item_id: null }))}
-              className="underline hover:text-stone-900"
-            >
-              参照を外す
-            </button>
-          </div>
-        )}
-
         <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="block min-w-0 space-y-1">
             <span className="text-xs text-stone-500">購入日</span>

@@ -7,7 +7,7 @@
 |------|------|
 | リポジトリ名 | `price-memo` |
 | プロダクト名（UI・仮） | 単価メモ / Price Memo |
-| ドキュメント最終更新 | 2026-11-02 |
+| ドキュメント最終更新 | 2026-11-10 |
 | 文書の扱い | **生きた概要**。機能の追加・削除・方針変更のたびに本ファイルを更新する |
 
 ---
@@ -34,7 +34,7 @@
 - 主用途は手動フォルダに入れた商品の単価推移・店舗別の絞り込み閲覧
 - 店頭では **買い物メモ**（過去統計の一覧＋その場の単位換算試算）。値札 OCR は本流にしない
 - 買わなかった観察価格も、統計データとして残してよい
-- 必要時のみ A のレシート明細を参照（任意下書き／参照）。A なしでも完結する
+- レシート連携 UI は現在提供せず、A なしで完結する
 - 「家計の支出記録」や「AI による自動カテゴリ」は **目的に含めない**（→ 機能 A）
 
 店頭フローの詳細: [spec-shopping-memo.md](./spec-shopping-memo.md)
@@ -49,7 +49,7 @@
 | カテゴリ | AI / 学習の `main` / `sub` | **手動フォルダのみ** |
 | 単価・重量 | 扱わない | g / 個 / ml 等の **確定データのみ** |
 | 値段推移・店頭判断 | 置かない（削除済み） | **値段推移＋買い物メモ**（OCR 店頭照会は非本流） |
-| 連携 | B を知らない | A のレシート DB を **一方向参照** |
+| 連携 | B を知らない | 連携 UI は現在提供しない（既存参照は保持） |
 
 詳細: [spec-split-receipt-and-unit-price.md](./spec-split-receipt-and-unit-price.md)
 
@@ -127,7 +127,7 @@ Supabase（A の Dev または Prod）
 | `trends` | 値段推移 | **現行（スマホのみ）** | 独立タブ。`lg` 以上では非表示（フォルダタブの分割パネルに統合） |
 | `howto` | 使い方 | **現行** | 機能説明・操作ヒント。詳細は [spec-guide.md](./spec-guide.md) |
 | `records` | （旧）記録 | **廃止** | フォルダの「＋」モーダルに統合 |
-| `link` | （旧）レシート紐付け | **廃止** | 独立タブ削除。任意下書きは記録追加モーダル内に残す |
+| `link` | （旧）レシート紐付け | **廃止** | 独立タブと記録追加モーダルの下書き検索を撤去 |
 | `inquiry` | 店頭照会（OCR） | **延期** | 値札 OCR。本流にしない → [spec-shopping-memo.md](./spec-shopping-memo.md) |
 
 ### 4.2 機能モジュール（予定）
@@ -139,12 +139,12 @@ Supabase（A の Dev または Prod）
 | 厳密レコード | `frontend/src/features/records/` | **現行** | `RecordForm`。`ensureStore`（キャッシュ経由） |
 | 値段推移 | `frontend/src/features/trends/` | **現行** | `FolderTrendPanel`（lazy + Recharts）。PC はフォルダ内、スマホは独立タブ |
 | 使い方 | `frontend/src/features/guide/` | **現行** | `HowToPage`。操作説明は機能画面ではなくここに集約 |
-| A 参照 | `RecordForm` 内のレシート下書き検索 | **現行** | 独立タブ・`receipt-link` モジュールは削除済み |
+| A 参照 | — | **提供停止** | レシート検索・下書き UI は撤去。既存参照 ID は編集時に保持 |
 | 店頭 OCR | — | **延期** | 値札 OCR（非本流）。`inquiry` プレースホルダ削除済み |
 
 ### 4.3 バックエンド API
 
-スキャフォールド時点ではヘルスチェックのみ。現行のフォルダ／レコード／推移／A 検索は FE から Supabase 直。買い物メモも同様を想定。OCR を入れる場合のみ BE + Gemini。
+スキャフォールド時点ではヘルスチェックのみ。現行のフォルダ／レコード／推移は FE から Supabase 直。買い物メモも同様を想定。OCR を入れる場合のみ BE + Gemini。
 
 | Method | Path | 認証 | 用途 | ステータス |
 |--------|------|------|------|------------|
@@ -168,7 +168,7 @@ B 固有テーブル。RLS・`user_id` 分離。migration正本はshared-supabas
 | `price_memo_items` | 買い物メモの掲載 | `folder_id`, `sort_order`, `user_id`（`folder_id` 一意） | フォルダ削除で CASCADE。メモから外すだけなら行削除 |
 | `price_records` | 厳密レコード | `folder_id`, `recorded_at`, `store_name`, `price`, `amount`, `unit`, `sort_order`, `receipt_item_id?` | `store_name` は `price_stores` と整合。単位は自由文字列 |
 
-A 参照（読み取り・紐付け用）:
+既存の A 参照（新規連携 UI は提供しない）:
 
 | テーブル | 用途 |
 |----------|------|
@@ -335,6 +335,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-11-10 | レシート連携 UI を撤去し、既存の参照 ID を保持 |
 | 2026-11-02 | 未認証 Playwright MCP を `--isolated` で追加し、共有認証 profile の破壊操作禁止と用途別検証ルールを明記 |
 | 2026-10-31 | Cursor委譲元のハーネスとWorker対象workspaceを分離し、monitorを委譲元checkoutから実行 |
 | 2026-10-31 | Cursor委譲CLIの重複route指定、workspace trust、task-file解決仕様を統一 |

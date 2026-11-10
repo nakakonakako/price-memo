@@ -28,7 +28,6 @@ vi.mock('@/components/StoreField', () => ({
 }))
 
 vi.mock('../api/recordsApi', () => ({
-  searchReceiptItems: vi.fn(),
 }))
 
 describe('RecordForm missing target', () => {
