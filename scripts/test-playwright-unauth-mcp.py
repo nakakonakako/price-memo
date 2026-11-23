@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import tomllib
 
@@ -25,6 +26,32 @@ FORBIDDEN_ENV = (
     "PLAYWRIGHT_MCP_ISOLATED",
     "PLAYWRIGHT_MCP_SAVE_SESSION",
 )
+
+
+def check_claude_unauth_hook(enabled_tools: list[str]) -> None:
+    """Claude Code must enforce the same playwright-unauth tool limit as Codex."""
+    settings = json.loads((ROOT / ".claude/settings.json").read_text())
+    [entry] = settings["hooks"]["PreToolUse"]
+    assert entry["matcher"] == "mcp__playwright-unauth__.*"
+    [hook] = entry["hooks"]
+    assert hook["command"] == 'python3 "$CLAUDE_PROJECT_DIR/.claude/hooks/playwright-unauth-tools.py"'
+    script = ROOT / ".claude/hooks/playwright-unauth-tools.py"
+    prefix = "mcp__playwright-unauth__"
+    for tool, expected in [(name, 0) for name in enabled_tools] + [
+        ("browser_click", 2), ("browser_evaluate", 2), ("browser_run_code", 2)
+    ]:
+        result = subprocess.run(
+            [sys.executable, str(script)],
+            input=json.dumps({"tool_name": prefix + tool}),
+            text=True, capture_output=True, check=False,
+        )
+        assert result.returncode == expected, (tool, result.returncode)
+    authenticated = subprocess.run(
+        [sys.executable, str(script)],
+        input=json.dumps({"tool_name": "mcp__playwright__browser_click"}),
+        text=True, capture_output=True, check=False,
+    )
+    assert authenticated.returncode == 0
 
 
 def main() -> None:
@@ -53,6 +80,13 @@ def main() -> None:
         "command": "bash",
         "args": [".cursor/playwright-unauth-mcp.sh"],
     }
+
+    assert json.loads((ROOT / ".mcp.json").read_text()) == mcp_config
+    check_claude_unauth_hook(codex["mcp_servers"]["playwright-unauth"]["enabled_tools"])
+    sol = (ROOT / ".claude/agents/sol-supervisor.md").read_text().split("---")[1]
+    tools_line = next(line for line in sol.splitlines() if line.startswith("tools:"))
+    sol_tools = {tool.strip() for tool in tools_line[len("tools:"):].split(",")}
+    assert not sol_tools & {"Edit", "Write", "NotebookEdit", "Agent"}
 
     config_path = ROOT / ".cursor/playwright-unauth-mcp.json"
     isolated_config = json.loads(config_path.read_text())

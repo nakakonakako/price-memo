@@ -203,6 +203,10 @@ shared persistent profile may be used by only one browser at a time.
   from `--trust`, sandbox settings, and the shell command allowlist.
 - If Playwright MCP tools are unavailable, repair the MCP environment and retry
   the official path. Do not fall back to another browser route.
+- Claude Code reads the same launchers from `.mcp.json`. Approve only the
+  needed server and never enable all project MCP servers at once. The project
+  PreToolUse hook in `.claude/settings.json` limits `playwright-unauth` to the
+  same tools as `enabled_tools` in `.codex/config.toml`; keep both in sync.
 - Never automate Google OAuth. Workers must not click app login buttons or
   otherwise drive OAuth re-authentication. Never read, inspect, print, copy
   into the repository, or include profile files, cookies, tokens,
@@ -283,7 +287,23 @@ and any Cursor delegation. Do not spawn another Sol for the same decision;
 re-escalate only if the scope changes materially and creates a new independent
 high-risk decision.
 
-## Cursor worker delegation (Codex supervisor only)
+## Claude Code as supervisor
+
+Claude Code acting as the supervisor follows every Luna rule in this file.
+Read "Codex CLI", "Codex supervisor", and "Luna" as also meaning that Claude
+Code session.
+
+- Sol escalation uses the read-only `sol-supervisor` subagent in
+  `.claude/agents/sol-supervisor.md` with the same handoff fields. Codex uses
+  `.codex/agents/sol-supervisor.toml`; keep both instructions in sync.
+- Cursor delegation, tiers, retries, browser roles, and the usage-exhausted
+  takeover are unchanged. On takeover, do not launch another Codex or Claude
+  Code process and do not switch models.
+- Claude Code desktop session worktrees under `.claude/worktrees/` are managed
+  by the app. `scripts/worktree.sh` does not create or remove them; use the
+  standard worktree commands for Cursor workers.
+
+## Cursor worker delegation (Codex / Claude Code supervisor only)
 
 At task start, Luna chooses the implementation owner and briefly gives the
 reason. Cursor is the default worker for UI/UX improvements, ordinary feature

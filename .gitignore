@@ -25,3 +25,6 @@ build/
 
 /.playwright-cli/
 /.playwright-mcp/
+
+.claude/worktrees/
+.claude/settings.local.json
