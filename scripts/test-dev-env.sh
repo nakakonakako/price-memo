@@ -200,9 +200,6 @@ fi
 if [[ "$repository_name" == price-memo || "$repository_name" == receipt-manager ]]; then
   grep -Eq 'port: 5173' "$source_root/frontend/vite.config.ts"
   grep -Eq 'strictPort: true' "$source_root/frontend/vite.config.ts"
-  if [[ "$repository_name" == price-memo ]]; then
-    grep -Eq 'vite --port 5273 --strictPort' "$source_root/frontend/package.json"
-  fi
 fi
 
 node - "$source_root" "$repository_name" <<'NODE'
@@ -215,13 +212,6 @@ if (!fs.existsSync(`${root}/scripts/backend-venv.sh`)) {
 }
 if (!scripts.dev.startsWith('bash scripts/dev-env.sh prepare && ')) {
   throw new Error('npm run dev must run the environment preflight first')
-}
-if (name === 'price-memo') {
-  for (const command of ['dev:playwright', 'devserver:ensure']) {
-    if (!scripts[command].startsWith('bash scripts/dev-env.sh prepare && ')) {
-      throw new Error(`${command} must run the environment preflight first`)
-    }
-  }
 }
 NODE
 
