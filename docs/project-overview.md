@@ -214,7 +214,7 @@ B 固有テーブル。RLS・`user_id` 分離。migration正本はshared-supabas
 
 ### 7.1 ローカル開発
 
-通常の人間向け開発・ブラウザー確認は `npm run dev` の `http://localhost:5173` を使う。Cursor worker の Playwright MCP 検証は下記の専用手順を使い、5273 の事前起動は不要。
+開発・ブラウザー確認は `npm run dev` の `http://localhost:5173` を使う。
 
 ```bash
 npm install
@@ -224,18 +224,13 @@ cd .. && npm run dev
 ```
 
 - Vite が `/api` を `http://localhost:8001` へプロキシ（A の 8000 と併走可能）
-- `npm run dev`、`npm run dev:playwright`、`npm run devserver:ensure` は起動前にViteとbackendの実効Supabase URLを承認済みDev project refへ照合する。URL欠落・不一致・曖昧なdotenv設定は値を表示せず停止する
+- `npm run dev` は起動前にViteとbackendの実効Supabase URLを承認済みDev project refへ照合する。URL欠落・不一致・曖昧なdotenv設定は値を表示せず停止する
 - `npm run dev` は起動前にVite `:5173` とFastAPI `:8001` を検査し、競合時は所有プロセス情報を表示できる範囲で表示して停止する。別ポートへの自動切替や既存プロセスの終了は行わず、Ctrl+C・SIGTERM・片側起動失敗時はこの起動が作成したサーバープロセス群だけを停止する。SIGTERM後に終了確認し、必要なSIGKILL後も期限付きで再確認する。所有権・終了状態・`/proc` のいずれかを確認できない場合はcleanup失敗をstderrと終了コードに反映する
-- Cursor / Playwright MCP のローカル UI 確認は `npm run devserver:ensure` で `:8001` / `:5273` を起動し、ブラウザーは `http://localhost:5273` に固定する（Vite `strictPort`）。同一worktreeの起動時Dev検証記録、PID/PGID/session/starttime、worktree識別子、実listener所有者、現在の接続設定を照合できた完全なセッションだけ再利用する。起動直後の所有権未確認プロセスは検証前記録として扱い、所有者を証明できない場合はkillせず記録を保持して停止する。停止時はpidfd取得・シグナル送信の失敗を成功扱いせず、プロセス群とポートの消滅を確認できた場合だけセッション記録を削除する。所有者不明・別worktree・旧形式・片側停止・接続設定変更時は再利用せず、別プロセスを終了しない。ensure/stopは全worktree共通ロックで直列化し、通常の `npm run dev:playwright` は `:5273` / `:8001` を使い、別の競合検査・プロセス終了管理を行う
-- 認証済み UI は `playwright` MCP とユーザー home 配下の共通 persistent profile、ログイン画面・未認証 UI は `playwright-unauth` MCP と `--isolated` のメモリー内 profile を用途別に選ぶ。ログアウト単体テストはmock、実動作確認は専用 profile と別Devテストアカウントを使う。認証済み共有MCPでログアウトや認証状態を破壊する操作は禁止。MCP設定自体はその操作を技術的に阻止しない。詳細は [cursor-delegation.md](./cursor-delegation.md)
-- 両 Playwright MCP は `@playwright/mcp` / Playwright / Chromium revision を固定し、browser binary はユーザー共通 cache を利用する。未認証側は共有 profile、storage-state、外部browser接続を使わない。更新手順は [cursor-delegation.md](./cursor-delegation.md)
 - DB: A と同じ Supabase プロジェクトを利用。migration正本は `shared-supabase-db`。ローカルSQL検証は隔離された使い捨てPostgreSQLを使用。hosted DBへの適用はsharedの保護Writer workflowに限り、price-memoはmigrationを保持・適用しない
 
 ### 7.2 環境変数
 
-Cursor CLI の明示的な利用枠切れ時は、現在の Codex Supervisor が既存変更を保護して同じ worktree で実装と検証を引き継ぐ。Codex は信頼済み worktree の `.codex/config.toml` で Playwright MCP を利用し、ブラウザーを利用できない場合は UI 検証を未確認として報告する。詳細は [cursor-delegation.md](./cursor-delegation.md)。
-
-追加worktreeの保存先、環境変数symlink、依存関係セットアップ、Cursor委譲の手順は [worktree-development.md](./worktree-development.md) を参照。
+追加worktreeの保存先、環境変数symlink、依存関係セットアップの手順は [worktree-development.md](./worktree-development.md) を参照。
 
 **フロント**（A の Dev/Prod と同じ値でよい。本番は Docker build-arg）
 
@@ -280,13 +275,10 @@ actionを更新する場合は、shared-supabase-dbへの変更がmainにマー�
 初回のみ VPS で `~/price-memo` を用意し、GHCR から pull できること（パッケージ公開 or `docker login`）を確認する。
 
 
-### 7.4 開発作業の委譲
+### 7.4 開発エージェント
 
-Codex CLI の通常 supervisor は GPT-6 Luna medium。高リスク・複雑な設計判断は
-read-only の GPT-6 Sol `sol_supervisor` subagent へ早期エスカレーションし、
-最終判断と実装委譲は Luna が行う。通常実装は Cursor CLI worker に
-`scripts/delegate-cursor.sh` で委譲する。詳細は
-[cursor-delegation.md](./cursor-delegation.md) を参照。price-memo の shared
+開発エージェントは Claude Code のみを使い、Codex・Cursor への委譲は行わない。
+ブラウザーを利用できない場合は UI 検証を未確認として報告する。price-memo の shared
 Supabase migration は作成・保持・適用しない。migration正本は
 `shared-supabase-db/supabase/migrations/`、hosted適用はsharedの保護Writer workflowのみ。契約本文は `db-contracts/price-memo.json` に置く。
 
@@ -326,7 +318,6 @@ price-memo/
 | [spec-trends.md](./spec-trends.md) | 値段推移（グラフ・店舗一覧） |
 | [spec-realtime-sync.md](./spec-realtime-sync.md) | 他端末変更のPrivate Broadcast通知と再取得 |
 | [spec-guide.md](./spec-guide.md) | 使い方タブ |
-| [cursor-delegation.md](./cursor-delegation.md) | Codex Luna/Sol と Cursor worker の委譲手順 |
 | `../receipt-manager/docs/project-overview.md` | A の生きた概要（隣リポジトリ） |
 
 ---
@@ -335,6 +326,7 @@ price-memo/
 
 | 日付 | 内容 |
 |------|------|
+| 2026-11-25 | Codex・Cursor連携、Cursor用検証devserver（5273）、Playwright MCP起動スクリプトを削除し、Claude Codeのみの開発体制に整理。worktree削除ガードからCursor session連携を削除 |
 | 2026-11-10 | レシート連携 UI を撤去し、既存の参照 ID を保持 |
 | 2026-11-02 | 未認証 Playwright MCP を `--isolated` で追加し、共有認証 profile の破壊操作禁止と用途別検証ルールを明記 |
 | 2026-10-31 | Cursor委譲元のハーネスとWorker対象workspaceを分離し、monitorを委譲元checkoutから実行 |

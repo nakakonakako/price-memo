@@ -11,7 +11,7 @@ limits; it does not standardize the internal process-inspection implementation.
 - Additional worktrees: `~/worktrees/price-memo/<task-name>`
 - Local environment files: `~/.config/price-memo/<environment>/`
 
-Existing worktrees under `/tmp`, `~/.cursor/worktrees`, and `~/web` are left in
+Existing worktrees under `/tmp` and `~/web` are left in
 place. Do not migrate or remove them automatically.
 
 ## Commands
@@ -65,9 +65,7 @@ directories are rejected. `backend/app/services/` is intentionally outside
 price-memo's dotenv lookup scope. After setup links are prepared, a strict
 check requires each configured source to have its exact symlink and
 each unconfigured source to have no target. Manual `--environment` selections
-remain supported. Cursor delegation explicitly selects `development` and
-checks its actual workspace again immediately before starting the monitored
-Cursor process. A managed link must be an absolute symlink whose direct
+remain supported. A managed link must be an absolute symlink whose direct
 `readlink` target exactly equals the selected source path. Relative and
 indirect symlinks are rejected even when they resolve to the same file. These
 checks inspect names, file types, and symlink targets; they never read
@@ -97,11 +95,10 @@ with mode `0600` inside mode `0700` directories, and retains source files. It
 never overwrites a destination. A `frontend/.env.local` value that overlaps a
 key in `frontend/.env` is reported by key name and blocks startup until the
 override is resolved. Do not place production credentials in this shared
-directory: Cursor workers with trusted access to a linked workspace can read
-the linked files.
+directory: agents with trusted access to a linked workspace can read the
+linked files.
 
-Root `npm run dev`, `npm run dev:playwright`, and `npm run devserver:ensure`
-run a lightweight environment preflight before starting. It prepares missing
+Root `npm run dev` runs a lightweight environment preflight before starting. It prepares missing
 symlinks, validates that the effective Vite and backend Supabase URLs target
 the approved development project, requires `VITE_SUPABASE_URL` and the
 publishable key in the effective Vite environment plus `SUPABASE_URL` in the
@@ -109,39 +106,18 @@ effective backend environment, and validates the managed
 `backend/.venv` interpreter and `uvicorn` shebang without running `npm ci` or
 `uv sync`, refuses conflicting local files, and prints exact recovery steps
 when automatic backend repair would be unsafe. The ordinary Vite server is
-fixed to `5173` with `strictPort`; the official Playwright server remains on
-`5273` with `strictPort`. Before launch, a supervisor checks both selected
+fixed to `5173` with `strictPort`. Before launch, a supervisor checks both selected
 ports and reports listener PID, command, and working directory when available;
 occupied ports stop startup without choosing another port or stopping their
 owners. The supervisor runs each server in its own session and stops only groups
 it started on Ctrl+C, SIGTERM, or startup failure. It confirms group exit after
 SIGTERM and, when needed, after SIGKILL. If ownership or exit cannot be
 confirmed, or `/proc` inspection fails, cleanup reports an error and returns a
-failure status. The normal development ports remain `5173` and `8001`;
-Playwright uses `5273` and `8001`.
+failure status. The development ports remain `5173` and `8001`.
 
-The Cursor Playwright `devserver:ensure` path validates both effective URLs on
-every invocation. It reuses a running service pair only when a versioned
-session record matches the canonical worktree and current Dev configuration,
-the recorded PID/PGID/session/start time still match, and `ss` identifies every
-listener as a process in the recorded groups carrying that launch's private
-session marker. HTTP readiness is checked only after process ownership has
-been proven. A shared lock serializes ensure and stop across worktrees. The
-session stores no environment values or credentials; its configuration
-fingerprint is a digest used only to detect changes.
-
-Ports occupied by another worktree, an unrecorded process, an old or malformed
-session, a partial startup, or a process whose owner cannot be inspected are
-never reused or stopped automatically. `devserver:stop` signals only verified
-groups recorded for the current canonical worktree. If ownership cannot be
-proven, inspect the listener manually and stop it explicitly; do not delete a
-session record to bypass the guard. Sessions written by older versions are
-not reusable. The official MCP, pinned browser, and browser profile remain
-unchanged.
-
-A symlink does not hide its target from a trusted Cursor workspace. Configure
+A symlink does not hide its target from a trusted agent workspace. Configure
 only development credentials required by the task. Do not link production
-credentials into a worker workspace.
+credentials into an agent workspace.
 
 `remove` only accepts a clean worktree below `~/worktrees/price-memo/` whose
 Git common directory matches this repository, prompts for the literal word
@@ -167,79 +143,36 @@ What is inspected:
   old cwd observation is discarded. A target cwd followed by an unreadable
   stat recheck refuses removal; an unassociated process whose identity cannot
   be rechecked is not assumed to belong to this worktree.
-- A Cursor Playwright `devserver` session record for the same worktree, when
-  present and structurally valid. A file alone does not count as “running”.
-  Process IDs, process groups, session IDs, and process start times are checked
-  against live `/proc` entries. A matching live group member carrying the
-  session marker is detected even after its recorded leader exits or its `cwd`
-  moves outside the worktree. A PID whose start time differs from the recorded
-  leader is treated as reused; its old group record is not trusted. To verify
-  the session marker, the guard reads `/proc/<pid>/environ` in memory and
-  extracts the value for the dedicated marker variable for comparison with
-  the nonce in that worktree's recorded session. Arbitrary environment values
-  are not used to establish ownership, and environment contents are not
-  printed or added to diagnostics.
-- `/proc` enumeration and the target's Cursor session record must be readable
-  and valid. If a recorded live process cannot be inspected, removal is refused.
-  An unreadable `cwd` or stat on a PID with no evidence linking it to the target
+- `/proc` enumeration must succeed. An unreadable `cwd` or stat on a PID with no evidence linking it to the target
   does not by itself block removal, since Linux restricts some unrelated
   process inspection. If a target cwd has already been observed but its stat
-  identity cannot be rechecked, or a recorded PID / matching process-group
-  member cannot be inspected, removal is refused. Failure to read the session
-  marker from `/proc/<pid>/environ` for a matching recorded group member also
-  refuses removal. This process-environment read is separate from worktree
-  environment-file link validation, which does not read linked file contents.
+  identity cannot be rechecked, removal is refused.
 
 Removal is refused when:
 
 - staged, unstaged, or untracked changes remain;
 - any inspected process is still active in the worktree;
-- `/proc` cannot be enumerated or the Cursor session JSON cannot be read and
-  validated;
-- a process linked by the target session cannot be inspected safely.
+- `/proc` cannot be enumerated;
+- a process with a target cwd cannot be rechecked safely.
 
 What to do when removal is refused:
 
-- Stop development servers and other work started in that worktree (`npm run
-  devserver:stop` for a verified Cursor session, or stop `npm run dev` /
-  supervisors you started there), end shells or jobs whose working directory is
+- Stop development servers and other work started in that worktree (stop
+  `npm run dev` / supervisors you started there), end shells or jobs whose working directory is
   inside the worktree, then run `scripts/worktree.sh remove` again.
 - When inspection itself fails, confirm manually that no listener or job still
-  uses the worktree before retrying. Do not delete or edit Cursor session files
-  to bypass the guard.
+  uses the worktree before retrying.
 
 Ordinary cwd scanning cannot detect a general process after it moves cwd
-outside the worktree. The recorded Cursor session/group check is additional
-protection only for processes tied to a valid recorded session; it does not
-cover every process. If a PID has unreadable inspection data and no evidence
+outside the worktree. If a PID has unreadable inspection data and no evidence
 links it to the target, the guard skips it, so a related process may be missed.
 A short race also remains between the final inspection and `git worktree
 remove`; a process started in that window may not be detected. The guard never
 kills processes.
 Conversely, a process that exits immediately after inspection may still leave
 the worktree removable even though work was active moments earlier. The guard
-reduces accidental removal; it does not replace checking active workers and
+reduces accidental removal; it does not replace checking active sessions and
 servers yourself.
 
-## Cursor delegation
-
-`scripts/delegate-cursor.sh --worktree <task-name>` creates or reuses the
-standard Git worktree and invokes Cursor with `--workspace <absolute-path>`.
-Worktree operations, environment-link validation, and monitor execution use the
-physical absolute path of the checkout that invoked the delegate. The monitor
-locks and reports the canonical path of the actual worker workspace. This
-remains true when the invoking checkout is a non-main worktree; choosing the
-harness source does not change the existing worktree base policy.
-Freshness of `origin/main` for new branches is handled only by
-`scripts/worktree.sh create` (default `--base origin/main`); the delegate script
-does not fetch. Existing worktrees are reused without fetch or branch changes.
-Use `--workspace <path>` to continue work in a listed worktree. Cursor's own
-`--worktree` option is not used because it controls a separate storage root.
-The retained `--continue-worktree` option is an alias for `--workspace`.
-Relative `--task-file` paths are resolved from the invoking repository root
-before switching to a target worktree; absolute task-file paths are preserved.
-
-`npm run devserver:ensure`, Playwright MCP, the shared browser profile, and
-Tailscale Serve keep their existing behavior. `npm run dev` and
-`npm run dev:playwright` use the owned-process supervisor; worktree setup does
-not start or stop development servers.
+`npm run dev` uses the owned-process supervisor; worktree setup does not start
+or stop development servers.
